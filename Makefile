@@ -114,6 +114,28 @@ endif
 # end of MacBookPro
 
 
+ifeq ($(SYSTYPE),"Cuillin")
+# compiler and its optimization options
+CC        =  mpicc   # sets the C-compiler
+OPTIMIZE  =  -std=c11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas -Wno-unused-function
+
+# overwrite default:
+MPICH_LIB = -lmpi
+GSL_INCL  = -I/usr/include
+GSL_LIB   = -L/usr/lib/x86_64-linux-gnu/ -lgsl -lgslcblas
+HWLOC_LIB = -L/usr/lib/x86_64-linux-gnu/ -lhwloc
+
+# libraries that are included on demand, depending on Config.sh options
+FFTW_INCL = -I/usr/include
+FFTW_LIBS = -L/usr/lib/x86_64-linux-gnu/
+HDF5_INCL = -I/usr/include/hdf5/openmpi -DH5_USE_16_API
+HDF5_LIB  = -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi/ -lhdf5 -lz
+HWLOC_INCL= -I/usr/include
+endif
+# end of Cuillin
+
+
+
 
 ifndef LINKER
 LINKER = $(CC)
@@ -173,7 +195,6 @@ OBJS =   debug_md5/calc_checksum.o \
          gravity/pm/pm_nonperiodic.o \
          hydro/finite_volume_solver.o \
          hydro/gradients.o \
-         hydro/residual_distribution_solver.o \
          hydro/riemann.o \
          hydro/riemann_hllc.o \
          hydro/riemann_hlld.o \
@@ -249,11 +270,12 @@ INCL += debug_md5/Md5.h \
         utils/generic_comm_helpers2.h \
         utils/timer.h
 
-# OBJS_CXX = hydro/residual_distribution_solver.o
-# INCL_CXX = main/cpp_functions.h
-
 ifeq (TWODIMS,$(findstring TWODIMS,$(CONFIGVARS)))
 OBJS    += mesh/voronoi/voronoi_2d.o
+endif
+
+ifeq (RESIDUAL_DISTRIBUTION,$(findstring RESIDUAL_DISTRIBUTION,$(CONFIGVARS)))
+OBJS    += hydro/residual_distribution_solver.o
 endif
 
 ifeq (MYIBARRIER,$(findstring MYIBARRIER,$(CONFIGVARS)))

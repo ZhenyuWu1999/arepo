@@ -39,7 +39,6 @@
 
 #include "../main/allvars.h"
 #include "../main/proto.h"
-#include "../main/cpp_functions.h"
 
 
 #ifdef HAVE_HDF5
@@ -73,7 +72,6 @@ int main(int argc, char **argv)
 
   /* output a welcome message */
   hello();
-  cpp_hello_world();
 
   /* initialize CPU-time/Wallclock-time measurement */
   init_cpu_log();

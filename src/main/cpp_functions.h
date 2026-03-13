@@ -5,10 +5,12 @@
 #ifndef AREPO_CPP_FUNCTIONS_H
 #define AREPO_CPP_FUNCTIONS_H
 
-#include <lapacke.h>
 #ifdef __cplusplus
 extern "C"{
 #endif
+
+#ifdef RESIDUAL_DISTRIBUTION
+#include <lapacke.h>
 
 // functions defined in residual_distribution_solver.cpp, which may be used in other C files
 void cpp_hello_world();
@@ -26,7 +28,7 @@ lapack_int mat_inv(double *A, unsigned n);
 lapack_int solve_system(int n, double* A, double* b);
 int needs_regularization(int rows, int cols, double* A);
 void regularize_matrix(int rows, int cols, double* A);
-
+#endif
 
 
 #ifdef __cplusplus
