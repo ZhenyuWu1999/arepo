@@ -4,7 +4,6 @@
 #  Enable/Disable compile-time options as needed #
 ##################################################
 
-#Warning: use parentheses in macros to prevent possible errors, e.g. GAMMA=(5.0/3.0), not GAMMA=5.0/3.0
 #--------------------------------------- Basic operation mode of code; default: 3d with 6 particle types; type 0: gas >0: only gravitationally interacting
 #NTYPES=6                      # number of particle types
 #TWODIMS                       # 2d simulation
@@ -26,12 +25,6 @@
 #PASSIVE_SCALARS=3             # number of passive scalar fields advected with fluid (default: 0)
 #NO_SCALAR_GRADIENTS           # disables time and spatial extrapolation for passive scalar fields (use only if you know why you're doing this)
 
-#--------------------------------------- Hydrodynamics with Residual Distribution solver
-#RESIDUAL_DISTRIBUTION         # replace Finite-Volume method with Residual Distribution
-#LDA_SCHEME                    # LDA scheme for residual distribution
-#N_SCHEME                      # N scheme for residual distribution
-#B_SCHEME                      # B (Blended) scheme for residual distribution
-
 #--------------------------------------- Magnetohydrodynamics
 #MHD                           # Master switch for magnetohydrodynamics
 #MHD_POWELL                    # Powell div(B) cleaning scheme for magnetohydrodynamics
@@ -41,6 +34,12 @@
 #--------------------------------------- Riemann solver; default: exact Riemann solver
 #RIEMANN_HLLC                  # HLLC approximate Riemann solver
 #RIEMANN_HLLD                  # HLLD approximate Riemann solver (required to use for MHD)
+
+#--------------------------------------- Residual Distribution hydrodynamics
+#RESIDUAL_DISTRIBUTION         # Enable the residual distribution hydrodynamics solver
+#LDA_SCHEME                    # Low Diffusion A scheme for residual distribution
+#N_SCHEME                      # N scheme for residual distribution
+#B_SCHEME                      # Blended scheme for residual distribution
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

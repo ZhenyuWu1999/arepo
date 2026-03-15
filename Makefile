@@ -5,7 +5,7 @@
 
 EXEC   = Arepo
 LIBRARY = arepo
-CONFIG   = Config.sh
+CONFIG   = Config_RD.sh
 BUILD_DIR = build
 SRC_DIR = src
 
@@ -37,6 +37,7 @@ CONFIGVARS := $(shell cat $(BUILD_DIR)/arepoconfig.h)
 RESULT     := $(shell SRC_DIR=$(SRC_DIR) BUILD_DIR=$(BUILD_DIR) ./git_version.sh)
 
 # Default
+CXX = mpicxx
 MPICH_INCL =
 MPICH_LIB  = -lmpich
 GMP_LIB    = -lgmp
@@ -117,12 +118,15 @@ endif
 ifeq ($(SYSTYPE),"Cuillin")
 # compiler and its optimization options
 CC        =  mpicc   # sets the C-compiler
+CXX       =  mpicxx  # sets the Cpp-compiler for residual distribution
 OPTIMIZE  =  -std=c11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas -Wno-unused-function
 
 # overwrite default:
 MPICH_LIB = -lmpi
 GSL_INCL  = -I/usr/include
 GSL_LIB   = -L/usr/lib/x86_64-linux-gnu/ -lgsl -lgslcblas
+LAPACK_INCL = -I/usr/include
+LAPACK_LIB = -L/usr/lib/x86_64-linux-gnu/ -llapacke -llapack
 HWLOC_LIB = -L/usr/lib/x86_64-linux-gnu/ -lhwloc
 
 # libraries that are included on demand, depending on Config.sh options
@@ -138,7 +142,7 @@ endif
 
 
 ifndef LINKER
-LINKER = $(CC)
+LINKER = $(CXX)
 endif
 
 
@@ -417,7 +421,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(INCL) $(INCL_CXX) $(MAKEFILES)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCL) $(INCL_CXX) $(MAKEFILES)
-	$(CC) $(LAPACK_INCL) -c $< -o $@
+	$(CXX) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/compile_time_info.o: $(BUILD_DIR)/compile_time_info.c $(MAKEFILES)
 	$(CC) $(CFLAGS) -c $< -o $@

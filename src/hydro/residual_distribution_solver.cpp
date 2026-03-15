@@ -19,6 +19,11 @@
 
 using namespace std;
 
+static lapack_int mat_inv(double *A, unsigned n);
+static lapack_int solve_system(int n, double *A, double *b);
+static int needs_regularization(int rows, int cols, double *A);
+static void regularize_matrix(int rows, int cols, double *A);
+
 // static struct flux_list_data
 //{
 //  int task, index;
