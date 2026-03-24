@@ -5,7 +5,7 @@
 
 EXEC   = Arepo
 LIBRARY = arepo
-CONFIG   = Config_RD.sh
+CONFIG   = Config.sh
 BUILD_DIR = build
 SRC_DIR = src
 

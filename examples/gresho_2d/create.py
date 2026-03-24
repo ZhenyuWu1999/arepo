@@ -2,40 +2,38 @@
 Code that creates 2d Gresho vortex initial conditions
 
 created by Rainer Weinberger, last modified 20.03.2020 -- comments welcome
+modified by Zhenyu Wu
 """
 
 #### load libraries
-import sys    # system specific calls
 import numpy as np    ## load numpy
 import h5py    ## load h5py; needed to write initial conditions in hdf5 format
+import os
 from numpy.random import default_rng
 from math import floor
-
-simulation_directory = str(sys.argv[1])
-print("examples/Gresho_2d/create.py: creating ICs in directory " + simulation_directory)
-
-""" initial condition parameters """
-FilePath = simulation_directory + '/IC_gresho_v1e-8_random50.hdf5'
-mesh_type = 'random'
-
-np.random.seed(0)
-
 
 FloatType = np.float64  # double precision: np.float64, for single use np.float32
 IntType = np.int32
 
 Boxsize = FloatType(1.0)
 
-if len(sys.argv) > 2:
-    CellsPerDimension = IntType(sys.argv[2])
-else:
-    CellsPerDimension = IntType(50)
-
 ## parameters
 density_0 = 1.0
-velocity_0 = 1.0e-8 ## bulk velocity
+velocity_0 = 0.0 ## bulk velocity
+velocity_label = "v0"
 gamma = 5.0/3.0
 gamma_minus_one = gamma - 1.0
+mesh_type = 'ring'
+CellsPerDimension = IntType(50)
+simulation_directory = os.path.dirname(os.path.abspath(__file__))
+
+filename = f"IC_gresho_{velocity_label}_{mesh_type}{int(CellsPerDimension)}.hdf5"
+FilePath = os.path.join(simulation_directory, filename)
+
+print("examples/Gresho_2d/create.py: creating ICs in directory " + simulation_directory)
+print("examples/Gresho_2d/create.py: writing " + FilePath)
+
+np.random.seed(0)
 
 
 
@@ -165,4 +163,3 @@ part0.create_dataset("InternalEnergy", data = Uthermal)
 
 ## close file
 IC.close()
-sys.exit(0)
