@@ -10,8 +10,7 @@ extern "C"{
 #endif
 
 #ifdef RESIDUAL_DISTRIBUTION
-// functions defined in residual_distribution_solver.cpp, which may be used in other C files
-void cpp_hello_world();
+// functions defined in residual_distribution_solver.c, which may be used in other C files
 void reset_dualarea(tessellation *T);
 void compute_residuals(tessellation*);
 int boundary_triangle_check_responsibility_thistask(tessellation* , int);

@@ -37,12 +37,11 @@ CONFIGVARS := $(shell cat $(BUILD_DIR)/arepoconfig.h)
 RESULT     := $(shell SRC_DIR=$(SRC_DIR) BUILD_DIR=$(BUILD_DIR) ./git_version.sh)
 
 # Default
-CXX = mpicxx
 MPICH_INCL =
 MPICH_LIB  = -lmpich
 GMP_LIB    = -lgmp
 GSL_LIB    = -lgsl -lgslcblas
-MATH_LIB   = -lm -lstdc++
+MATH_LIB   = -lm
 HWLOC_LIB  = -lhwloc
 
 
@@ -93,9 +92,7 @@ endif
 ifeq ($(SYSTYPE),"MacBookPro")
 # compiler and its optimization options
 CC        =  mpicc   # sets the C-compiler
-CXX       =  mpicxx  # sets the Cpp-compiler for residual distribution
 OPTIMIZE  =  -std=c11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas -Wno-unused-function
-# OPTIMIZE_CXX  =  -std=c++11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas -Wno-unused-function
 
 # overwrite default:
 MPICH_LIB = -lmpi
@@ -118,7 +115,6 @@ endif
 ifeq ($(SYSTYPE),"Cuillin")
 # compiler and its optimization options
 CC        =  mpicc   # sets the C-compiler
-CXX       =  mpicxx  # sets the Cpp-compiler for residual distribution
 OPTIMIZE  =  -std=c11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas -Wno-unused-function
 
 # overwrite default:
@@ -142,7 +138,7 @@ endif
 
 
 ifndef LINKER
-LINKER = $(CXX)
+LINKER = $(CC)
 endif
 
 
@@ -403,8 +399,8 @@ all: check build
 
 build: $(EXEC)
 
-$(EXEC): $(OBJS) $(OBJS_CXX)
-	$(LINKER) $(OPTIMIZE2) $(OBJS) $(OBJS_CXX) $(LIBS) -o $(EXEC)
+$(EXEC): $(OBJS)
+	$(LINKER) $(OPTIMIZE2) $(OBJS) $(LIBS) -o $(EXEC)
 
 lib$(LIBRARY).a: $(filter-out $(BUILD_DIR)/main/main.o,$(OBJS))
 	$(AR) -rcs lib$(LIBRARY).a $(OBJS)
@@ -417,11 +413,8 @@ clean:
 	@rm -f $(TO_CHECK) $(CONFIG_CHECK)
 	@rm -rf $(BUILD_DIR)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(INCL) $(INCL_CXX) $(MAKEFILES)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(INCL) $(MAKEFILES)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(INCL) $(INCL_CXX) $(MAKEFILES)
-	$(CXX) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/compile_time_info.o: $(BUILD_DIR)/compile_time_info.c $(MAKEFILES)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -444,9 +437,6 @@ $(CONFIG_CHECK): $(TO_CHECK) $(CONFIG) check.py
 $(BUILD_DIR)/%.o.check: $(SRC_DIR)/%.c Template-Config.sh defines_extra check.py
 	@$(PYTHON) check.py 1 $< $@ Template-Config.sh defines_extra
 
-$(BUILD_DIR)/%.o.check: $(SRC_DIR)/%.cpp Template-Config.sh defines_extra check.py
-	@$(PYTHON) check.py 1 $< $@ Template-Config.sh defines_extra
-
 $(BUILD_DIR)/%.o.check: $(SRC_DIR)/%.F
 	touch $@
 
@@ -454,9 +444,6 @@ $(BUILD_DIR)/%.o.check: $(SRC_DIR)/%.f90
 	touch $@
 
 $(BUILD_DIR)/%.o.check: $(SRC_DIR)/%.F90
-	touch $@
-
-$(BUILD_DIR)/%.o.check: $(SRC_DIR)/%.cc
 	touch $@
 
 $(BUILD_DIR)/%.h.check: $(SRC_DIR)/%.h Template-Config.sh defines_extra check.py
