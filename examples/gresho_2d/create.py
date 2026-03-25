@@ -5,12 +5,14 @@ created by Rainer Weinberger, last modified 20.03.2020 -- comments welcome
 modified by Zhenyu Wu
 """
 
-#### load libraries
-import numpy as np    ## load numpy
-import h5py    ## load h5py; needed to write initial conditions in hdf5 format
 import os
-from numpy.random import default_rng
+import re
 from math import floor
+
+import h5py
+import matplotlib.pyplot as plt
+import numpy as np
+from numpy.random import default_rng
 
 FloatType = np.float64  # double precision: np.float64, for single use np.float32
 IntType = np.int32
@@ -19,23 +21,77 @@ Boxsize = FloatType(1.0)
 
 ## parameters
 density_0 = 1.0
-velocity_0 = 0.0 ## bulk velocity
-velocity_label = "v0"
-gamma = 5.0/3.0
+velocity_0 = 1.0e-8  # bulk velocity
+velocity_label = "v1e-8"
+gamma = 5.0 / 3.0
 gamma_minus_one = gamma - 1.0
-mesh_type = 'ring'
-CellsPerDimension = IntType(50)
+default_glass_file = (
+    "/home/zwu/SWIFT/examples/HydroTests/GreshoVortex_2D/glassPlane_48.hdf5"
+)
+mesh_type = "ring"  # "ring" or "random" or "glass"
+CellsPerDimension = IntType(48)
+glass_file = default_glass_file
 simulation_directory = os.path.dirname(os.path.abspath(__file__))
 
-filename = f"IC_gresho_{velocity_label}_{mesh_type}{int(CellsPerDimension)}.hdf5"
+
+def load_swift_glass(glass_file, target_boxsize):
+    with h5py.File(glass_file, "r") as glass:
+        Coordinates = np.asarray(glass["/PartType0/Coordinates"][:, :], dtype=FloatType)
+
+        box_attr = glass["/Header"].attrs["BoxSize"]
+        box_array = np.atleast_1d(np.asarray(box_attr, dtype=FloatType))
+        source_boxsize = box_array[0]
+
+    if Coordinates.ndim != 2 or Coordinates.shape[1] < 2:
+        raise ValueError(
+            f"Unexpected coordinates shape {Coordinates.shape} in {glass_file}."
+        )
+    if source_boxsize <= 0:
+        raise ValueError(f"Invalid BoxSize={source_boxsize} in {glass_file}.")
+
+    xPosFromCenter = np.mod(Coordinates[:,0] / source_boxsize, 1.0) * target_boxsize
+    yPosFromCenter = np.mod(Coordinates[:,1] / source_boxsize, 1.0) * target_boxsize
+    xPosFromCenter -= 0.5 * target_boxsize
+    yPosFromCenter -= 0.5 * target_boxsize
+    Radius = np.sqrt(xPosFromCenter**2 + yPosFromCenter**2)
+    return Radius, xPosFromCenter, yPosFromCenter
+
+
+def plot_point_distribution(Pos, boxsize, filepath):
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.scatter(Pos[:,0], Pos[:,1], s=4, c="k", linewidths=0)
+    ax.set_xlim(0.0, boxsize)
+    ax.set_ylim(0.0, boxsize)
+    ax.set_aspect("equal")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_title(f"Gresho 2D point distribution ({mesh_type})")
+    fig.tight_layout()
+    fig.savefig(filepath, dpi=200)
+    plt.close(fig)
+
+
+if mesh_type == "glass":
+    glass_label = os.path.splitext(os.path.basename(glass_file))[0]
+    glass_resolution = re.search(r"(\d+)$", glass_label)
+    if glass_resolution:
+        filename = f"IC_gresho_{velocity_label}_{mesh_type}{glass_resolution.group(1)}.hdf5"
+    else:
+        filename = f"IC_gresho_{velocity_label}_{mesh_type}.hdf5"
+else:
+    filename = f"IC_gresho_{velocity_label}_{mesh_type}{int(CellsPerDimension)}.hdf5"
+
 FilePath = os.path.join(simulation_directory, filename)
+PlotFilePath = os.path.splitext(FilePath)[0] + ".png"
 
 print("examples/Gresho_2d/create.py: creating ICs in directory " + simulation_directory)
 print("examples/Gresho_2d/create.py: writing " + FilePath)
+print("examples/Gresho_2d/create.py: writing " + PlotFilePath)
+
+if mesh_type == "glass":
+    print("examples/Gresho_2d/create.py: reading SWIFT glass " + glass_file)
 
 np.random.seed(0)
-
-
 
 """ set up grid: equidistant polar 2d grid; similar to Pakmor et al (2016) """
 d_ring = Boxsize / CellsPerDimension
@@ -44,48 +100,56 @@ Radius = [0.0]
 xPosFromCenter = [0.0]
 yPosFromCenter = [0.0]
 
-
-if mesh_type == 'ring':
+if mesh_type == "ring":
     i_ring = 0
     while d_ring * FloatType(i_ring) <= 0.71 * Boxsize:
         i_ring += 1
         ## place i_ring cells at this distance
-        phi = np.random.uniform(0,2.0*np.pi) ## random starting angle
-        #print "i_ring", i_ring
-        for i_cell in np.arange( IntType(2.0*np.pi*i_ring) ):
+        phi = np.random.uniform(0, 2.0 * np.pi)  ## random starting angle
+        for i_cell in np.arange(IntType(2.0 * np.pi * i_ring)):
             radius_this_cell = d_ring * FloatType(i_ring)
-            #print radius_this_cell
             xcoord = radius_this_cell * np.cos(phi)
             ycoord = radius_this_cell * np.sin(phi)
-            
+
             ## only include the cell if coordinates are within the box
-            if xcoord >= -0.5*Boxsize and xcoord < 0.5*Boxsize and ycoord >= -0.5*Boxsize and ycoord < 0.5*Boxsize:
-                Radius.append( radius_this_cell )
-                xPosFromCenter.append( xcoord )
-                yPosFromCenter.append( ycoord )
-                
-            phi += (2.0*np.pi*i_ring) / IntType(2.0*np.pi*i_ring) / FloatType(i_ring)
-elif mesh_type == 'random':
-    Coordinates = []
+            if (
+                xcoord >= -0.5 * Boxsize
+                and xcoord < 0.5 * Boxsize
+                and ycoord >= -0.5 * Boxsize
+                and ycoord < 0.5 * Boxsize
+            ):
+                Radius.append(radius_this_cell)
+                xPosFromCenter.append(xcoord)
+                yPosFromCenter.append(ycoord)
+
+            phi += (2.0 * np.pi * i_ring) / IntType(2.0 * np.pi * i_ring) / FloatType(
+                i_ring
+            )
+elif mesh_type == "random":
     rng = default_rng()
     choice_per_dimension = int(5000)
-    position_index = rng.choice(choice_per_dimension**2, size=CellsPerDimension**2,replace=False)
+    position_index = rng.choice(
+        choice_per_dimension**2, size=CellsPerDimension**2, replace=False
+    )
 
     for i in range(CellsPerDimension**2):
-        xcoord = (position_index[i]%choice_per_dimension)/float(choice_per_dimension)*Boxsize
-        ycoord = floor(position_index[i]/choice_per_dimension)/float(choice_per_dimension)*Boxsize
-        xcoord -= 0.5*Boxsize; ycoord -= 0.5*Boxsize
-        radius_this_cell = np.sqrt(xcoord**2 + ycoord**2)*Boxsize
+        xcoord = (position_index[i] % choice_per_dimension) / float(
+            choice_per_dimension
+        ) * Boxsize
+        ycoord = floor(position_index[i] / choice_per_dimension) / float(
+            choice_per_dimension
+        ) * Boxsize
+        xcoord -= 0.5 * Boxsize
+        ycoord -= 0.5 * Boxsize
+        radius_this_cell = np.sqrt(xcoord**2 + ycoord**2) * Boxsize
 
-        Radius.append( radius_this_cell )
-        xPosFromCenter.append( xcoord )
-        yPosFromCenter.append( ycoord )
-
-        
-
-
-
-
+        Radius.append(radius_this_cell)
+        xPosFromCenter.append(xcoord)
+        yPosFromCenter.append(ycoord)
+elif mesh_type == "glass":
+    Radius, xPosFromCenter, yPosFromCenter = load_swift_glass(glass_file, Boxsize)
+else:
+    raise ValueError(f"Unknown mesh_type={mesh_type}")
 
 ## convert to numpy arrays now that number of cells is known
 Radius = np.array(Radius, dtype=FloatType)
@@ -93,49 +157,54 @@ xPosFromCenter = np.array(xPosFromCenter, dtype=FloatType)
 yPosFromCenter = np.array(yPosFromCenter, dtype=FloatType)
 NumberOfCells = Radius.shape[0]
 ## set up structure for positions (in code coordinates, i.e. from 0 to Boxsize)
-Pos = np.zeros([NumberOfCells, 3])
-Pos[:,0] = xPosFromCenter + 0.5 * Boxsize
-Pos[:,1] = yPosFromCenter + 0.5 * Boxsize
+Pos = np.zeros([NumberOfCells, 3], dtype=FloatType)
+Pos[:, 0] = xPosFromCenter + 0.5 * Boxsize
+Pos[:, 1] = yPosFromCenter + 0.5 * Boxsize
 
 """ set up hydrodynamical quantitites """
 ## mass insetad of density
-Density = np.full(NumberOfCells, density_0, dtype=FloatType) 
+Density = np.full(NumberOfCells, density_0, dtype=FloatType)
 ## different zones
-i1, = np.where( Radius < 0.2 )
-i2, = np.where( (Radius >= 0.2) & (Radius < 0.4) )
-i3, = np.where( Radius >= 0.4 )
+i1, = np.where(Radius < 0.2)
+i2, = np.where((Radius >= 0.2) & (Radius < 0.4))
+i3, = np.where(Radius >= 0.4)
 
 ## velocity
-RotationVelocity = np.zeros( NumberOfCells, dtype=FloatType )
+RotationVelocity = np.zeros(NumberOfCells, dtype=FloatType)
 RotationVelocity[i1] = 5.0 * Radius[i1]
 RotationVelocity[i2] = 2.0 - 5.0 * Radius[i2]
 RotationVelocity[i3] = 0.0
-Vel = np.zeros([NumberOfCells, 3], dtype=FloatType )
-i_all_but_central = np.arange(1,NumberOfCells)
+Vel = np.zeros([NumberOfCells, 3], dtype=FloatType)
+i_all_but_central, = np.where(Radius > 0.0)
 Vel[i_all_but_central,0] = -RotationVelocity[i_all_but_central] * yPosFromCenter[i_all_but_central] / Radius[i_all_but_central]
 Vel[i_all_but_central,1] =  RotationVelocity[i_all_but_central] * xPosFromCenter[i_all_but_central] / Radius[i_all_but_central]
-Vel[:,0] += velocity_0
+Vel[:, 0] += velocity_0
 
 ## specific internal energy
-Pressure = np.zeros( NumberOfCells, dtype=FloatType)
+Pressure = np.zeros(NumberOfCells, dtype=FloatType)
 Pressure[i1] = 5.0 + 12.5 * Radius[i1] * Radius[i1]
-Pressure[i2] = 9.0 + 12.5 * Radius[i2] * Radius[i2] - 20.0 * Radius[i2] + 4.0 * np.log(Radius[i2] / 0.2)
+Pressure[i2] = (
+    9.0
+    + 12.5 * Radius[i2] * Radius[i2]
+    - 20.0 * Radius[i2]
+    + 4.0 * np.log(Radius[i2] / 0.2)
+)
 Pressure[i3] = 3.0 + 4.0 * np.log(2.0)
 Uthermal = Pressure / density_0 / gamma_minus_one
 
 """ write *.hdf5 file; minimum number of fields required by Arepo """
-IC = h5py.File(FilePath, 'w')
+IC = h5py.File(FilePath, "w")
 
 ## create hdf5 groups
 header = IC.create_group("Header")
 part0 = IC.create_group("PartType0")
 
 ## header entries
-NumPart = np.array([NumberOfCells, 0, 0, 0, 0, 0], dtype = IntType)
+NumPart = np.array([NumberOfCells, 0, 0, 0, 0, 0], dtype=IntType)
 header.attrs.create("NumPart_ThisFile", NumPart)
 header.attrs.create("NumPart_Total", NumPart)
-header.attrs.create("NumPart_Total_HighWord", np.zeros(6, dtype = IntType) )
-header.attrs.create("MassTable", np.zeros(6, dtype = IntType) )
+header.attrs.create("NumPart_Total_HighWord", np.zeros(6, dtype=IntType))
+header.attrs.create("MassTable", np.zeros(6, dtype=IntType))
 header.attrs.create("Time", 0.0)
 header.attrs.create("Redshift", 0.0)
 header.attrs.create("BoxSize", Boxsize)
@@ -155,11 +224,13 @@ else:
     header.attrs.create("Flag_DoublePrecision", 0)
 
 ## copy datasets
-part0.create_dataset("ParticleIDs", data = np.arange(1, NumberOfCells+1) )
-part0.create_dataset("Coordinates", data = Pos)
-part0.create_dataset("Masses", data = Density)
-part0.create_dataset("Velocities", data = Vel)
-part0.create_dataset("InternalEnergy", data = Uthermal)
+part0.create_dataset("ParticleIDs", data=np.arange(1, NumberOfCells + 1))
+part0.create_dataset("Coordinates", data=Pos)
+part0.create_dataset("Masses", data=Density)
+part0.create_dataset("Velocities", data=Vel)
+part0.create_dataset("InternalEnergy", data=Uthermal)
 
 ## close file
 IC.close()
+
+plot_point_distribution(Pos, Boxsize, PlotFilePath)
