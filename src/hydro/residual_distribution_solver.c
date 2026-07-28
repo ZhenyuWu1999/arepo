@@ -38,6 +38,22 @@ static void regularize_matrix(int rows, int cols, double *A);
 
 #ifdef RESIDUAL_DISTRIBUTION
 
+#if !defined(TWODIMS)
+#error "The current residual-distribution solver is implemented only for TWODIMS."
+#endif
+
+#if !defined(VORONOI_STATIC_MESH)
+#error "The current residual-distribution baseline requires VORONOI_STATIC_MESH."
+#endif
+
+#if !defined(FORCE_EQUAL_TIMESTEPS)
+#error "The current residual-distribution baseline requires FORCE_EQUAL_TIMESTEPS."
+#endif
+
+#if(defined(LDA_SCHEME) + defined(N_SCHEME) + defined(B_SCHEME)) != 1
+#error "Select exactly one residual-distribution scheme: LDA_SCHEME, N_SCHEME, or B_SCHEME."
+#endif
+
 static struct FluxRD_list_data
 {
   int task, index;
@@ -57,6 +73,37 @@ static int N_DualArea_export, Max_N_FluxRD_export, N_FluxRD_export;
 struct triangle_normals *tri_normals_list;
 extern struct primexch *PrimExch;
 extern struct grad_data *GradExch;
+
+static int rd_triangle_is_physical(tessellation *T, int triangle_index)
+{
+  if(triangle_index < 0 || triangle_index >= T->Ndt)
+    return 0;
+
+  for(int vertex = 0; vertex < DIMS + 1; vertex++)
+    {
+      int point_index = T->DT[triangle_index].p[vertex];
+
+      if(point_index < 0 || point_index >= T->Ndp)
+        return 0;
+
+      if(T->DP[point_index].task < 0 || T->DP[point_index].task >= NTask || T->DP[point_index].index < 0)
+        return 0;
+    }
+
+  return 1;
+}
+
+static int rd_compare_particle_id(const void *a, const void *b)
+{
+  MyIDType id_a = *(const MyIDType *)a;
+  MyIDType id_b = *(const MyIDType *)b;
+
+  if(id_a < id_b)
+    return -1;
+  if(id_a > id_b)
+    return 1;
+  return 0;
+}
 
 /*! \brief Compute residuals of triangles/tetrahedra and distribute them.
  *  This function is used for Residual Distribution hydrodynamics method, which is equivalent to
@@ -82,6 +129,13 @@ void reset_dualarea(tessellation *T)
   /* classification of Delaunay triangles*/
   for(i = 0; i < Ndt; i++)
     {
+      if(!rd_triangle_is_physical(T, i))
+        {
+          DT_label[i] = 'o';
+          Ndt_other += 1;
+          continue;
+        }
+
       int pmin = imin_array(DT[i].p, DIMS + 1);
       int pmax = imax_array(DT[i].p, DIMS + 1);
 
@@ -227,6 +281,14 @@ void compute_residuals(tessellation *T)
   return;
 #endif /* #ifdef NOHYDRO */
   TIMER_START(CPU_RESIDUAL_DISTRIBUTION);
+
+  /*
+   * The median control area is a geometric property of the complete physical
+   * tessellation. It must not depend on which elements happen to be active in
+   * a time-integration stage.
+   */
+  reset_dualarea(T);
+
   point *DP = T->DP;
   tetra *DT = T->DT;
   int i, j = 0, k = 0, p;
@@ -240,6 +302,12 @@ void compute_residuals(tessellation *T)
   /* classification of Delaunay triangles*/
   for(i = 0; i < Ndt; i++)
     {
+      if(!rd_triangle_is_physical(T, i))
+        {
+          DT_label[i] = 'o';
+          Ndt_other += 1;
+          continue;
+        }
 
       int has_one_active_local = 0, all_local = 0, num_local = 0;
       for (j= 0;j<DIMS+1;j++){
@@ -340,54 +408,12 @@ void compute_residuals(tessellation *T)
 #endif
     }
 
-  for(i = 0; i < NumGas; i++)
-    {
-      SphP[i].DualArea = 0.0;
-    }
-
-  N_DualArea_export = 0;
+  Max_N_FluxRD_export = 0;
   for(i = 0; i < Ndt_thistask; i++)
-    {
-      for(j = 0; j < DIMS + 1; j++)
-        {
-          if(DP[DT[thistask_triangles[i]].p[j]].task == ThisTask)
-            {
-              int SphP_index = DP[DT[thistask_triangles[i]].p[j]].index;
-              //              if(SphP_index < 0)
-              //                continue;   not necessary here, since the triangles we selected should not contain external points
-              if(SphP_index >= NumGas)
-                SphP_index -= NumGas;
+    for(j = 0; j < DIMS + 1; j++)
+      if(DP[DT[thistask_triangles[i]].p[j]].task != ThisTask)
+        Max_N_FluxRD_export++;
 
-              SphP[SphP_index].DualArea += tri_normals_list[i].area / (DIMS + 1);
-            }
-          else
-            {
-              N_DualArea_export += 1;
-            }
-        }
-    }
-
-  DualArea_list = (struct DualArea_list_data *)mymalloc_movable(&DualArea_list, "DualArea_list",
-                                                                N_DualArea_export * sizeof(struct DualArea_list_data));
-  k             = 0;
-
-  for(i = Ndt_local; i < Ndt_thistask; i++)
-    {
-      for(j = 0; j < DIMS + 1; j++)
-        {
-          if(DP[DT[thistask_triangles[i]].p[j]].task != ThisTask)
-            {
-              DualArea_list[k].task     = DP[DT[thistask_triangles[i]].p[j]].task;
-              DualArea_list[k].index    = DP[DT[thistask_triangles[i]].p[j]].originalindex;
-              DualArea_list[k].DualArea = tri_normals_list[i].area / (DIMS + 1);
-              k += 1;
-            }
-        }
-    }
-
-  apply_DualArea_list();
-
-  Max_N_FluxRD_export = N_DualArea_export;
   N_FluxRD_export     = 0;
   FluxRD_list =
       (struct FluxRD_list_data *)mymalloc_movable(&FluxRD_list, "FluxRD_list", Max_N_FluxRD_export * sizeof(struct FluxRD_list_data));
@@ -762,7 +788,12 @@ void compute_residuals(tessellation *T)
 
       // use matrix inversion
       regularize_matrix(4, 4, (double *)Kmatrix_minus_sum);
-      mat_inv(&Kmatrix_minus_sum[0][0], 4);
+      lapack_int inverse_info = mat_inv(&Kmatrix_minus_sum[0][0], 4);
+      if(inverse_info != 0)
+        {
+          printf("RD matrix inversion failed on task %d, triangle %d, LAPACK info %d\n", ThisTask, thistask_triangles[i], inverse_info);
+          terminate_program("RD matrix inversion failed");
+        }
 
       double Flux_RD[4][3];
 #ifdef B_SCHEME
@@ -852,14 +883,14 @@ void compute_residuals(tessellation *T)
 
       for(k = 0; k < 4; k++)
         {
-          Sum_Flux_N[k] = abs(Flux_N[k][0]) + abs(Flux_N[k][1]) + abs(Flux_N[k][2]);
-          if(Sum_Flux_N[i] == 0)
+          Sum_Flux_N[k] = fabs(Flux_N[k][0]) + fabs(Flux_N[k][1]) + fabs(Flux_N[k][2]);
+          if(Sum_Flux_N[k] == 0)
             {
               Theta_E[k] = 0.0;
             }
           else
             {
-              Theta_E[k] = abs(Phi[k]) / Sum_Flux_N[k];
+              Theta_E[k] = dmin(1.0, fabs(Phi[k]) / Sum_Flux_N[k]);
             }
           Flux_RD[k][0] = Theta_E[k] * Flux_N[k][0] + (1.0 - Theta_E[k]) * Flux_LDA[k][0];
           Flux_RD[k][1] = Theta_E[k] * Flux_N[k][1] + (1.0 - Theta_E[k]) * Flux_LDA[k][1];
@@ -891,6 +922,9 @@ void compute_residuals(tessellation *T)
             {
               int PrimExch_index = DP[DT[thistask_triangles[i]].p[j]].index;
 
+              if(N_FluxRD_export >= Max_N_FluxRD_export)
+                terminate_program("FluxRD_list capacity exceeded");
+
               FluxRD_list[N_FluxRD_export].task  = DP[DT[thistask_triangles[i]].p[j]].task;
               FluxRD_list[N_FluxRD_export].index = DP[DT[thistask_triangles[i]].p[j]].originalindex;
 
@@ -909,7 +943,6 @@ void compute_residuals(tessellation *T)
   apply_FluxRD_list();
 
   myfree_movable(FluxRD_list);
-  myfree_movable(DualArea_list);
   myfree_movable(tri_normals_list);
   myfree_movable(thistask_triangles);
   myfree_movable(boundary_triangles);
@@ -921,6 +954,9 @@ void compute_residuals(tessellation *T)
 
 int boundary_triangle_check_responsibility_thistask(tessellation *T, int DTindex)
 {
+  if(!rd_triangle_is_physical(T, DTindex))
+    return -1;
+
   point *DP = T->DP;
   tetra *DT = T->DT;
   int tasks[DIMS + 1]; /* tasks of the vertices in this triangle */
@@ -948,6 +984,8 @@ int boundary_triangle_compare(tessellation *T, int DTindex1, int DTindex2)
 {
   if(DTindex1 < 0 || DTindex2 < 0)
     return 0;
+  if(!rd_triangle_is_physical(T, DTindex1) || !rd_triangle_is_physical(T, DTindex2))
+    return 0;
   point *DP = T->DP;
   tetra *DT = T->DT;
   MyIDType particleIDlist1[DIMS + 1], particleIDlist2[DIMS + 1];
@@ -957,8 +995,8 @@ int boundary_triangle_compare(tessellation *T, int DTindex1, int DTindex2)
       particleIDlist2[i] = DP[DT[DTindex2].p[i]].ID;
     }
 
-  qsort(particleIDlist1, DIMS + 1, sizeof(int), system_compare_int);
-  qsort(particleIDlist2, DIMS + 1, sizeof(int), system_compare_int);
+  qsort(particleIDlist1, DIMS + 1, sizeof(MyIDType), rd_compare_particle_id);
+  qsort(particleIDlist2, DIMS + 1, sizeof(MyIDType), rd_compare_particle_id);
 
   for(int i = 0; i < DIMS + 1; i++)
     {
@@ -995,7 +1033,7 @@ void triangle_vertex_add_extrapolation(struct state_primitive *delta_time, struc
   if(st->rho <= 0)
     return;
 
-  if(st->rho + delta_time->rho || st->press + delta_time->press < 0)
+  if(st->rho + delta_time->rho <= 0 || st->press + delta_time->press <= 0)
     return;
 
   st->rho += delta_time->rho;
@@ -1164,27 +1202,15 @@ int DualArea_list_data_compare(const void *a, const void *b)
 
 lapack_int mat_inv(double *A, unsigned n)
 {
-  int ipiv[n + 1];
+  lapack_int ipiv[n];
   lapack_int ret;
 
   ret = LAPACKE_dgetrf(LAPACK_ROW_MAJOR, n, n, A, n, ipiv);
 
   if(ret != 0)
-    {
-      fprintf(stderr, "B WARNING: MATRIX CANNOT BE INVERTED\n");
-      for(int i = 0; i < n * n; ++i)
-        {
-          fprintf(stderr, "%g\t", A[i]);
-          if((i + 1) % n == 0)
-            {
-              fprintf(stderr, "\n");
-            }
-        }
-      exit(0);
-    }
-  ret = LAPACKE_dgetri(LAPACK_ROW_MAJOR, n, A, n, ipiv);
+    return ret;
 
-  return ret;
+  return LAPACKE_dgetri(LAPACK_ROW_MAJOR, n, A, n, ipiv);
 }
 
 lapack_int solve_system(int n, double *A, double *b)

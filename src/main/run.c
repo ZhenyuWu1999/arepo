@@ -114,9 +114,11 @@ void run(void)
 
       mesh_setup_exchange();
 
+#ifdef RD_OUTPUT_DIAGNOSTICS
       char triangulation_name[1024];
       sprintf(triangulation_name, "%s/triangulation_sync0_%03d", All.OutputDir, RestartSnapNum);
       write_only_delaunay_triangulation(&Mesh, triangulation_name, 0, NTask - 1);
+#endif
 
       update_primitive_variables();
 
@@ -167,7 +169,9 @@ void run(void)
     }
 #endif /* #if defined(VORONOI_STATIC_MESH) */
 
+#ifdef RD_OUTPUT_DIAGNOSTICS
   int loop_test = 0;
+#endif
 
   while(1) /* main loop */
     {
@@ -302,6 +306,7 @@ void run(void)
       create_mesh();
       mesh_setup_exchange();
 
+#ifdef RD_OUTPUT_DIAGNOSTICS
       if(loop_test == 0 && All.TotNumPart == TimeBinsHydro.GlobalNActiveParticles)
         {
           char triangulation_name[1024];
@@ -309,6 +314,7 @@ void run(void)
           write_only_delaunay_triangulation(&Mesh, triangulation_name, 0, NTask - 1);
           loop_test += 1;
         }
+#endif
 
 #endif /* #if !defined(VORONOI_STATIC_MESH) */
 

@@ -126,7 +126,7 @@ if mesh_type == "ring":
                 i_ring
             )
 elif mesh_type == "random":
-    rng = default_rng()
+    rng = default_rng(0)
     choice_per_dimension = int(5000)
     position_index = rng.choice(
         choice_per_dimension**2, size=CellsPerDimension**2, replace=False

@@ -45,6 +45,7 @@
  */
 
 #include <gsl/gsl_linalg.h>
+#include <math.h>
 
 #include "../main/allvars.h"
 #include "../main/proto.h"
@@ -184,6 +185,13 @@ void update_primitive_variables_single(struct particle_data *localP, struct sph_
 {
 
 #ifdef RESIDUAL_DISTRIBUTION
+  if(!isfinite(localSphP[i].DualArea) || localSphP[i].DualArea <= 0)
+    {
+      printf("Invalid RD control area: task=%d index=%d ID=%llu DualArea=%g\n", ThisTask, i,
+             (unsigned long long)localP[i].ID, localSphP[i].DualArea);
+      terminate_program("Invalid RD control area");
+    }
+
   localSphP[i].Density = localP[i].Mass / localSphP[i].DualArea;
 #else
   localSphP[i].Density = localP[i].Mass / localSphP[i].Volume;

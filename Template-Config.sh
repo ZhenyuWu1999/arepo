@@ -40,6 +40,7 @@
 #LDA_SCHEME                    # Low Diffusion A scheme for residual distribution
 #N_SCHEME                      # N scheme for residual distribution
 #B_SCHEME                      # Blended scheme for residual distribution
+#RD_OUTPUT_DIAGNOSTICS         # Write verbose RD triangulation diagnostics
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

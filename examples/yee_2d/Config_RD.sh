@@ -20,6 +20,7 @@ LDA_SCHEME
 
 #--------------------------------------- Time integration options
 TREE_BASED_TIMESTEPS                     # non-local timestep criterion (take 'signal speed' into account)
+FORCE_EQUAL_TIMESTEPS                    # temporary validated RD baseline
 
 #---------------------------------------- Single/Double Precision
 DOUBLEPRECISION=1                        # Mode of double precision: not defined: single; 1: full double precision 2: mixed, 3: mixed, fewer single precisions; unless short of memory, use 1.
