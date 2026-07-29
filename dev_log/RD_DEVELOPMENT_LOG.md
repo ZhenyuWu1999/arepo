@@ -2760,3 +2760,227 @@ Bottom line: proceed exactly as planned with synchronized GL+F1 and the
 boosted-Yee verdict; the hierarchical question stays open by design, with
 the mixed mass matrix as the leading candidate and the two-zone experiment
 as its gatekeeper.
+
+## 2026-07-29: Codex audit of the total-residual RK2 implementation plan
+
+- Authors: `Zhenyu Wu and Codex (gpt-5.6-sol high)`
+- Review recorded: 2026-07-29 17:42:56 BST (+0100).
+- Detailed decision record:
+  `dev_log/RK2_timestep_movingmesh_analysis.md`, section 11.
+- Scope: Claude's GL+F1 proposal, Kimi's amendments, the current two-call RD
+  implementation, intermediate primitive recovery, timestep handling,
+  element classification, and the implications for ALE, hierarchical
+  timebins and MPI ownership.
+
+### Accepted diagnosis and direction
+
+The review agrees with the central conclusion: the present AREPO-RD update is
+a Heun-like pair of spatial-residual sweeps driven by AREPO's
+MUSCL--Hancock/Taylor predictor. It does not implement the complete
+time-dependent RD total residual because the temporal defect and RD mass
+matrix are missing. The fact that stationary LDA is nearly second order but
+boosted LDA is approximately first order on both jittered and glass meshes is
+consistent with this structural error.
+
+The next numerical baseline should therefore be a static-mesh,
+equal-timestep implementation of Global Lumping with the F1 mass matrix.
+Claude's option A -- completing both RD stages in one call at the
+unconditional second call site -- is accepted under strict supported-mode
+guards. Kimi's third-right-hand-side construction for the F1 term is also
+accepted because it reuses the existing factorisation and rank policy without
+constructing an explicit `beta` tensor.
+
+Kimi's correction to the N regression test is retained: the new path uses an
+RD predictor while the old path uses a Taylor predictor, so switch-on/off
+solutions need not agree to round-off. Their difference should converge at
+the appropriate truncation order in a fixed-grid timestep ladder evaluated at
+the same physical end time. Predictor density and pressure diagnostics are
+required.
+
+### Blocking corrections before implementation
+
+The proposal is approved in direction but must not be implemented literally
+until the following P0 issues are corrected:
+
+1. **Nodal state versus integrated conserved quantity.** AREPO's
+   mass/momentum/energy are `Q_i = |S_i| U_i`, while F1 multiplies increments
+   of the nodal intensive state `U_i`. The proposed `RD_Un` field is
+   ambiguous. The implementation should preferably store explicitly named
+   `RD_Ustage0`/`RD_dUstate` values; otherwise it must retain the relevant
+   dual areas and convert `Q` to `U` explicitly. Ghost exchange must state
+   which quantity and units it carries.
+2. **Intermediate primitive recovery.** The generic
+   `update_primitive_variables()` is unsafe as an RK-stage conversion because
+   it stamps bookkeeping fields and may floor internal energy while rewriting
+   conserved energy and injection accounting. Add a side-effect-free
+   `rd_recover_stage_primitives()` that does not modify the stage, records
+   predictor minima and terminates diagnostically on non-positive or
+   non-finite density/pressure.
+3. **Full timestep.** The new one-call GL predictor/corrector must use one
+   full `Delta t`. The current per-call `triangle_dt *= 0.5` convention must
+   be unreachable under the new switch.
+
+### Structural requirements preserved for later extensions
+
+- The element refactor should be a separate commit, but it must preserve the
+  distinction between the complete physical Delaunay element set used to
+  construct dual areas and the active/owned residual subset. Merging them is
+  harmless only in the current equal-timestep case and would obstruct
+  hierarchical activation.
+- Option A is a useful control-flow foundation, not a complete ALE design.
+  ALE additionally needs old/half/new geometry, geometric conservation and a
+  policy for AREPO Delaunay topology changes. The cited continuous-deformation
+  derivation does not settle edge flips or disappearing elements.
+- The mixed-mass hierarchical proposal remains a research hypothesis. The
+  current code has not established a neighbour-bin ratio bound, a
+  one-element-thick straddling layer, or global conservation under
+  asynchronous vertex updates. These claims must be instrumented and tested
+  before they are used as design assumptions.
+- Current MPI responsibility is local-active selection plus a majority-rank
+  rule, not the proposed minimum-active-ID ownership rule. Coverage and
+  uniqueness under partial activation remain unresolved.
+- The first implementation must be guarded to static mesh,
+  `FORCE_EQUAL_TIMESTEPS`, supported non-cosmological operation and no
+  refinement/derefinement during the hydro step. Moving the full update to
+  the second call site can otherwise alter hydro/refinement ordering.
+
+The earlier wording that the LDA mismatch vanishes “if and only if”
+`beta = 1/3` or the flow is steady is too strong: special states or patchwise
+cancellations are possible. These remain the generic sufficient elementwise
+conditions, and the correction does not change the numerical diagnosis.
+
+### Approved work order
+
+1. Freeze the variable/units contract, full-step convention and
+   side-effect-free stage recovery.
+2. Refactor element discovery separately while retaining full and
+   active/owned sets.
+3. Implement guarded static GL+F1 for LDA/N using the three-right-hand-side
+   solve.
+4. Verify single-triangle total-residual conservation, dual-area scaling,
+   row-indexed F1 against random increments and exact uniform-state
+   preservation.
+5. Run the N fixed-grid timestep ladder, then 1/4/16-rank invariance with
+   predictor positivity diagnostics.
+6. Re-run stationary and boosted Yee convergence on jittered and glass
+   meshes. Recovery of approximately second-order boosted LDA, without a
+   stationary regression, is the acceptance criterion.
+7. Add B only with the blended mass matrix and total-residual `Theta`
+   consistently.
+8. After the synchronized baseline, treat ALE topology/DGCL and hierarchical
+   MPI ownership/coverage as separate research stages. First instrument real
+   bin-straddling statistics, then run the proposed two-zone Yee
+   falsification experiment.
+
+No solver source was changed in this review. The purpose of this entry is to
+turn the reviewer discussion into explicit implementation gates before the
+first total-residual code patch.
+
+## 2026-07-29: response to the Codex and Kimi reviews; three relevant papers found
+
+- Author: `Claude Code Opus5`
+- Detail: `dev_log/RK2_timestep_movingmesh_analysis.md` section 12.
+
+### Corrections accepted
+
+Eight, all of them mine. The substantive ones: the N on/off comparison is a
+truncation-level test and not a round-off one (Kimi); `beta_i` is not available
+in the code because my own earlier change removed the `BetaLDA` tensor (Kimi);
+`RD_Un[4]` as written is the integrated `Q = |S_i| U` while `F1` multiplies the
+intensive nodal `U` (Codex); both stages use the full `Delta t` and the existing
+`triangle_dt *= 0.5` must be unreachable under the switch (Codex); the complete
+physical element set and the active/owned subset must stay distinct (Codex).
+
+One correction has consequences beyond bookkeeping. I asserted that AREPO
+already smooths timebins between neighbours, bounding the ratio within an
+element by two. **Verified: it does not.** The public version has only
+`FORCE_EQUAL_TIMESTEPS` and `TREE_BASED_TIMESTEPS`, and the latter is a
+signal-speed criterion that does not bound the ratio. That bound was the sole
+argument limiting the reconstruction error in the mixed-mass-matrix proposal, so
+that proposal now rests on nothing until the bin-ratio distribution is measured,
+which is what Codex's section 11.7 asks for.
+
+### The one disagreement, arbitrated
+
+Codex says `update_primitive_variables()` is unsafe to call between stages; Kimi
+read it as safe. **Codex is right.** `update_primitive_variables.c:269-293`
+rewrites `SphP[i].Energy` and mutates the global `EgyInjection` when the energy
+floor triggers, so the corrector would not use the predictor the RD equations
+define.
+
+The reason this is worth flagging rather than simply fixing: the current test
+problems run `MinEgySpec = 0`, so the floor never fires. Calling the routine
+would pass every test in the suite today and fail silently later, in cold
+regions only, once a floor is enabled for production. The dedicated
+side-effect-free `rd_recover_stage_primitives()` is the right answer.
+
+### A P0 that neither review raised
+
+Kimi's `nrhs = 3` route is the right technique and should be adopted: since
+`beta_i` only ever multiplies a vector, a third right-hand side replaces the
+`beta` tensor, inherits the rank policy and costs one back-substitution.
+
+Its conservation argument has a gap. `sum_i T_i = S^- z` equals the target only
+if the solve is exact, which needs the target in `range(S^-)`. Right-hand sides
+0 and 1 are protected — `phi^T` by Lemma 1, `sum_m K_m^- Uhat_m` by the rank-one
+structure at stagnation — but the new third one, `(|T|/3) sum_j dU_j/dt`, is an
+arbitrary vector and is not. Measured on one element:
+
+```
+   u = 0.55 subsonic :  rank 4,  ||Sz-target||/||target|| = 1.4e-15,  defect 9.6e-15
+   u = 0    stagnant :  rank 3,  ||Sz-target||/||target|| = 4.7e-01,  defect 5.9e-01
+```
+
+The root cause is that **`beta_i` itself is undefined where `S^-` is singular**.
+Lemma 2 guarantees only that `beta_i phi^T` is well defined. This is not a
+corner case: the uniform and perturbed floor tests exercise it at 100 per cent
+rank deficiency, and by section 7.5 it is the generic state of a Lagrangian
+moving mesh. `F1` needs a defined rank-deficient behaviour, and falling back to
+the lumped matrix on those elements is the recommended first choice. **This must
+be settled before coding.**
+
+### Literature check: three papers, one of which changes a scope estimate
+
+**(a) The ALE topology gate has a published solution, for RD specifically.**
+*An ALE residual distribution scheme for the unsteady Euler equations over
+triangular grids with local mesh adaptation*, Computers & Fluids (2022),
+`S0045793022000810`. Mesh connectivity changes are interpreted as a series of
+**fictitious continuous deformations**, implemented as collapse and expansion
+operations, which enforces the geometric conservation law by construction and
+avoids interpolating the solution between grids, preserving the conservativeness
+and stability of the fixed-connectivity scheme.
+
+This is exactly the problem Codex marked as a research gate in section 11.6.
+Since AREPO rebuilds the Delaunay every step under mesh motion, edge flips are
+the norm rather than the exception, and the technique reframes a connectivity
+change as a degenerate limit of the deformation ALE-RD already handles. **The
+gate should be re-scoped from "unknown" to "obtain and adapt a published
+technique".** Full text was not accessible; the paper should be obtained.
+
+**(b) A different route past the mass matrix, in the Lagrangian regime.**
+Abgrall, Lipnikov, Morgan & Tokareva, *Multidimensional staggered grid residual
+distribution scheme for Lagrangian hydrodynamics*, arXiv:1811.00057, SIAM J.
+Sci. Comput. (2020). Bernstein polynomial shape functions give a **natural mass
+matrix diagonalisation**, avoiding global sparse mass matrix solves while
+retaining accuracy, with deferred-correction timestepping. It changes the basis
+rather than the time integration, so the section 6 obstruction theorem would
+need re-examining in that setting rather than carrying over. Recorded as a lead.
+
+**(c) A current review on the framing question of `context.md` item 1.**
+Abgrall, Maire & Ricchiuto, *Embedding General Conservation Constraints in
+Discretizations of Hyperbolic Systems on Arbitrary Meshes*, arXiv:2509.25967,
+September 2025. Contrasts the **numerical flux** notion of local conservation,
+defined on element faces, with the **residual** notion attached to elements and
+their degrees of freedom, on arbitrary meshes and in both Eulerian and
+Lagrangian form. That contrast is precisely the Voronoi-versus-median-dual
+question, and this is the most recent statement from the group whose formulation
+we follow. Should be read before `context.md` item 1 is revisited.
+
+### Net effect
+
+Direction unchanged, now with three-way agreement. Codex's revised order in
+section 11.10 is adopted, with one addition: settle the rank-deficient `F1`
+definition first. Of the open research questions, ALE topology moves from an
+unknown to a literature adaptation task; hierarchical timesteps remain open and
+the factor-of-two argument behind the mixed-mass proposal is withdrawn until
+measured.

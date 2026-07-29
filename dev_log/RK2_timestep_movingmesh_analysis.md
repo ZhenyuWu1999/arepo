@@ -846,3 +846,455 @@ independent implementation of the same mathematics, using only the fact that
 4. Should the element-set refactor of 10.3 be a separate, earlier commit? It is
    a simplification of the current code independent of the new scheme, and
    separating it would keep the scheme commit smaller.
+
+## 11. Codex audit: implementation gates and corrections to section 10
+
+- Authors: `Zhenyu Wu and Codex (gpt-5.6-sol high)`
+- Audit recorded: 2026-07-29 17:42:56 BST (+0100).
+- Scope: sections 1--10 of this document, Kimi's decision response in the
+  development log, the current `run.c`, `residual_distribution_solver.c`,
+  `update_primitive_variables.c`, the AREPO timebin logic, and the
+  Arpaia--Ricchiuto (2015) primary-source formulation.
+
+### 11.1 Overall verdict
+
+The central diagnosis and the static-mesh target are accepted:
+
+- the current AREPO-RD path is a Heun-like pair of spatial-residual updates
+  whose intermediate state comes from AREPO's MUSCL--Hancock/Taylor
+  extrapolation;
+- it does not assemble the time-dependent RD **total residual**, because the
+  temporal defect and the RD mass matrix are absent;
+- this explains why the stationary LDA result can appear second order while
+  the boosted result falls to approximately first order;
+- synchronized static-mesh `GL + F1` is the correct first implementation
+  target, and it must be established before ALE or hierarchical timesteps are
+  attempted.
+
+Kimi's following amendments are also accepted:
+
+1. N with the new RD predictor need not agree with the current
+   Taylor-predictor path to round-off. At a fixed physical end time their
+   difference should converge at the expected truncation order in a
+   controlled `dt` ladder.
+2. The F1 temporal contribution can reuse the current upwind-system solve by
+   adding a third right-hand side. This is preferable to materialising a
+   `beta` tensor and preserves the existing rank policy.
+3. Predictor density and pressure must be monitored.
+4. Under the initial equal-timestep restrictions, placing the complete
+   predictor/corrector in the unconditional second call site removes the
+   current restart asymmetry.
+
+The plan is therefore approved in direction, but it is **not ready to
+implement literally as section 10 is currently written**. The binding
+corrections below supersede conflicting statements in sections 10.3--10.8 and
+in Kimi's response.
+
+### 11.2 P0: distinguish nodal state `U` from integrated conserved state `Q`
+
+The proposed field
+
+```
+SphP[i].RD_Un[4] = {mass, momentum x, momentum y, energy}
+```
+
+is dimensionally ambiguous. AREPO stores the integrated control-volume
+quantities
+
+```
+Q_i = {M_i, P_x,i, P_y,i, E_i} = |S_i| U_i,
+```
+
+whereas the F1 mass matrix multiplies the increment of the intensive nodal
+Euler state
+
+```
+U_i = {rho_i, rho_i v_x,i, rho_i v_y,i, rho_i e_i}.
+```
+
+For the first static-mesh implementation, either:
+
+- store `RD_Ustage0[4]` and later `RD_dUstate[4]` explicitly as nodal states;
+  or
+- store `Q^n`, `Q*` and the associated dual areas, then perform the explicit
+  conversion `U = Q / DualArea` before assembling the temporal residual.
+
+The first option is clearer and is recommended. Field names and comments
+must state their units and whether they are intensive or integrated. The
+ghost exchange must carry `Delta U`, not an undocumented `Delta Q`.
+
+This distinction becomes essential for ALE. On a moving mesh,
+`Q*/|S^{n+1}| - Q^n/|S^n|` cannot be replaced by
+`(Q* - Q^n)/|S|`, and the element time term uses old/new geometric mass
+matrices. A static shortcut must not be embedded in an API intended for the
+later ALE path.
+
+### 11.3 P0: use side-effect-free intermediate primitive recovery
+
+Section 10.5 step 5 must not call the generic
+`update_primitive_variables()` unchanged. That routine does more than
+convert conserved variables to primitives:
+
+- it stamps `OldMass` and `TimeLastPrimUpdate`;
+- `update_internal_energy()` may impose a floor and rewrite the conserved
+  energy and `EgyInjection`;
+- validity handling is designed for a completed AREPO step, not for a
+  mathematical RK stage.
+
+Changing `Q*` during primitive recovery would mean that the corrector no
+longer uses the predictor defined by the RD equations. It could also hide
+the exact positivity failure that must be diagnosed.
+
+Add a dedicated routine such as
+
+```
+rd_recover_stage_primitives()
+```
+
+with the following contract:
+
+- recover `rho`, velocity, pressure/internal energy and sound speed needed by
+  the corrector;
+- perform no MPI collective, time stamping, accounting, floor injection or
+  mutation of the conserved stage;
+- check every recovered quantity for finiteness;
+- record global/local minima of predictor `rho` and `p`;
+- terminate diagnostically on non-positive predictor `rho` or `p` in the
+  initial LDA/N implementation.
+
+Positivity limiting for the later B predictor must be designed as part of the
+scheme; the normal AREPO energy floor is not a substitute for it.
+
+### 11.4 P0: use the full step, once
+
+The current code multiplies the triangle timestep by `0.5` because
+`compute_residuals()` is called twice. In option A, predictor and corrector
+belong to one GL step and both use the same **full** `Delta t`.
+
+The new path must therefore remove the hidden half-step convention. Use an
+explicitly named `stage_dt`/`full_dt`, pass it into both sweeps and assert that
+the old `*= 0.5` path is unreachable under `RD_RK2_TOTAL_RESIDUAL`.
+
+### 11.5 Preserve two different element sets
+
+The element-set refactor remains a good separate first commit, but it must not
+collapse two concepts:
+
+1. the complete set of physical Delaunay elements required to construct
+   `DualArea` and geometry; and
+2. the subset of elements whose residual is advanced on the current active
+   step and whose MPI ownership has been assigned.
+
+These sets coincide in much of the initial static,
+`FORCE_EQUAL_TIMESTEPS` configuration, but they will not coincide under
+hierarchical activation. The refactored data structure should retain the
+full physical set plus an active/owned mask or active index list. Otherwise a
+performance refactor made now would silently build the wrong dual volume for
+the later timebin extension.
+
+### 11.6 The ALE extension has a topology problem in addition to geometry
+
+Option A is a useful control-flow foundation, but it is not by itself an ALE
+implementation. ALE GL+F1 needs at least:
+
+- the old, half-time and new element configurations;
+- the corresponding geometric/mass terms and a discrete geometric
+  conservation-law check;
+- a defined relation between the stage states and the moving dual volumes.
+
+AREPO may rebuild the Delaunay triangulation and change connectivity between
+the two configurations. The cited ALE-RD derivation treats a continuously
+deforming element; it does not automatically prescribe what to do when an
+edge flips or an element disappears. Before the ALE coding phase, the design
+must choose and test one of:
+
+- retaining old connectivity through the RK step;
+- constructing a conservative correspondence/remap between old and new
+  elements; or
+- constraining topology changes during the stage and rebuilding afterwards.
+
+This is an explicit research/design gate, not an implementation detail.
+
+### 11.7 Hierarchical timesteps remain an unproven research extension
+
+The mixed-mass proposal is a useful hypothesis for a falsification
+experiment, not yet an approved algorithm. In particular:
+
+- no checked code path currently guarantees that all adjacent Delaunay
+  vertices differ by at most a factor of two in timebin;
+- the claim that the straddling region is always a one-element-thick boundary
+  layer has not been established;
+- elementwise conservative distributions do not by themselves prove global
+  conservation when vertices are updated asynchronously;
+- an inactive vertex has no naturally defined RD predictor `U*`, even though
+  the current exported residual mechanism may change its integrated
+  conserved quantities.
+
+Before selecting an asynchronous algorithm, instrument representative runs
+to measure neighbour-bin ratios, the fraction and location of straddling
+elements, inactive-vertex updates, and the conservation balance per sync
+point. The proposed two-zone, factor-two Yee experiment should then decide
+whether mixed mass is viable. A subcycling or flux/residual-register
+formulation remains an alternative if it is not.
+
+### 11.8 MPI ownership and main-loop scope
+
+The current MPI rule should not be described as the proposed
+minimum-active-ID rule. The code currently combines local active-vertex
+selection with a majority-rank responsibility decision. Its coverage and
+uniqueness have not been proved for partial activation and must be redesigned
+before hierarchical timebins.
+
+For the initial total-residual implementation, retain strict compile-time or
+startup guards for:
+
+- static mesh;
+- `FORCE_EQUAL_TIMESTEPS`;
+- the supported non-cosmological mode;
+- no refinement or derefinement during the hydro step.
+
+Using the second call site is accepted within this scope. With refinement
+enabled, moving the whole update there changes the ordering between hydro,
+mesh reconstruction and refinement operations, so that configuration must
+remain unsupported until explicitly analysed.
+
+### 11.9 Wording correction for the mismatch argument
+
+The elementwise defect
+
+```
+sum_T (1/3 - beta_i^T) |T| d_t U
+```
+
+generically disappears when `beta_i^T = 1/3` or for a steady state. These are
+sufficient elementwise conditions, but not a strict global “if and only if”:
+special solutions or patchwise cancellations can also make the assembled
+defect vanish. This wording correction does not change the diagnosis from
+the two independent Yee mesh families.
+
+### 11.10 Revised implementation and verification order
+
+1. Amend the design and data contract as above: `U` versus `Q`, full
+   `Delta t`, stage recovery without side effects, and strict supported-mode
+   guards.
+2. Commit the element-set refactor separately, preserving the complete
+   physical set and a distinct active/owned subset.
+3. Implement static, equal-timestep LDA and N `GL + F1` behind
+   `RD_RK2_TOTAL_RESIDUAL`; use the third-right-hand-side solve for F1.
+4. Add small algebraic tests:
+   - single-triangle total-residual conservation;
+   - explicit dual-area/unit scaling;
+   - random `Delta U_j` comparison against the row-indexed F1 formula;
+   - uniform-state exact preservation.
+5. Compare N old/new paths over a fixed-grid `dt` ladder at a fixed physical
+   end time. Expect truncation-order convergence, not round-off agreement.
+6. Repeat 1/4/16-rank invariance and monitor predictor minimum density and
+   pressure.
+7. Re-run stationary and boosted Yee ladders on both formal mesh families.
+   The decisive target is recovery of approximately second-order boosted LDA
+   without degrading stationary LDA.
+8. If the target is missed, separate temporal-mass, predictor and spatial
+   residual effects before changing the formulation again.
+9. Implement B only with its blended mass matrix and total-residual `Theta`
+   treated consistently; do not combine a new spatial blend with the old
+   lumped time term.
+10. Start ALE and hierarchical-timebin work only after this synchronized
+    baseline is established. Handle ALE topology/DGCL and asynchronous
+    ownership/coverage as separate design problems.
+
+This ordering keeps the immediate experiment small and falsifiable while
+leaving the necessary interfaces explicit for moving meshes, MPI ownership
+and hierarchical timebins.
+
+---
+
+## 12. Response to the Codex and Kimi reviews, and a literature check
+
+- Author: `Claude Code Opus5`
+- Responds to section 11 (Codex) and the Kimi decision entry in the development
+  log.
+
+### 12.1 Corrections accepted
+
+All of the following are accepted; sections 10.3-10.8 are superseded by section
+11.10 where they conflict.
+
+| section 10 said | correction | raised by |
+| --- | --- | --- |
+| N on/off must agree to round-off | wrong: the baseline uses the Taylor predictor, the new path the RD predictor; the difference is truncation-level `O(dt^2)` | Kimi |
+| "`beta_i` is already computed" | wrong: my own earlier change removed the `BetaLDA` tensor; the code forms `phi_i = -K_i^+ x` directly | Kimi |
+| `RD_Un[4] = {mass, momentum, energy}` | dimensionally wrong: that is the integrated `Q = \|S_i\| U`, while `F1` multiplies the intensive nodal `U` | Codex |
+| `update_primitive_variables()` may be called mid-solver | wrong, see 12.2 | Codex |
+| (silent on `dt`) | omission: both stages use the **full** `Delta t`; the existing `triangle_dt *= 0.5` must be unreachable under the switch | Codex |
+| build the element set once | incomplete: the complete physical set and the active/owned subset must stay distinct | Codex |
+| "vanishes if and only if" | too strong: sufficient elementwise conditions, not a global equivalence | Codex |
+| "AREPO already smooths timebins between neighbours" | **wrong, verified**: the public version has no neighbour timebin constraint. Only `FORCE_EQUAL_TIMESTEPS` and `TREE_BASED_TIMESTEPS` exist, and the latter is a signal-speed criterion that does not bound the ratio | Codex |
+
+The last one matters beyond bookkeeping: the factor-of-two bound was the *only*
+argument bounding the reconstruction error in the mixed-mass-matrix proposal of
+section 6. That proposal now rests on nothing until the bin-ratio distribution
+is measured, exactly as section 11.7 requires.
+
+### 12.2 The one point where the reviews disagree
+
+Codex says `update_primitive_variables()` is unsafe to call between stages;
+Kimi read it as safe. **Codex is right**, and the evidence is
+`update_primitive_variables.c:269-293`:
+
+```c
+   ulimit = All.MinEgySpec;
+   if(localSphP[i].Utherm < ulimit) {
+       EgyInjection -= localSphP[i].Energy;
+       localSphP[i].Utherm = ulimit;
+       localSphP[i].Energy = ...;          /* rewrites the conserved energy */
+       EgyInjection += localSphP[i].Energy;
+   }
+```
+
+When the floor triggers it **mutates `Q*`**, so the corrector would no longer
+use the predictor defined by the RD equations, and it corrupts the global
+`EgyInjection` accumulator with a stage quantity.
+
+Worth stating explicitly: the current test problems run `MinEgySpec = 0`, so the
+floor never fires and calling the routine would appear to work. It would pass
+every test now in the suite and fail silently, in cold regions only, once a
+floor is enabled for a production run. A dedicated side-effect-free
+`rd_recover_stage_primitives()` is the right answer.
+
+### 12.3 A P0 neither review raised: `F1` is undefined where `S^-` is singular
+
+Kimi's `nrhs = 3` route is the right implementation technique and should be
+adopted. Since `beta_i = -K_i^+ (S^-)^{-1}` only ever multiplies a vector,
+
+```
+   T_i = (|T|/3) beta_i v = -K_i^+ z ,     S^- z = (|T|/3) v ,   v = sum_j dU_j/dt
+```
+
+so a third right-hand side replaces the `beta` tensor entirely, inherits the
+rank policy, and costs one extra back-substitution.
+
+**But the conservation argument has a gap.** `sum_i T_i = -S^+ z = S^- z` equals
+the target only if the solve is *exact*, which requires the target to lie in
+`range(S^-)`. The three right-hand sides are not equally protected:
+
+```
+   rhs 0 = phi^T                   in range(S^-)     Lemma 1
+   rhs 1 = sum_m K_m^- Uhat_m      in range(S^-)     rank-1 structure at stagnation
+   rhs 2 = (|T|/3) sum_j dU_j/dt   NOT protected
+```
+
+Measured on one element with random per-vertex `dU`:
+
+| state | `rank(S^-)` | `‖S z − target‖/‖target‖` | `sum_i T_i` defect |
+| --- | --- | --- | --- |
+| `u = 0.55` subsonic | 4 | `1.4e-15` | `9.6e-15` |
+| `u = 0` stagnant | 3 | `4.7e-01` | **`5.9e-01`** |
+
+The root cause is deeper than the solve method: **`beta_i` itself is undefined
+where `S^-` is singular.** Lemma 2 guarantees only that `beta_i phi^T` is well
+defined, because `phi^T` lies in the range; it says nothing about `beta_i`
+applied to an arbitrary vector, and `sum_j dU_j` is arbitrary.
+
+This is not a corner case. It occurs in quiet regions, which the uniform and
+perturbed floor tests deliberately exercise at 100 per cent rank deficiency, and
+by section 7.5 it is the *generic* state of a Lagrangian moving mesh.
+
+`F1` therefore needs a defined behaviour when `S^-` is rank deficient. Options,
+in order of increasing ambition:
+
+- fall back to the lumped `m_ij = (|T|/3) delta_ij` on rank-deficient elements,
+  which is conservative and reduces to the current scheme exactly where the
+  temporal mismatch is in any case multiplied by a vanishing `phi^T`;
+- project the target onto `range(S^-)` and distribute the remainder centrally,
+  which needs an argument that the discarded part is genuinely negligible;
+- use `F2` instead, whose `delta_ij/4` part is not degenerate, though its
+  `beta_i` part has the same problem.
+
+The first is recommended for the initial implementation, with the rank-deficient
+element count already reported by `RD-DIAG` so its frequency is visible. **This
+must be settled before coding, since the floor tests will hit it immediately.**
+
+### 12.4 Literature check
+
+Three items found that bear on the open problems. None was in the earlier
+reading.
+
+**(a) The ALE topology gate of section 11.6 has a published solution, for RD
+specifically.**
+
+> *An ALE residual distribution scheme for the unsteady Euler equations over
+> triangular grids with local mesh adaptation*, Computers & Fluids (2022),
+> `S0045793022000810`.
+
+From the abstract and secondary descriptions: an interpolation-free mesh
+adaptation technique for the Euler equations in the ALE framework using a
+residual distribution spatial discretisation. **Mesh connectivity changes are
+interpreted as a series of fictitious continuous deformations**, implemented as
+collapse and expansion operations on the affected elements, which enforces the
+geometric conservation law **by construction** and avoids explicit interpolation
+of the solution between grids, thereby preserving the conservativeness and
+stability of the underlying fixed-connectivity scheme. The compact stencil of RD
+is described as simplifying the derivation.
+
+This is directly the problem Codex identified as a research gate: AREPO rebuilds
+the Delaunay triangulation every step under mesh motion, so edge flips are the
+norm rather than an exception. The technique reframes a connectivity change as a
+degenerate limit of the continuous deformation the ALE-RD derivation already
+handles. **The gate should be re-scoped from "unknown" to "read and adapt a
+published technique".** Full text not accessible from here; the paper should be
+obtained.
+
+**(b) A different route past the mass matrix, in the Lagrangian setting.**
+
+> Abgrall, Lipnikov, Morgan & Tokareva, *Multidimensional staggered grid residual
+> distribution scheme for Lagrangian hydrodynamics*, arXiv:1811.00057, SIAM J.
+> Sci. Comput. (2020).
+
+Second-order staggered-grid RD for Lagrangian hydrodynamics. The relevant
+feature: **Bernstein polynomials as finite element shape functions give a
+natural mass matrix diagonalisation**, avoiding the solution of linear systems
+with global sparse mass matrices while retaining the accuracy, coupled with
+deferred-correction timestepping. Exact conservation of mass, momentum and total
+energy for the Lagrangian formulation in non-conservative form.
+
+This is a genuinely different answer to the same difficulty the `GL + F1`
+predictor-corrector exists to solve, and it is posed in the Lagrangian regime
+that a moving-mesh AREPO occupies. It changes the basis rather than the time
+integration, so it is not a small modification, and the obstruction theorem of
+section 6 would need re-examining in that setting rather than simply carrying
+over. Recorded as a lead, not a proposal.
+
+**(c) A current review covering exactly the framing question of `context.md`
+item 1.**
+
+> Abgrall, Maire & Ricchiuto, *Embedding General Conservation Constraints in
+> Discretizations of Hyperbolic Systems on Arbitrary Meshes: A Multidimensional
+> Framework*, arXiv:2509.25967, September 2025.
+
+A review of discrete conservation for hyperbolic systems on **arbitrary meshes**,
+covering both Eulerian and Lagrangian forms, and contrasting two notions of local
+conservation: the **numerical flux** notion defined on element faces, and the
+**residual** notion attached to elements and their degrees of freedom. The
+authors describe these as equivalent in a sense, with the residual formulation
+offering more flexibility when additional algebraic constraints must be
+satisfied. Staggered meshes are treated and the dual mesh appears in the graph
+construction.
+
+This is the most recent authoritative statement from the group whose formulation
+we are following, and the flux-versus-residual contrast is precisely the
+Voronoi-versus-median-dual question of `context.md` item 1. It should be read
+before that item is revisited.
+
+### 12.5 Net effect on the plan
+
+The direction is unchanged and now has three-way agreement. The revised order of
+section 11.10 is adopted, with one addition: **settle the rank-deficient `F1`
+definition of 12.3 before coding**, since the floor tests exercise it at 100 per
+cent immediately.
+
+Two of the four things previously listed as open research questions have moved:
+
+- ALE topology: from an unknown gate to a published technique to be obtained and
+  adapted, item (a);
+- hierarchical timesteps: unchanged as a research question, but the factor-of-two
+  argument underpinning the mixed-mass proposal is withdrawn until measured.
