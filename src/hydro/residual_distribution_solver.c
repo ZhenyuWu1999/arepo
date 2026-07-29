@@ -14,7 +14,7 @@
 #include "../mesh/voronoi/voronoi.h"
 /* Relative pivot ratio below which the LU factorisation of S^- is considered
  * rank deficient and the minimum-norm least-squares solution is used instead.
- * See regularize_matrix_debug_report.md, section 4. */
+ * See dev_log/regularize_matrix_debug_report.md, section 4. */
 #define RD_PIVOT_RATIO_TOLERANCE 1e-12
 
 /* Relative conservation defect  ||sum_i phi_i - phi^T|| / scale  above which
@@ -147,7 +147,7 @@ static void rd_record_dt_extrapolation(double dt_extrapolation)
  *  fields then contribute nothing to K_j^-.  The system nevertheless stays
  *  consistent, and the distributed residuals are independent of which solution
  *  is selected, so the minimum-norm least-squares solution is a valid choice.
- *  See regularize_matrix_debug_report.md, sections 3 and 4.
+ *  See dev_log/regularize_matrix_debug_report.md, sections 3 and 4.
  *
  *  \param[in] S Row-major 4x4 matrix S^-; left unmodified.
  *  \param[in,out] rhs Row-major 4 x nrhs right-hand sides, overwritten by X.
@@ -253,7 +253,7 @@ static void rd_enforce_conservation(double flux[4][3], const double Phi[4], int 
    * exact answer is phi^T = 0, every quantity is at machine epsilon, and such a
    * ratio is round-off over round-off: it saturates near its algebraic maximum
    * of 4 and reports a catastrophe where nothing is wrong. (That false alarm
-   * cost a full investigation once; see regularize_matrix_debug_report.md.)
+   * cost a full investigation once; see dev_log/regularize_matrix_debug_report.md.)
    * The absolute defect is the meaningful quantity, and it is put in context at
    * report time by dividing by the largest |phi^T| in the same call. */
   (void)scale;
@@ -1014,7 +1014,7 @@ void compute_residuals(tessellation *T)
        *   LDA:  x = (S^-)^dagger phi^T
        *   N:    y = (S^-)^dagger b,   b = sum_j K_j^- Uhat_j
        * One factorisation therefore serves both, and no regularisation of
-       * S^- is required.  See regularize_matrix_debug_report.md. */
+       * S^- is required.  See dev_log/regularize_matrix_debug_report.md. */
       double rhs[4][2];
 
       for(k = 0; k < 4; k++)
@@ -1538,7 +1538,7 @@ lapack_int solve_system(int n, double *A, double *b)
  * whenever any entry fell below an absolute threshold.  That test is not a
  * conditioning test, the constants are dimensional, and the shift breaks the
  * identity sum_i K_i^+ = -S^- on which the conservation of both the LDA and
- * the N distribution rests.  See regularize_matrix_debug_report.md; the
+ * the N distribution rests.  See dev_log/regularize_matrix_debug_report.md; the
  * previous behaviour is preserved in git at commit ebe1be2. */
 
 #endif  // #ifdef RESIDUAL_DISTRIBUTION
