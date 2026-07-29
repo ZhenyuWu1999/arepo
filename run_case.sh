@@ -36,6 +36,7 @@ PY
 if command -v module >/dev/null 2>&1; then
   module load openmpi || true
   module load hdf5-openmpi || true
+  module load mkl/latest || true
 fi
 
 if [[ ! -x "${BINARY}" ]]; then

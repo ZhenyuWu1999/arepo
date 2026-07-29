@@ -121,9 +121,15 @@ OPTIMIZE  =  -std=c11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas 
 MPICH_LIB = -lmpi
 GSL_INCL  = -I/usr/include
 GSL_LIB   = -L/usr/lib/x86_64-linux-gnu/ -lgsl -lgslcblas
+HWLOC_LIB = -L/usr/lib/x86_64-linux-gnu/ -lhwloc
+
+ifdef MKLROOT
+LAPACK_INCL = -I$(CURDIR)/src/mkl_compat -I$(MKLROOT)/include
+LAPACK_LIB = -L$(MKLROOT)/lib/intel64 -Wl,-rpath,$(MKLROOT)/lib/intel64 -lmkl_rt -lpthread -lm -ldl
+else
 LAPACK_INCL = -I/usr/include
 LAPACK_LIB = -L/usr/lib/x86_64-linux-gnu/ -llapacke -llapack
-HWLOC_LIB = -L/usr/lib/x86_64-linux-gnu/ -lhwloc
+endif
 
 # libraries that are included on demand, depending on Config.sh options
 FFTW_INCL = -I/usr/include

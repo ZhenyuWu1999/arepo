@@ -34,6 +34,35 @@ require_file() {
   printf '%s\n' "${resolved}"
 }
 
+ensure_mkl_environment() {
+  if [[ -n "${MKLROOT:-}" && -f "${MKLROOT}/include/mkl_lapacke.h" ]]; then
+    return 0
+  fi
+
+  if command -v module >/dev/null 2>&1; then
+    module load openmpi || true
+    module load hdf5-openmpi || true
+    module load mkl/latest || true
+  fi
+
+  if [[ -n "${MKLROOT:-}" && -f "${MKLROOT}/include/mkl_lapacke.h" ]]; then
+    return 0
+  fi
+
+  cat >&2 <<'EOF'
+MKL is not available in the current shell, so this build would fall back to the
+system LAPACKE library. On this cluster that usually produces a binary that
+fails on compute nodes.
+
+Recommended workflow:
+  1. Either use `cnode` to enter a compute node, or SSH to an FCFS node
+     such as `ssh zwu@fcfs1`.
+  2. Run `module load openmpi hdf5-openmpi mkl/latest`
+  3. Re-run ./build_case.sh --config ...
+EOF
+  exit 3
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -92,10 +121,11 @@ echo "Make jobs     : ${MAKE_JOBS}"
 echo
 
 cd "${AREPO_REPO_ROOT}"
+ensure_mkl_environment
 
 if [[ "${DO_CLEAN}" -eq 1 ]]; then
-  echo "+ make clean"
-  make clean
+  echo "+ make CONFIG=${CONFIG_PATH} clean"
+  make CONFIG="${CONFIG_PATH}" clean
   echo
 fi
 
