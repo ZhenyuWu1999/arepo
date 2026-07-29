@@ -2585,3 +2585,178 @@ scope for this change. Section 7 is the specification for ALE when that begins;
 section 6 records why hierarchical timesteps are a research question with no
 reference solution in the CFD literature, which uses a single global `Δt`
 throughout.
+
+## 2026-07-29: review of Claude's RK2 plan (decision response) and a hierarchical-timestep strategy assessment
+
+- Author: `Kimi K3`
+- Review recorded: 2026-07-29 17:18:25 BST (+0100).
+- Scope: `dev_log/RK2_timestep_movingmesh_analysis.md` in full (sections
+  1-10); the Arpaia & Ricchiuto (2015) formulas as quoted there; Ben Morton's
+  standalone LDA branch at `/home/zwu/rdsolver/rd/triangle2D.h:795-870`
+  (independently re-read); `update_primitive_variables()` side effects in
+  `src/hydro/update_primitive_variables.c`; the current `run.c` call-site
+  structure including the restart path.
+- This entry answers the decision requested by the 2026-07-29 "RK2
+  specification closed" entry, and adds a strategy assessment for the
+  hierarchical-timestep extension requested by Zhenyu.
+
+### Part 1 — Verdict on Claude's plan: approved, with four amendments
+
+Verified independently and endorsed:
+
+- The `1/3` versus `β` mismatch mechanism is correct and quantitatively
+  accounts for the measured convergence table (boost 0: LDA ~ 1.95; boost 1:
+  ~ 0.94; N unchanged; B follows LDA; both mesh families agree). Substituting
+  the exact solution into the lumped semi-discrete form leaves
+  `sum_T (1/3 - beta_i^T) |T| dtU`, which vanishes only for `beta = 1/3` or
+  steady flow.
+- The thesis scheme is Arpaia & Ricchiuto's Global Lumping with the F1 mass
+  matrix, confirmed term by term against equations (50)-(53) of the primary
+  source; F1 satisfies `sum_i m_ij = (|T|/3) I`.
+- The section-4 algebraic simplification of the corrector is correct,
+  including the exact collapse of `GL + m^N` to the Heun form.
+- The hierarchical-timestep obstruction theorem (conservative + element-local
+  mass matrix => lumped) is correct, as is the conclusion that searching for a
+  locality-preserving modified `beta~` is futile.
+- **The standalone-code finding is confirmed from the source.** Ben's LDA
+  branch (`triangle2D.h:803-859`) broadcasts the same `SUM_MASS` to all three
+  vertices, implying a source-indexed mass matrix
+  `m_ij = (|T|/3) beta_j` with `sum_i m_ij = |T| beta_j != (|T|/3) I` —
+  conservative only when `Delta U` is uniform across the element (`O(h)`), and
+  first order under advection by the section-2 argument. **Do not port the
+  standalone LDA branch.** How this bears on the group's published results is
+  for Zhenyu to decide; a re-run of an advected case with the standalone code
+  is advisable before any conclusion is stated outside the group.
+
+Amendments to the plan:
+
+1. **The N-scheme on/off regression expectation is wrong.** The algebraic
+   collapse `GL + m^N` -> Heun is correct, but the switch-off baseline uses
+   the Taylor/gradient predictor while the switch-on path uses the RD
+   predictor. Both are first-order predictors differing at `O(dt^2)`, and the
+   difference enters the update through `phi_i(U*)`. The on/off difference is
+   therefore at truncation level, vanishing at second order in `dt` — **not
+   round-off**. Keep the test, but set the expectation accordingly (difference
+   should shrink like `dt^2` under CFL refinement). A true bit-level control
+   requires an additional temporary variant running the new machinery with the
+   old Taylor predictor.
+2. **"`beta_i` is already computed" is inaccurate — and there is a better
+   route.** The current LDA branch forms `phi_i = -K_i^+ x` directly; the
+   `BetaLDA` tensor no longer exists. The mass-matrix term does not need it
+   either: since `beta_i` multiplies a vector,
+   `T_i = (|T|/3) beta_i (sum_j Delta U_j)/dt = -K_i^+ z` where `z` solves
+   `S^- z = (|T|/3) (sum_j Delta U_j)/dt`. **Add a third right-hand side to
+   `rd_solve_upwind_system` (nrhs 2 -> 3): one factorisation, three solves,
+   zero beta tensor, and the existing rank policy is inherited unchanged.**
+   Conservation is automatic: `sum_i T_i = -S^+ z = S^- z =` the target
+   vector. This also pins the convention that `m_ij` is built from the
+   stage-2 (`U*`) linearisation; a stage-1 choice is equally legitimate
+   (difference `O(dt)`) but one must be picked and documented.
+3. **Predictor positivity needs monitoring before shock tests.** The RD
+   predictor is an LDA update, and LDA is not a positive scheme; `U*` can go
+   non-positive in density/pressure near discontinuities, where the corrector
+   sweep will fail at `Cs_avg`. Smooth-vortex tests are unaffected. Add a
+   `min rho/p` of the predicted state to `RD-DIAG` now, and plan for the
+   B-scheme predictor to use the blended distribution.
+4. **A latent restart asymmetry in the current wiring is an extra argument
+   for option A.** The first call site sits inside `if(RestartFlag != 1)`, so
+   on a restart iteration only the second half-call (`dt/2`, on stale states)
+   is applied. Option A places the whole step at the unconditionally executed
+   second site and eliminates this asymmetry for free.
+
+Answers to Claude's four reviewer questions:
+
+- **Q1 (call site):** the second site is correct; `find_next_sync_point()`
+  and the timebin bookkeeping are indifferent under `FORCE_EQUAL_TIMESTEPS`,
+  and amendment 4 above adds support.
+- **Q2 (data carriers):** `SphP[i].RD_Un[4]` and `primexch.RD_dU[4]` are the
+  right mechanism; no existing AREPO structure carries an old conserved
+  state. Guard both with `#ifdef RD_RK2_TOTAL_RESIDUAL` and keep them out of
+  the snapshot/restart IO registration (per-step transients).
+- **Q3 (`update_primitive_variables` side effects):** read and confirmed
+  purely local (no MPI collectives). Side effects: `OldMass` stamping,
+  `update_internal_energy`, `do_validity_checks`, `TimeLastPrimUpdate`. Safe
+  to call inside the solver; termination on a non-physical `U*` is the
+  desired behaviour. It iterates `ActiveParticleList` (all cells under the
+  enforced equal timesteps). TIMER nesting inside `compute_residuals` is
+  cosmetic.
+- **Q4 (element-set refactor first):** yes — merge it as a separate earlier
+  commit; it is a net improvement on its own (removes a duplicated
+  classification and one MPI collective per step).
+
+Implementation order endorsed (with amendment 1's corrected expectation):
+element-set refactor; `RD_RK2_TOTAL_RESIDUAL` + option A + LDA/N via the
+nrhs=3 route; the 10.8 test sequence; the decisive criterion remains
+**boosted LDA recovering approximately second order**; blended mass matrix
+and total-residual `Theta` for B as a second step (Arpaia eqs. 43-44).
+
+### Part 2 — Strategy assessment: is this direction extensible to hierarchical timesteps?
+
+Zhenyu's question: Ben's approach cannot be copied, AREPO's structure should
+be reused — does the current direction lead anywhere for hierarchical
+timesteps? Assessment: **yes, it is the necessary foundation and closes no
+doors; the real difficulty is the proven mathematical constraint, which is
+also precisely the original-research opportunity for thesis Chapter 4.**
+
+Why the current direction is the right foundation:
+
+- Any asynchronous scheme must reduce to GL+F1 when bins coincide; second
+  order synchronously is a necessary condition for second order
+  asynchronously.
+- Option A's single-call structure is what asynchrony needs: an active
+  element must complete both stages in one call, on one element set, with one
+  `dt`. The new data carriers (`RD_Un`, ghost `RD_dU`) are already the
+  channels an asynchronous update would use for remote vertices.
+- The conservation problem from the original audit (observation 4) is
+  decoupled from accuracy: it is an element coverage/ownership engineering
+  issue, addressed by the minimum-active-ID rule plus the coverage audit.
+
+The obstruction, restated: FV-AREPO gets asynchrony for free because face
+fluxes are pairwise-local; the consistent mass matrix couples the time term
+across an element's vertices, which collides head-on with the locality a
+timebin hierarchy needs. The theorem (conservative + element-local =>
+lumped) shows this is structural, not an implementation difficulty, and the
+CFD literature has no reference solution (single global `dt` throughout).
+
+A concrete viable route — mixed mass matrix on AREPO's existing machinery:
+
+- Elements whose vertices share a bin advance together: run full GL+F1
+  unchanged.
+- Elements straddling a bin boundary fall back to the lumped mass (both forms
+  are conservative, so global conservation remains exact); inactive vertices'
+  `U*_j` / `Delta U_j` are reconstructed, e.g. scaled by
+  `dt_small/dt_large`, or — notably — by re-admitting the Taylor
+  extrapolation **only on straddling elements**, which is exactly how AREPO's
+  FV path treats inactive neighbours.
+- The cost is accuracy confined to the boundary-layer elements; AREPO's
+  timebin smoothing bounds the bin ratio across any Delaunay edge at two, so
+  the reconstruction error is bounded and the layer is one element thick.
+- Everything needed already exists mechanically: `FluxRD_list` exports
+  contributions to remote vertices, `PrimExch` carries ghost states, the
+  ownership rule and coverage audit are designed.
+
+Honest risks, in order of severity:
+
+1. The straddling layer sits where the timestep criterion puts it — on
+   gradients, shocks and contacts. A first-order boundary layer could degrade
+   the scheme exactly where accuracy matters. Mitigants (bin ratio <= 2,
+   one-element thickness) make the loss plausibly small, but this requires a
+   quantitative experiment, not argument.
+2. Positivity near shocks needs an N-type predictor floor; asynchrony
+   complicates the analysis. Another reason the full B scheme must land
+   first.
+3. The fraction of straddling elements under a deep astrophysical hierarchy
+   (bin range ~ 2^20) is unknown and must be measured.
+
+Recommended falsification experiment before committing to a full
+asynchronous implementation: static mesh, two imposed timebin zones (factor
+2 apart), advected Yee crossing the bin boundary, mixed-mass-matrix
+prototype. Measure machine-precision conservation (expected), the boundary
+layer's local error, and the global order. This is a days-scale experiment
+that decides whether the mixed approach is viable or a subcycling treatment
+of straddling elements is needed instead.
+
+Bottom line: proceed exactly as planned with synchronized GL+F1 and the
+boosted-Yee verdict; the hierarchical question stays open by design, with
+the mixed mass matrix as the leading candidate and the two-zone experiment
+as its gatekeeper.
