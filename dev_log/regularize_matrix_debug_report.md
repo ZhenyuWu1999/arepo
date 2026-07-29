@@ -313,6 +313,20 @@ even though its residual looks acceptable.
 
 ### 4.2 Explicit conservation rebalance
 
+> **SUPERSEDED.** Codex and Kimi reviewed `07f264a` and judged the *correction*
+> below to be unnecessary and, as engineering, capable of masking defects. That
+> is accepted: the measurements in section 7 show the correction is of size
+> `1.4e-17` (LDA) to `1.8e-15` (N, B) against `max|phi^T| = 3.3e-2`, so the
+> argument made here — that it never changes anything — is itself the argument
+> for not having it. It is also redundant with assertion A2, and keeping it
+> weakens A2 by guaranteeing that the check it performs always passes.
+>
+> The *measurement* stays and A2 is promoted to a hard assertion; only the
+> correction goes. See the log entry
+> "2026-07-29: review by Codex and Kimi". This section is retained as written
+> so that the reasoning being overturned is on the record, and should be
+> rewritten once the change is made.
+
 ```
      phi_i^T  <-  phi_i^T  +  (1/(d+1)) ( phi^T  -  sum_{j in T} phi_j^T )
 ```

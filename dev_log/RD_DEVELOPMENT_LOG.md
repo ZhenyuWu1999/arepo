@@ -1097,3 +1097,549 @@ it will scream loudest exactly where the true answer is zero.
 Remaining from earlier entries: long runs to `TimeMax = 3.0` under the final
 code. Next is the advected smooth vortex convergence study, now with all three
 schemes available and N usable as the control.
+
+## 2026-07-29: independent audit of the Kimi/Claude review and recommendations for the next validation stage
+
+- Author: `gpt-5.6-sol high`
+- Review recorded: 2026-07-29 10:22:03 BST (+0100).
+- Repository state reviewed: `develop_pureC_RD` at `87877a2`, including
+  `53c3fc4`, `07f264a` and `87877a2`.
+- Scope: Kimi's review and time-integration analysis; Claude's removal of
+  `regularize_matrix()`, new invariant diagnostics and tests; the LDA/N/B
+  direct-solve paths; build infrastructure; and the existing Yee generator and
+  checker.
+- No source code was changed as part of this audit.
+
+### Overall assessment
+
+The current code is a substantially better synchronized static-mesh baseline
+than `ebe1be2`. Replacing the fixed diagonal regularisation is mathematically
+justified and is necessary before an ALE/moving-mesh formulation. The uniform,
+perturbed-uniform, Gresho and MPI-rank tests give strong evidence for algebraic
+correctness, exercise of the singular path, conservation to round-off, and
+consistent triangle coverage under the enforced equal-timestep configuration.
+
+These tests do **not** establish an accuracy or convergence order. The current
+baseline should be accepted for further validation, but not yet described as a
+demonstrated second-order unsteady RD method.
+
+Keeping `FORCE_EQUAL_TIMESTEPS` is the right choice for this stage because it
+isolates the spatial distribution, predictor and mass/time-defect questions.
+Hierarchical active time bins, moving mesh and the MPI ownership redesign should
+remain disabled until this synchronized baseline passes an exact-solution
+convergence test.
+
+### Findings confirmed
+
+1. **Removal of `regularize_matrix()` is correct.** At mesh-relative
+   stagnation, `S^- = sum_i K_i^-` is structurally singular. Adding an absolute
+   `1e-10 I` is unit-dependent and breaks `sum_i K_i^+ = -S^-`. A direct solve
+   with a singular-capable path is the correct approach.
+
+2. **The rewritten LDA and N algebra is correct.** The row-major `4 x 2` LAPACKE
+   right-hand-side layout is consistent with `ldb = nrhs`, and
+
+   ```
+   phi_i^LDA = -K_i^+ x,       S^- x = phi^T
+   phi_i^N   =  K_i^+(U_i-y),  S^- y = sum_j K_j^- U_j
+   ```
+
+   reproduces the standard distributions without forming an explicit inverse
+   or the full `BetaLDA` tensor.
+
+3. **The singular-path and MPI tests are meaningful.** The uniform case takes
+   the minimum-norm path for every solve and preserves the state to about
+   `1e-15`. The pressure-perturbed uniform case is the discriminating variant
+   because its momentum residual is non-zero at stagnation. Field differences
+   near `1e-14` plus identical element counts are strong evidence that the
+   current synchronized ownership rules cover the same elements under the
+   tested decompositions.
+
+4. **The signed-area change is useful insurance, not an identified fix for the
+   historical termination.** The cross product and orientation assertion are
+   preferable to Heron's formula. Claude's later measurement correctly retracts
+   the earlier suggestion that Heron cancellation caused the observed failure.
+
+5. **Kimi's `0 / dt` reading is confirmed.** The two half-weight calls are wired
+   as a two-stage update. This establishes the predictor/corrector mechanics,
+   but not the combined space-time linearity-preserving property of LDA or B.
+
+### Remaining solver concerns
+
+#### LU and DGELSD use inconsistent notions of numerical rank
+
+The LU path is rejected when the ratio of the smallest to largest diagonal
+pivot is below `1e-12`, but the fallback calls `DGELSD` with `rcond = -1`, which
+uses a machine-precision rank threshold. A matrix rejected as too ill-
+conditioned for LU may therefore still be treated as full rank by DGELSD,
+retaining its small singular values rather than returning a truncated numerical-
+rank solution.
+
+This does not show that the reported results are wrong: exactly stagnant cases
+are genuinely rank deficient and the tested branch differences remain at
+round-off. It is nevertheless a mismatch between implementation and comments.
+Also, partial pivoting does not order diagonal pivots by magnitude, and
+`min(abs(diag(U))) / max(abs(diag(U)))` is a heuristic rather than a condition-
+number estimate. The gauge-invariance proof in the debug report is specifically
+for exact stagnation and should not automatically be extended to every state
+selected by a near-singular heuristic.
+
+Before changing `rcond`, perform an element-level sweep over mesh-relative
+speeds of roughly `1e-16` to `1e-4`, comparing LU, DGELSD and forced-SVD
+residual distributions. The required continuity is that of the final `phi_i`,
+not necessarily the intermediate solution vector. Then choose and document one
+policy: a stable full-rank SVD solve with a machine threshold, or a scale-aware
+numerical-rank truncation used consistently in both tests.
+
+#### Diagnostics should distinguish exact and near singularity
+
+If `dgetrf()` returns non-zero `info`, the code takes the pseudoinverse path
+without setting `RD_stat_min_pivot_ratio` to zero. A 100-percent singular case
+can consequently report `min_pivot_ratio = 1`. Record zero or add an explicit
+`exact_singular` count.
+
+The numerical rank returned by DGELSD is unused. Diagnostics should record the
+rank and the residuals `||S^-x-phi^T||` and `||S^-y-b||`, distinguishing an
+expected gauge singularity from an unexpected inconsistent least-squares solve.
+
+### Conservation rebalance is mathematically unnecessary
+
+`rd_enforce_conservation()` is not part of the mathematical LDA, N or B scheme.
+In exact arithmetic no correction is needed. For LDA,
+
+```
+sum_i phi_i^LDA = -S^+ x = S^- x = phi^T.
+```
+
+For N,
+
+```
+sum_i phi_i^N
+  = sum_i K_i^+ U_i - S^+ y
+  = sum_i K_i^+ U_i + sum_i K_i^- U_i
+  = phi^T.
+```
+
+B is a component-wise blend of two distributions whose sums both equal
+`phi^T`, so it is conservative as well. At exact stagnation the same result
+holds with a Moore-Penrose solution because the right-hand sides are consistent
+and the distributed residual is independent of the null-space gauge.
+
+The current rebalance is defensible only as a floating-point projection after
+its correction has already been shown to be round-off. Claude's raw defects of
+about `1e-15` support that interpretation. Applying it unconditionally is still
+risky because it can hide a future error in the solve, `K` matrices, indexing or
+MPI path. Assertion A2 is checked after the correction and is therefore nearly
+true by construction, not an independent validation of the raw distribution.
+Equal splitting also does not make the correction part of RD theory; if it ever
+exceeds round-off it can alter dissipation or linearity properties.
+
+Recommended action before convergence testing:
+
+1. Add a controlled switch disabling the correction while retaining raw-defect
+   diagnostics.
+2. Compare correction-on/off runs for uniform, perturbed-uniform, Gresho
+   `v0`/`v1e-8`, and 1/4 MPI ranks.
+3. Measure element defects, global mass/momentum/energy drift and snapshot
+   differences.
+4. If the uncorrected path remains at accumulated round-off, remove the
+   rebalance and retain a diagnostic assertion only.
+5. If a projection is retained for bit-level local conservation, allow it only
+   when the raw defect satisfies a floating-point error bound; otherwise stop
+   rather than repair the result.
+
+The bound should be based on pre-cancellation operation magnitudes, e.g.
+
+```
+eps_machine * sum |K_i^+| |x|              (LDA)
+eps_machine * sum |K_i^+| (|U_i| + |y|)    (N)
+```
+
+with an operation-count factor. A fixed absolute tolerance is unit-dependent,
+while dividing by a nearly zero element `|phi^T|` repeats the quiet-element
+false alarm already documented.
+
+### Yee infrastructure is not ready for convergence measurements
+
+The current `examples/yee_2d/` case is a stationary vortex on a polar,
+flow-aligned point set. The generator has an unseeded random ring angle and no
+bulk velocity. The checker assumes a stationary centre and can silently produce
+invalid results:
+
+- it divides `RotationVelocity_ref` by `Radius` at the central point where
+  `Radius = 0`, producing NaN;
+- `NaN > tolerance` is false, so this need not fail the test;
+- no readable snapshots can still lead to a successful exit;
+- finite-value, positivity, global conservation and clean-termination checks
+  are absent;
+- `sqrt(NumberOfCells)` is not the requested linear resolution of this polar
+  point set.
+
+Create a separate deterministic `yee_advected_2d` case rather than overwriting
+the historical stationary test. Store resolution, seed, mesh family and boost
+in IC metadata. Translate the analytic centre periodically,
+
+```
+x_c(t) = (x_c(0) + u_boost * t) mod L,
+```
+
+and compare density, internal energy and the full velocity vector using volume-
+weighted L1/L2 norms. Reject non-finite values and non-positive density/pressure,
+require the expected final snapshot, and record global conserved quantities.
+
+### How to interpret Yee plus boost
+
+Claude is correct that an advected smooth vortex is more sensitive to the
+lumped mass/time-defect problem than stationary Yee. A fixed-mesh `dt`
+refinement alone measures convergence to the semi-discrete solution and cannot
+determine unsteady spatial order.
+
+The boosted vortex nevertheless measures the complete space-time method, not
+the mass matrix in isolation. It also contains the spatial distribution,
+predictor, mesh alignment and Galilean error. The strongest evidence chain is:
+
+1. stationary Yee retains its expected spatial behaviour;
+2. boosted Yee is refined in `h` with actual `dt` proportional to `h`;
+3. a separate fixed-mesh boosted temporal refinement confirms the two-stage
+   order until the spatial-error plateau.
+
+If stationary LDA remains approximately second order, boosted LDA drops toward
+first order, and the independent temporal refinement remains second order, the
+combination strongly implicates the lumped mass/time-defect distribution. Kimi's
+temporal test is useful as a control, but cannot answer that question alone.
+
+### Recommended work order
+
+1. **P0: remove or strictly guard conservation rebalance**, then run the
+   correction-on/off regressions before producing convergence results.
+2. **P0: harden upwind-solve diagnostics** and perform the near-stagnation
+   velocity sweep before selecting a numerical-rank policy.
+3. **P0: build a reproducible advected-Yee harness** using a deterministic
+   glass or mildly perturbed unstructured mesh. Avoid an exactly Cartesian
+   point set because of cocircular Delaunay degeneracy and directional bias.
+4. **P1: run a convergence pilot** with resolutions `32, 64, 128` (then `256`
+   if necessary), schemes N/LDA/B, boosts `0` and `1` initially, and a fixed
+   CFL under `FORCE_EQUAL_TIMESTEPS`. Record actual dyadic timesteps and step
+   counts. Add boost `0.25` after the first result if useful.
+5. **P1: run the temporal control** on one sufficiently fine boosted mesh with
+   CFL values near `0.4, 0.2, 0.1, 0.05`.
+6. **P1/P2: finish long synchronized regressions** to Gresho `TimeMax = 3`, but
+   do not interpret them as exact-solution accuracy tests.
+7. **P3: only then revisit hierarchical active bins and moving mesh**, whose
+   conservative update and MPI responsibility problems would otherwise be
+   mixed with unresolved baseline-accuracy questions.
+
+### Build-system note
+
+The `flock` in `build_case.sbatch` is an effective workaround, but
+`src/main/allvars.h` still hardcodes `build/arepoconfig.h`. Direct concurrent
+`build_case.sh` calls remain unprotected and `BUILD_DIR` remains unsafe. Keep
+all convergence builds serialized, then replace the hardcoded generated-header
+include with a build-directory-aware include path in a later infrastructure
+change.
+
+## 2026-07-29: second independent review — adjudication of the rebalance dispute and the near-stagnation gap
+
+- Author: `Kimi K3`
+- Review recorded: 2026-07-29 10:49:51 BST (+0100).
+- Repository state reviewed: `develop_pureC_RD` at `87877a2`, comprising
+  `ebe1be2` (CodeX baseline), `53c3fc4` (MKL build infrastructure), `07f264a`
+  (Claude: direct solve replacing `regularize_matrix()`, invariant checks),
+  and `87877a2` (dev_log move).
+- Sources reviewed in full: the code diff `ebe1be2..07f264a`;
+  `dev_log/regularize_matrix_debug_report.md` (all 720 lines, including the
+  two lemmas); the log entries of 2026-07-28 and the three of 2026-07-29;
+  the signed-area change in `src/mesh/voronoi/voronoi.c`; and the CodeX audit
+  entry of 2026-07-29 10:22.
+- No source code was changed as part of this review.
+
+### Verdict on the `regularize_matrix()` removal and the direct solve
+
+The change is mathematically correct and necessary. Independently verified:
+
+- **Lemma 1 (consistency) holds.** At mesh-relative stagnation the flux
+  reduces to the pressure terms, so `phi^T = (0, 1/2 sum n_x p_i,
+  1/2 sum n_y p_i, 0)`, which lies in
+  `range(S^-) = span{(1,0,0,H), (0,1,0,0), (0,0,1,0)}`. The system is
+  consistent; only the solution is non-unique.
+- **Lemma 2 (gauge invariance) holds.** `null(S^-) = span{(1,0,0,0)}`, the
+  isobaric density direction, and at `u = 0` the Euler Jacobian annihilates
+  it (`A_x (delta,0,0,0)^T = 0`, since `dp/d rho = -(gamma-1) u^2 / 2 = 0`),
+  so `K_i^+ z = 0` and the distributed residuals are independent of the
+  gauge. The minimum-norm least-squares solution is a valid choice.
+- The implementation matches the thesis formulas: `phi_i^LDA = -K_i^+ x`
+  with `S^- x = phi^T` is `beta_i phi^T = -K_i^+ (S^-)^{-1} phi^T`; the N
+  branch `Bracket = Uhat_i - y` with `S^- y = sum_j K_j^- Uhat_j` is the
+  inflow-state form. The row-major `4 x 2` right-hand-side layout with
+  `ldb = nrhs = 2` is correct for both `dgetrs` and `dgelsd`. One
+  factorisation serving both right-hand sides also eliminates the explicit
+  inverse and the `BetaLDA[4][4][3]` tensor.
+- The test campaign is of high quality: the uniform floor test (100 per cent
+  of solves on the minimum-norm path, state preserved to `1e-15`), the
+  perturbed variant whose error was correctly predicted to appear only in
+  the velocity field at exactly `REGULARIZATION_CONSTANT` scale, the
+  element-solve-count audit across decompositions (a stronger coverage
+  statement than field comparison), and the honest retraction of the Heron
+  hypothesis after measurement.
+
+### Adjudication: the conservation rebalance (CodeX position upheld, with a concrete resolution)
+
+Both sides are mathematically right: in exact arithmetic
+`rd_enforce_conservation()` is the identity, and the measured pre-correction
+defects (`1e-15` to `1e-17` absolute) are genuinely round-off. The
+disagreement is engineering policy, and there CodeX's three objections are
+decisive:
+
+1. Assertion A2 is evaluated **after** the correction and is therefore true
+   by construction. An assertion that cannot fire has no validation value;
+   it will not catch a future error in the solve, the `K` matrices, the
+   indexing, or the MPI path.
+2. An unconditional repair masks exactly the class of bug this code base has
+   repeatedly produced. Equal splitting of the defect has no basis in RD
+   theory; the remark that it coincides with the centred distribution is
+   rhetorically true but mathematically irrelevant, and if the defect ever
+   exceeds round-off the split arbitrarily alters the distribution.
+3. Claude's own bound — the correction is
+   `O(kappa(S^-) * eps_mach * ||phi^T||)` — should be **enforced**, not
+   assumed.
+
+Resolution (adopting CodeX's recommendation 5): apply the rebalance **only
+when the raw defect satisfies a scale-aware floating-point bound**, e.g.
+`eps_mach * sum |K_i^+| |x|` (LDA) or `eps_mach * sum |K_i^+| (|U_i| + |y|)`
+(N), times a small operation-count factor; otherwise terminate. Move A2 to
+the **raw** distribution. Keep the `RD-DIAG` pre-correction statistics,
+which are the honest part of the current implementation. An optional
+alternative used elsewhere in the RD literature: compute the distribution at
+two vertices and close the third by `phi_3 = phi^T - phi_1 - phi_2`, which
+is conservative to round-off by construction at the cost of vertex symmetry;
+it can serve as a control implementation.
+
+The user has reviewed both positions and endorses this resolution: the
+unconditional rebalance is a redundant step that risks hiding problems.
+
+### The LU/DGELSD rank-criterion mismatch (CodeX finding endorsed, and strengthened)
+
+CodeX is correct that the two paths use inconsistent notions of numerical
+rank, and the issue is somewhat sharper than "implementation-comment
+mismatch". Both lemmas are proved for **exact** stagnation. Near stagnation
+(`u_n` small but non-zero), `S^-` is full rank but ill-conditioned; the
+pivot-ratio guard (`1e-12`) rejects the LU, but `dgelsd` with `rcond = -1`
+truncates only at machine precision, so it retains the small singular value
+and returns a solution with a large near-null-space component. The
+annihilation `K_i^+ z = 0` holds only in exact arithmetic; in floating point
+the induced error in `phi_i` scales like `eps_mach * ||K|| / u_n`, which at
+`u_n ~ 1e-8` is an `O(1e-8)` relative effect — an accuracy problem, not a
+cosmetic one. CodeX's proposed element-level sweep over mesh-relative speeds
+`1e-16` to `1e-4`, comparing LU / DGELSD / forced-SVD distributions and
+requiring continuity of the final `phi_i` (not of the intermediate solution
+vector), is the right experiment; one documented policy (stable full-rank
+SVD with machine threshold, or a scale-aware truncation used consistently in
+both the guard and the fallback) should be chosen from its outcome.
+
+### On Yee+boost: Claude's critique of the Kimi P1 test is accepted
+
+The fixed-mesh `dt`-refinement test proposed in the 2026-07-28 review
+measures only the temporal order of the semi-discrete ODE — it converges to
+the semi-discrete solution and cannot detect an unsteady spatial-accuracy
+degradation from the lumped mass matrix. The cited theory (Ricchiuto &
+Abgrall 2010: lumped mass combined with an LP spatial distribution is not LP
+and degrades unsteady accuracy to first order; this is what the
+total-residual RK-RD formulation repairs) is consistent with the thesis
+notes (`m_ij^{LDA} = (|T|/3) beta_i^{LDA}`). The correct evidence chain is
+the three-step one from the CodeX audit:
+
+1. stationary Yee spatial convergence as control (LDA should remain ~2);
+2. **advected Yee on a glass/random mesh, `h`-refined with `dt` proportional
+   to `h` at fixed CFL** — if boosted LDA drops toward first order while N
+   stays first order, the lumped-mass/time-defect defect is confirmed, and
+   the remedy is known (distribute the time-defect term with
+   `m_ij = (|T|/3) beta_i`);
+3. the fixed-mesh temporal refinement retained only as a control.
+
+The design constraints from both reviews are endorsed: glass or mildly
+perturbed unstructured mesh (no Cartesian point set — cocircular Delaunay
+degeneracy and directional bias; no polar flow-aligned mesh), periodically
+translated analytic centre, volume-weighted L1/L2 norms, and a checker that
+cannot pass on NaN (the current Yee checker divides by `Radius = 0` at the
+centre and `NaN > tolerance` is false). Note that the P0 debts from earlier
+entries — `check.py` repair and seeding `examples/yee_2d/create.py` — are
+still open and are the only thing blocking this decisive experiment.
+
+### Minor endorsements
+
+- Diagnostics: record zero (or an explicit `exact_singular` count) in
+  `min_pivot_ratio` when `dgetrf` returns `info != 0`; record the `dgelsd`
+  numerical rank and the residuals `||S^-x - phi^T||`, `||S^-y - b||` to
+  distinguish an expected gauge singularity from an inconsistent
+  least-squares solve.
+- The marginal rank-dependence of the pseudo-inverse branch (29821 vs 29820
+  in ~4.7M solves) is harmless by Lemma 2, but the `RD_ALWAYS_PSEUDOINVERSE`
+  reference path should be run once as a full control to confirm branch
+  independence formally.
+- `reset_dualarea()` per `compute_residuals()` call is dead work under
+  `VORONOI_STATIC_MESH` (two full classifications and extra collectives per
+  step); move it to after mesh construction. Correctness is unaffected.
+- Boundary-triangle duplicate detection keys on the sorted ID triple only;
+  two geometrically distinct periodic images sharing an ID triple would
+  silently drop a real element. Include `image_flags` or the centroid offset
+  in the key, and add a reconciliation against the global Delaunay triangle
+  count — the current element-count audit is per-task and cannot see this
+  loss.
+- Build hygiene: the `flock` serialisation is a reasonable stopgap, but
+  `src/main/allvars.h:44` hardcodes `./../../build/arepoconfig.h`, so
+  `BUILD_DIR` isolation silently compiles every configuration against the
+  stale header. Any scheme comparison in which two schemes agree to more
+  than a few digits should be treated as a build failure until this is fixed
+  properly.
+- Conservation checks must always be recomputed from snapshots:
+  `energy.txt` is written with `%g` (six significant digits).
+
+### Consolidated priorities (this review's adjudication)
+
+- **P0**: conditional (scale-aware, bound-checked) rebalance with A2 moved
+  to the raw distribution; `check.py` repair, Yee generator seed, Yee
+  checker NaN fix; pivot/rank diagnostics completion.
+- **P1**: near-stagnation sweep to fix one rank policy; then build the
+  deterministic `yee_advected_2d` case (glass mesh, boost ladder, IC
+  metadata for resolution/seed/boost) and run the three-step evidence chain
+  with N as control.
+- **P2**: if boosted LDA is confirmed to degrade, implement the
+  total-residual RK-RD time-defect distribution `m_ij = (|T|/3) beta_i`;
+  long Gresho `t = 3` regressions; proper `BUILD_DIR` fix.
+- **P3**: only after baseline accuracy is quantified, return to hierarchical
+  time bins, the MPI ownership redesign, and the moving-mesh ALE/GCL
+  formulation.
+
+## 2026-07-29: review by Codex and Kimi — rebalance to be removed, rank criterion inconsistent
+
+- Recorded by: `Claude Code Opus5`
+- Findings by: `Codex` and `Kimi K3`, reviewing commit `07f264a`
+- Implementation of the two accepted changes is assigned to `Codex`, since the
+  second finding is his.
+
+### Accepted without dispute
+
+Both reviewers accept the removal of `regularize_matrix()` and the replacement
+of the explicit inverse by a direct solve, together with the supporting analysis
+in `regularize_matrix_debug_report.md`.
+
+### 1. The conservation rebalance is unnecessary and should be removed
+
+Both reviewers judge `rd_enforce_conservation()`'s *correction* to be
+unnecessary, and warn that as engineering it can mask defects. I agree, and the
+strongest argument is my own measurement.
+
+Section 4.2 of the report justifies the rebalance by showing that the correction
+is identically zero in exact arithmetic and `O(kappa * eps * ||phi^T||)` in
+floating point. Measured absolute defects are `1.4e-17` (LDA) and `1.8e-15`
+(N, B) against `max|phi^T| = 3.3e-2`. **"It never changes anything" is itself the
+argument for not having it.**
+
+There is a sharper form of the objection that I had not seen:
+
+> The A2 assertion and the rebalance are redundant, and keeping the rebalance
+> weakens the assertion.
+
+A2 exists to catch a broken conservation identity. The rebalance guarantees that
+A2 passes after the correction. The measurement is taken before the correction,
+so the measurement is doing all the work and the correction contributes only a
+surface on which a future defect — a reintroduced regularisation, a dropped
+element in the asynchronous work, an indexing error — could be silently absorbed
+while the mass-drift check still passes.
+
+Worth stating plainly: this is the same category of error I criticised
+`regularize_matrix()` for. A numerical patch applied over a symptom without the
+underlying condition being verified. I removed one and installed another in the
+same commit, and did not notice.
+
+Agreed replacement:
+
+- delete the correction, keep the measurement;
+- promote A2 from a report to a hard assertion, `defect_abs > tol * max|phi^T|`
+  terminating the run, with `tol = 1e-10` (measured values are `1e-13`, leaving
+  three orders of headroom);
+- confirm by a control run that the mass drift is unchanged, which it should be,
+  since the correction was of that size.
+
+If conservation later becomes genuinely difficult in the asynchronous or ALE
+formulations, the requirement is to *see* the failure, not to pass through it.
+
+### 2. LU and DGELSD apply inconsistent rank criteria (found by Codex)
+
+A real defect. `rd_solve_upwind_system()` uses two thresholds four orders of
+magnitude apart:
+
+```
+     if(!(ratio >= 1e-12)) use_pseudo_inverse = 1;       LU guard, threshold 1e-12
+     LAPACKE_dgelsd(..., singular_values, -1.0, &rank);  rcond = -1 -> cut-off at eps ~ 2.2e-16
+```
+
+This creates a band in which the fallback does nothing:
+
+```
+     sigma_min/sigma_max  in  ( 2.2e-16 , 1e-12 )
+
+        LU guard : ratio < 1e-12   -> declared rank deficient, handed to dgelsd
+        dgelsd   : ratio > 2.2e-16 -> declared full rank, solved normally
+        => returns exactly the ill-conditioned solution the guard exists to avoid
+```
+
+The fallback is a no-op over precisely the band of matrices it was written for.
+
+Why the tests did not catch it, which is the part worth remembering:
+
+| case | `min_pivot_ratio` | path taken |
+| --- | --- | --- |
+| Gresho `v1e-8` | `2.8e-11` to `4.3e-10` | above `1e-12`, LU path, `dgelsd` never called |
+| Gresho `v0`, uniform | `3.1e-20` | below `2.2e-16`, `dgelsd` truncates correctly |
+
+Both ends of the range are covered and the middle is never touched. **The gap in
+test coverage coincides exactly with the location of the defect.** A conditioning
+threshold needs a test case straddling it, not only cases far on either side.
+
+Proposed fix, subject to whatever Codex prefers: pass
+`rcond = RD_PIVOT_RATIO_TOLERANCE` instead of `-1`, so the pivot ratio only
+decides whether to consult `dgelsd` while `dgelsd` makes the authoritative
+decision at the same tolerance. A condition estimate via `dgecon` instead of the
+pivot-ratio proxy would be a stronger variant. Either way, add a case with
+`sigma_min/sigma_max` near `1e-14`; a Gresho background velocity of order
+`1e-5` should land in the band.
+
+### 3. Attribution in the advected-vortex study (Codex)
+
+Codex accepts the experiment but notes that a finer analysis is needed before a
+loss of order can be attributed to the mass matrix. Agreed. An h-refinement
+slope shows *that* the order drops, not *why*, and the confounders are real:
+static-mesh advection error growing with `u0`, the gradient predictor differing
+from the RD lumped predictor, the location of the B blend, glass meshes at
+different resolutions not forming a single mesh family, and limiter activation.
+
+What tightens the attribution, in order of strength:
+
+- **Intervention is the gold standard.** Implement the total-residual form
+  `m_ij^{LDA} = (|T|/3) beta_i^{LDA}` and rerun the same ladder. Order recovering
+  to 2 establishes the attribution by changing the cause; order not recovering
+  refutes it. About thirty lines, since only the distribution of the temporal
+  term changes.
+- **Read the slope, not the magnitude.** Static-mesh advection error is `O(h^2)`
+  for a linearity-preserving scheme, so it moves the error constant; the mass
+  matrix moves the slope. This requires at least four resolutions and a check
+  that the slope has stabilised.
+- **Use N as a control.** N is not LP even for steady problems. If boosting
+  leaves N's order unchanged while LDA's degrades, the mechanism is LP-specific,
+  which excludes advection error since that affects both schemes alike.
+- **`u0 = 0` is the internal control.** The temporal defect vanishes identically
+  for a steady solution, so the mass matrix cannot appear. That line must come
+  out at 2; if it does not, the test setup is wrong rather than the scheme.
+
+Sequencing: run the observational parts first. If the order is 2 across the
+ladder then the lumped mass does not bite at these resolutions, which is itself
+a useful result, and the intervention is unnecessary. Only a measured
+degradation justifies implementing the total-residual form.
+
+### Assignment
+
+Items 1 and 2 are assigned to Codex. Section 4.2 of
+`regularize_matrix_debug_report.md` currently argues *for* the rebalance and
+carries a note marking it superseded by this entry; it should be rewritten once
+the change is made.
