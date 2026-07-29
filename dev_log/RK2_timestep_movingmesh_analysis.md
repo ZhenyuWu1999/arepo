@@ -339,33 +339,146 @@ ready-made solution to port.
 
 ---
 
-## 7. Moving mesh
+## 7. Moving mesh: the ALE-RD formulation
 
-The `K` matrices are already in ALE form: `residual_distribution_solver.c`
-builds the eigenvalues as `u·n̂ ± c − v_mesh·n̂` from `Velvertex_avg`. What is
-missing is the geometric part:
+### 7.1 It is explicit Runge–Kutta, not space-time
 
-- `|T|` and `|S_i|` vary during the step, so the temporal term becomes a
-  derivative of `|S_i| U_i` rather than of `U_i`;
-- the geometric conservation law must hold, i.e. a uniform flow must be
-  preserved exactly, which constrains how `|T|(t)` is integrated in time.
+Confirmed from Campoli, Quemar, Bonfiglioli & Ricchiuto, *Shock-fitting and
+predictor-corrector explicit ALE Residual Distribution*, section 2.2, which uses
+the scheme of Arpaia & Ricchiuto (`10.1007/s10915-014-9910-5`) and describes it
+as a "two-step explicit Residual Distribution method". The Springer title of the
+source paper is itself explicit: *An ALE Formulation for Explicit Runge–Kutta
+Residual Distribution*.
 
-Arpaia & Ricchiuto's ALE formulation (`10.1007/s10915-014-9910-5`, and
-`hal-01102124`) is built on explicit Runge–Kutta residual distribution, not on a
-space-time discretisation. That is favourable here: ALE-RD appears reachable as
-an extension of the RK2 structure, reusing AREPO's mesh motion, rather than
-requiring the excluded rewrite. This should be confirmed by reading those papers
-before committing.
+**This settles the strategic question. Option A is a stepping stone, not a dead
+end, and the space-time rewrite excluded by the design constraint is not needed
+for a moving mesh.**
 
-A structural consequence worth stating plainly: **option B is not a route to a
-moving mesh.** AREPO rebuilds the mesh between the two call sites, so predictor
-and corrector would see different element sets. If ALE is a firm goal, the main
-loop should be restructured once, to option A, rather than twice.
+### 7.2 The equations
+
+Euler in ALE compact form, with `J` the determinant of the Jacobian between
+reference and actual frame and `σ` the local mesh deformation velocity:
+
+```
+(1)   ∂_t (J w) + J ∇·( f(w) − σ w ) = 0
+```
+
+Two-step explicit RD update, and the first-order predictor:
+
+```
+(2)   |C_i^{n+1}| w_i^{n+1} = |C_i^{n+1}| w_i^*  − Δt Σ_{K∋i} Φ_i^K(w_h^n, w_h^*)
+
+(5)   |C_i^{n+1}| w_i^*     = |C_i^{n+1}| w_i^n  − Δt Σ_{K∋i} Φ̃_i^K(w_h^n)
+```
+
+Total element residual and the two steady residuals:
+
+```
+(3)   Φ^K  = (1/Δt) ( ∫_{K^{n+1}} w_h^*  −  ∫_{K^n} w_h^n )
+             + ½ Φ^K(w_h^n) + ½ Φ^K(w_h^*)
+
+(4)   Φ^K  = ∫_{∂K^{n+1/2}} ( f(w_h) − σ_h w_h ) · n ds
+
+(6)   Φ̃^K = ∫_{∂K^{n+1/2}} f(w_h) · n ds  −  ∫_{K^{n+1/2}} σ_h · ∇w_h dx
+```
+
+Nodal split with the mass matrix:
+
+```
+(8)   Φ_i^K = Σ_{j∈K} [ m_ij^{K^{n+1}} w_j^*  −  m_ij^{K^n} w_j^n ] / Δt
+              + ½ Φ_i^K(w_h^n) + ½ Φ_i^K(w_h^*)
+```
+
+with the `β_j` "uniformly bounded w.r.t. the cell residuals" and the `m_ij^K`
+"mass matrix entries **consistent with the definition of the spatial
+distribution**". The paper states that these definitions give a scheme "formally
+second order accurate in space and time, fully conservative, and verifying the
+DGCL".
+
+Discrete geometric conservation law, satisfied by evaluating essentially all
+geometric quantities on the **half-time averaged configuration** `K^{n+1/2}`:
+
+```
+(7)   |K^{n+1}| − |K^n| = Δt ∫_{∂K^{n+1/2}} σ_h · n ds
+```
+
+### 7.3 Why this is favourable for AREPO-RD
+
+**The static-mesh scheme is the special case, not throwaway work.** Comparing
+the temporal terms:
+
+```
+   thesis, static mesh :  Σ_j m_ij ( w_j^* − w_j^n ) / Δt
+   ALE                 :  Σ_j [ m_ij^{K^{n+1}} w_j^* − m_ij^{K^n} w_j^n ] / Δt
+```
+
+When the mesh does not move, `m^{K^{n+1}} = m^{K^n}` and the second reduces to
+the first. Implementing the thesis form now is therefore the first half of the
+ALE implementation, not a detour.
+
+**The `|C_i| w_i` bookkeeping already matches AREPO.** Equation (2) updates the
+product of control volume and state, and AREPO already evolves `P[i].Mass`,
+`SphP[i].Momentum` and `SphP[i].Energy` and recovers `Density = Mass/DualArea`.
+The current code is already using the right variables; what is missing is that
+the control volume is not updated in time.
+
+**The DGCL prescription is cheap.** The half-time configuration is obtained from
+averaged vertex positions, `x^{n+1/2} = (x^n + x^{n+1})/2`, with normals and
+areas evaluated there. No additional mesh construction is required, only
+geometry evaluated at averaged coordinates. AREPO's drift already provides
+`x^n` and `x^{n+1}`.
+
+**The mesh-motion term is already present in the K matrices.**
+`residual_distribution_solver.c` builds the eigenvalues as
+`u·n̂ ± c − v_mesh·n̂` from `Velvertex_avg`, which is the `−σ w` contribution of
+equation (1) at the level of the flux Jacobian. What is missing is the geometry,
+not the wave speeds.
+
+### 7.4 What must not be overlooked
+
+- **The predictor and the corrector use different steady residuals.** `Φ̃` in
+  (6) is described as *geometrically non-conservative* and differs from `Φ` in
+  (4) by the GCL term. Using the same routine for both stages would be wrong
+  under mesh motion, though it is harmless while `σ = 0`.
+- **`|C_i|` is taken at `n+1` on both sides of (2) and (5).** The control volume
+  used to divide is the new one, not the old one and not an average.
+- **The element integrals in (3) are over `K^{n+1}` and `K^n` separately**, not
+  over a single configuration. This is what makes the temporal term consistent
+  with the DGCL.
+
+### 7.5 Structural consequence for the main loop
+
+Option B is not a route to a moving mesh. AREPO rebuilds the mesh between the
+two call sites, so predictor and corrector would see different element sets. The
+ALE scheme moreover needs `K^n`, `K^{n+1/2}` and `K^{n+1}` available within a
+single evaluation, which cannot be arranged across two call sites separated by a
+mesh rebuild. **If ALE is a firm goal, restructure the main loop once, to option
+A.**
 
 Note also that under ALE the stagnation degeneracy of `S^-` becomes generic
 rather than exceptional: the degeneracy condition is `u_n = v_n`, which is the
 normal state of a Lagrangian mesh. The direct-solve work already committed in
 `07f264a` is a prerequisite for moving mesh, not only a fix for quiet regions.
+
+### 7.6 The gap the literature does not close
+
+The CFD residual-distribution literature solves the moving-mesh problem and does
+**not** address hierarchical time stepping. Arpaia & Ricchiuto, and the
+shock-fitting work built on it, all use a single global `Δt`. Local time
+stepping is an astrophysics requirement that arises from the dynamic range of
+galaxy formation, and it has no counterpart in the applications these schemes
+were developed for.
+
+Consequently:
+
+- for the moving mesh there is a derived, published formulation to follow;
+- for hierarchical time steps there is **no reference solution to port**, and
+  section 6 shows the obstruction is structural rather than incidental.
+
+These two goals should therefore be treated differently. ALE is an
+implementation task against a known target. Hierarchical time stepping is a
+research question, and the mixed mass matrix of section 6 is a pragmatic
+compromise rather than a known-correct scheme.
 
 ---
 
@@ -381,15 +494,22 @@ Established:
    should not be ported.
 4. Any conservative, element-local mass matrix is the lumped one. Locality and
    `β`-weighted temporal distribution are mutually exclusive.
-5. Only option A survives if the moving mesh is a firm goal.
+5. ALE-RD is an explicit two-step Runge–Kutta method, not a space-time
+   discretisation. The static-mesh scheme is its `σ = 0` special case, so
+   implementing the thesis form now is the first half of the ALE work.
+6. Only option A survives if the moving mesh is a firm goal, both because AREPO
+   rebuilds the mesh between the two call sites and because ALE needs `K^n`,
+   `K^{n+1/2}` and `K^{n+1}` within one evaluation.
+7. The two remaining goals are of different kinds. Moving mesh is an
+   implementation task against a published formulation. Hierarchical time
+   stepping has no counterpart in the CFD literature, which uses a single global
+   `Δt` throughout, and section 6 shows the obstruction is structural.
 
 Open, in the order they need deciding:
 
 - whether the accuracy loss of option (c), the mixed mass matrix, is acceptable;
   this needs a quantitative estimate, not only the observation that it is
-  conservative.
-- whether Arpaia & Ricchiuto's ALE-RD really is RK-based rather than space-time,
-  which decides whether option A is a stepping stone or a dead end.
+  conservative. This is the one genuinely open research question of the three.
 - the unexplained stationary velocity order of about 1.7 against 2.0 for
   density, pressure and internal energy. This should be understood before the
   boosted numbers carry full weight.
@@ -397,3 +517,20 @@ Open, in the order they need deciding:
   on AREPO's least-squares gradients entirely, which is a simplification, but it
   changes the scheme's behaviour near discontinuities where those gradients are
   currently limited.
+- the explicit construction of `m_ij^K` in Arpaia & Ricchiuto. The secondary
+  source states only that it is "consistent with the definition of the spatial
+  distribution". For the static-mesh implementation the thesis form
+  `m_ij = (|T|/3) β_i` is sufficient; the ALE extension will need the primary
+  paper.
+
+### Sources consulted
+
+- Campoli, Quemar, Bonfiglioli & Ricchiuto, *Shock-fitting and predictor-corrector
+  explicit ALE Residual Distribution*, section 2.2, equations (1)-(8):
+  https://www.math.u-bordeaux.fr/~mricchiu/sf-draft.pdf
+- Arpaia & Ricchiuto, *An ALE Formulation for Explicit Runge-Kutta Residual
+  Distribution*, J. Sci. Comput. (2015), 10.1007/s10915-014-9910-5:
+  https://link.springer.com/article/10.1007/s10915-014-9910-5
+- Ricchiuto & Abgrall, *Explicit Runge-Kutta residual distribution schemes for
+  time dependent problems: Second order case*, JCP 229 (2010):
+  https://dl.acm.org/doi/10.1016/j.jcp.2010.04.002
