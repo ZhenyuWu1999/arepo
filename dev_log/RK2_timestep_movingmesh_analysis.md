@@ -665,3 +665,184 @@ matrix, so both halves of this are missing.
    `Θ` are part of the specification, not refinements.
 5. The predictor-corrector exists to avoid an implicit solve. Any restructuring
    that separates the stages works against the reason the scheme has that shape.
+
+---
+
+## 10. Proposed implementation: static-mesh `GL + F1`, option A
+
+Concrete change list for review by Codex and Kimi. Target is the scheme
+established in sections 1 and 9: **Global Lumping with the `F1` mass matrix,
+`σ = 0`**. Everything is behind one compile switch so the current lumped path
+stays reproducible.
+
+### 10.1 Switch and scope
+
+```
+RD_RK2_TOTAL_RESIDUAL     new Config option, registered in Template-Config.sh
+```
+
+Off: current behaviour, bit-identical. On: the scheme below. Both must build.
+The existing lumped campaigns and artifacts remain the comparison baseline and
+must not be regenerated.
+
+`RD_RK2_TOTAL_RESIDUAL` implies the option-A main loop; it is not compatible
+with the current two-half-step placement, so the two are mutually exclusive by
+construction rather than by convention.
+
+### 10.2 Main loop, `src/main/run.c`
+
+```
+:229   compute_residuals(&Mesh)          →  becomes a no-op under the switch
+:324   compute_residuals(&Mesh)          →  performs the complete RK2 step
+```
+
+The whole step is applied at the second site, where `All.Time = t^{n+1}` and
+`update_primitive_variables()` follows immediately at `:329`. Nothing else in
+`run.c` moves. Rationale for choosing the second site rather than the first:
+the primitive recovery that must follow the corrector is already there.
+
+Point to confirm during review: that `find_next_sync_point()` and the timebin
+bookkeeping are indifferent to which of the two sites does the work, given
+`FORCE_EQUAL_TIMESTEPS`.
+
+### 10.3 Solver restructuring, `residual_distribution_solver.c`
+
+`compute_residuals()` currently runs 507-1275 as a single function that
+classifies elements, computes geometry, sweeps residuals, and exports. Split it:
+
+```
+rd_build_element_set(T, ...)        element classification, ownership, dedup,
+                                    triangle_get_normals_area  — runs ONCE per step,
+                                    result reused by both stages
+rd_residual_sweep(T, set, stage)    the existing per-element body: Roe average,
+                                    K matrices, Phi, solve, distribution
+rd_apply_and_exchange(...)          existing FluxRD_list build + apply_FluxRD_list
+```
+
+The element set, normals and areas are identical in both stages on a static
+mesh, so building them once removes a duplicated classification, an extra
+`reset_dualarea()` and its MPI collective. This is a net simplification even
+before the new scheme is switched on.
+
+`rd_residual_sweep` needs a stage argument because stage 1 evaluates `φ^K(U^n)`
+and stage 2 evaluates `φ^K(U*)` and additionally assembles the mass-matrix term.
+
+### 10.4 New data
+
+Per local gas cell, four doubles holding `U^n`:
+
+```
+   SphP[i].RD_Un[4]        mass, momentum x, momentum y, energy at t^n
+```
+
+Nothing else is needed: by section 4, `Σ_T φ_i^{n,T} = −|S_i|(U*_i − U^n_i)/Δt`,
+so the stage-1 nodal residual is recoverable from `U^n` and the current state
+and does not have to be stored per element.
+
+For ghost vertices, one new block in `struct primexch`, alongside the existing
+`#ifdef RESIDUAL_DISTRIBUTION` entry for `Energy`:
+
+```
+   MyFloat RD_dU[4];       U*_j − U^n_j for the mass-matrix term
+```
+
+`mesh.h:124-126` already establishes the pattern for RD-only fields.
+
+### 10.5 Sequence inside the single call
+
+```
+ 1  rd_build_element_set(T)                          once; also fills DualArea
+ 2  save SphP[i].RD_Un from the current conserved state
+ 3  rd_residual_sweep(stage = PREDICTOR)             φ_i^K(U^n), distributed with β_i
+ 4  rd_apply_and_exchange()                          ⟹ conserved variables now hold U*
+ 5  update_primitive_variables()                     local; recover W* from U*
+ 6  exchange_primitive_variables()  + RD_dU          ghosts get W* and ΔU
+ 7  rd_residual_sweep(stage = CORRECTOR)             φ_i^K(U*) and Σ_j m_ij ΔU_j/Δt
+ 8  rd_apply_and_exchange()                          ⟹ U^{n+1}
+```
+
+Step 5 must not stamp `TimeLastPrimUpdate`, or must be made to stamp it
+harmlessly: under this scheme the Taylor extrapolation is gone and
+`dt_Extrapolation` is unused, so the cleanest resolution is to drop the
+extrapolation call from the RD path entirely under the switch.
+
+MPI cost per step: two flux exchanges and one primitive exchange, against two
+flux exchanges and two primitive exchanges now. Not a regression.
+
+### 10.6 Corrector arithmetic
+
+Using the section 4 identity, stage 2 computes per element
+
+```
+   T_i   = (|T|/3) β_i^{LDA} Σ_{j∈T} ΔU_j / Δt              F1 mass matrix
+   Φ_i^T = T_i + ½ φ_i^T(U*)                                 φ^n folded in below
+```
+
+and the nodal update is
+
+```
+   U^{n+1}_i = U*_i + ½ ΔU*_i − (Δt/|S_i|) Σ_T Φ_i^T
+```
+
+where `ΔU*_i = U*_i − U^n_i` is available locally. `β_i^{LDA}` is already
+computed in the existing LDA branch as `−K_i^+ (S^-)^†`; the new work is one
+`4×4` times `4` product per vertex.
+
+For N, `m_ij = (|T|/3) δ_ij` and the same expression reduces to the existing
+Heun form, which is a useful internal check: **with the switch on, the N scheme
+must reproduce the switch-off result to round-off.** That is the cheapest
+possible regression test of the new machinery and should be the first thing run.
+
+For B, section 9.5 requires blending the mass matrices and computing `Θ` from
+the total residual. Proposed staging: implement LDA and N first, leave B on the
+lumped path initially, and add the blended mass matrix as a second step.
+
+### 10.7 What must be preserved
+
+- assertions A1, A2, A3 and the `RD-DIAG` instrumentation, with A2 extended to
+  the total residual `Σ_i Φ_i^T = Φ^T`;
+- the direct solve and rank policy of `e95dc5d`, untouched;
+- the uniform static medium floor test, which must still pass exactly: with
+  `U* = U^n` the mass-matrix term vanishes identically and the scheme must
+  reduce to doing nothing;
+- rank invariance at 1 / 4 / 16 ranks.
+
+### 10.8 Test sequence
+
+```
+ 1  N scheme, switch on vs off                 must agree to round-off
+ 2  uniform static medium floor test           must still be exact
+ 3  rank invariance 1/4/16                     unchanged tolerances
+ 4  advected Yee ladder, LDA, boosts 0 and 1   the decisive measurement
+ 5  stationary Yee ladder                      must not regress from ~1.95
+```
+
+Item 4 is the point of the exercise: **boosted LDA should recover approximately
+second order.** If it does not, the mass matrix is not the whole story and the
+predictor/extrapolation must be examined next, as recorded in the earlier
+review.
+
+Item 1 deserves emphasis because it tests the new code path against an
+independent implementation of the same mathematics, using only the fact that
+`GL + m^N` collapses to Heun.
+
+### 10.9 Deliberately out of scope for this change
+
+- ALE geometry: `|T|(t)`, `|S_i|(t)`, the half-time configuration `K^{n+1/2}`,
+  and the distinction between `Φ̃` and `Φ`. Section 7 is the specification when
+  that work starts.
+- Hierarchical timesteps. The switch requires `FORCE_EQUAL_TIMESTEPS`, as the
+  current baseline already does. Section 6 is the standing analysis.
+- `F2` and Selective Lumping. Documented alternatives, not first choices.
+
+### 10.10 Open questions for the reviewers
+
+1. Is moving the entire step to the second call site acceptable, or is there a
+   reason internal to AREPO's timebin bookkeeping to prefer the first?
+2. Is adding `SphP[i].RD_Un[4]` and `primexch.RD_dU[4]` the right way to carry
+   the new state, or is there an existing mechanism that should be reused?
+3. Does `update_primitive_variables()` have side effects beyond
+   `TimeLastPrimUpdate` that make it unsafe to call from inside the solver?
+4. Should the element-set refactor of 10.3 be a separate, earlier commit? It is
+   a simplification of the current code independent of the new scheme, and
+   separating it would keep the scheme commit smaller.

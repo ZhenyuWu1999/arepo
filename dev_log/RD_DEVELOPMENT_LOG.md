@@ -2499,3 +2499,89 @@ The E1–E3 experiments proposed earlier are deferred at Zhenyu's direction; the
 derivation now supersedes their diagnostic purpose, though E1 and E2 retain
 value as falsifiable checks of it. The lumped baseline campaigns and artifacts
 should be preserved unchanged for comparison.
+
+## 2026-07-29: RK2 specification closed from the primary source; implementation plan for review
+
+- Author: `Claude Code Opus5`
+- Detail: `dev_log/RK2_timestep_movingmesh_analysis.md`, new sections 9 and 10.
+- **This entry requests a decision.** If Codex and Kimi agree with the plan in
+  section 10, that is the direction to implement.
+
+### The specification is now closed
+
+Both 2015 Arpaia papers are in `MyThesis/useful_resources` and linked from
+`context.md`. Section 3 of the ALE paper supplies what the thesis states without
+derivation, and settles three things.
+
+**The mass matrix has two admissible forms** (eq. 28):
+
+```
+   m_ij^{F1} = (|K|/3) β_i^K                          ← the thesis choice
+   m_ij^{F2} = (|K|/3) ( δ_ij/4 + β_i^K − 1/12 )
+```
+
+Both satisfy `Σ_i m_ij = (|K|/3) I`. This confirms the thesis indexing against
+the standalone code, from the primary source rather than from my algebra.
+
+**What the code implements has a name in the paper** (eq. 29). Row-wise lumping
+of either form gives `|S_i| du_i/dt + Σ_K φ_i^K = 0`, which the paper calls the
+**Mass Lumped formulation** and introduces as the starting point *before* the
+time-dependent machinery. That is exactly
+`residual_distribution_solver.c`.
+
+**The thesis scheme is the paper's Global Lumping variant with `F1`.** Expanding
+eqs. (50)-(53) reproduces `eq:RD_RK2_predictor` and `eq:RD_RK2_corrector` term
+by term. Selective Lumping, which keeps the Galerkin mass matrix on the
+new-value term, is a documented alternative.
+
+Section 3.5 also explains why the two-stage structure exists at all: the mass
+matrix otherwise forces the solution of a nonlinear algebraic system even under
+explicit time integration, which is why time-dependent RD is usually implicit or
+space-time. The predictor-corrector is the device that restores genuinely
+explicit marching. The two stages are meant to act as one algebraic object.
+
+For the blended scheme (eqs. 43-44) the **mass matrix itself is blended** and
+`Θ` must use the total space-time residual. The current code has neither half.
+
+### Proposed implementation
+
+Section 10 of the analysis document is a concrete change list: the
+`RD_RK2_TOTAL_RESIDUAL` switch and its scope; moving the whole step to the
+second `run.c` call site; splitting `compute_residuals()` into element-set
+construction, a residual sweep taking a stage argument, and the existing apply
+and exchange; `SphP[i].RD_Un[4]` and a `primexch.RD_dU[4]` block; the eight-step
+sequence inside the single call; the corrector arithmetic; what must be
+preserved; the test sequence; and what is deliberately out of scope.
+
+Two points worth surfacing here.
+
+**A free regression test.** With `m_ij = (|T|/3) δ_ij` the new machinery
+collapses to the existing Heun form, so **the N scheme with the switch on must
+reproduce the switch-off result to round-off**. That tests the new code path
+against an independent implementation of the same mathematics and should be the
+first thing run.
+
+**A simplification available immediately.** The element classification,
+ownership resolution, deduplication and geometry are identical in both stages on
+a static mesh. Building them once removes a duplicated classification, a second
+`reset_dualarea()` and its MPI collective. This is a net improvement to the
+current code independent of the new scheme, and could be a separate earlier
+commit.
+
+### Questions put to the reviewers
+
+1. Is moving the entire step to the second call site acceptable, or is there a
+   reason internal to AREPO's timebin bookkeeping to prefer the first?
+2. Are `SphP[i].RD_Un[4]` and `primexch.RD_dU[4]` the right carriers for the new
+   state, or does an existing mechanism apply?
+3. Does `update_primitive_variables()` have side effects beyond
+   `TimeLastPrimUpdate` that make it unsafe to call from inside the solver?
+4. Should the element-set refactor be split into its own earlier commit?
+
+### Scope boundaries restated
+
+ALE geometry, hierarchical timesteps, `F2` and Selective Lumping are all out of
+scope for this change. Section 7 is the specification for ALE when that begins;
+section 6 records why hierarchical timesteps are a research question with no
+reference solution in the CFD literature, which uses a single global `Δt`
+throughout.
