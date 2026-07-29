@@ -3479,3 +3479,91 @@ recovery is the open question.
   `RD_DIAG_DUMP_STAGE`, all in `defines_extra` and out of production configs.
 - The lumped baseline campaigns remain the comparison reference and are
   untouched.
+
+## 2026-07-29 (correction): the rank divergence was uninitialised memory
+
+- Author: `Claude Code Opus5`
+- **Corrects the entry immediately above.** Its section 1 attributed the
+  np1-vs-np4 divergence to the conditioning of `S^-`. That conclusion is
+  wrong. The cause was a genuine bug, and fixing it removes the divergence.
+
+### What it actually was
+
+`exchange_primitive_variables()` allocates `tmpPrimExch` with `mymalloc`, which
+does not zero, fills only a subset of the fields, and then sends
+`sizeof(struct primexch)` as `MPI_BYTE` directly over `PrimExch`. Every field
+it leaves unset overwrites a good ghost value with uninitialised heap.
+`VelVertex` is one of those fields.
+
+Stock AREPO never notices, because that call is always followed by gradient
+calculation and `exchange_primitive_variables_and_gradients()`, which refills
+`VelVertex` before anything reads it. The RK2 corrector broke the invariant: it
+calls `exchange_primitive_variables()` to publish `W*` and `RD_dU`, then reads
+`VelVertex` immediately when assembling the `K` matrices.
+
+So on one rank there are no ghosts and every vertex has `VelVertex = 0`
+exactly; on four ranks the ghost vertices carry heap garbage. The values drawn
+were denormals of order `1e-314` -- numerically almost zero, but *not* zero,
+and present only in the multi-rank runs. That is precisely a tiny
+decomposition-dependent perturbation.
+
+### How the two stories relate
+
+The amplification analysis in the previous entry is still correct as
+mechanism: `cond(S^-) ~ 3.6e10` at stagnation does turn a perturbation of
+`Phi` into a `1e-11` distributed residual. What was wrong was the claim about
+the *source* of the perturbation. I attributed it to roundoff in the predictor
+and concluded it was irreducible; it was in fact a bug, and the amplifier was
+simply making a real defect visible. The lesson is that identifying a
+plausible amplifier is not the same as identifying the source, and a mechanism
+that explains the magnitude is not thereby evidence that no bug exists.
+
+### Verification
+
+Gresho `v1e-8` random48, LDA + `RD_RK2_TOTAL_RESIDUAL`, `TimeMax = 1e-4`,
+`max |np1 - np4|` over sorted particle IDs:
+
+| field | before | after | relative after |
+| --- | --- | --- | --- |
+| Masses | ~1e-11 | 6.51e-19 | 2.8e-16 |
+| Density | ~1e-11 | 6.66e-16 | 6.7e-16 |
+| Velocities | ~1e-11 | 6.66e-16 | 6.7e-16 |
+| InternalEnergy | ~1e-11 | 7.11e-15 | 8.2e-16 |
+
+Round-off, as it should be. The RK2 path is now decomposition-invariant.
+
+### How it surfaced
+
+Not through the Gresho work, but through the Yee campaign, as
+`RD upwind solve failed ... LAPACK info -5` at `n=64, boost=0`. That code is
+DGELSD's own non-finite check on the matrix, reported as an illegal argument.
+Two guards were added so this class of failure names itself:
+
+- the `isnan(Cs_avg)` test became a real element guard. `Cs_avg == 0` divides
+  every entry of `K` by zero and produces infinities without ever producing a
+  NaN, so `isnan()` alone let that case through to LAPACK.
+- the solve-failure path now dumps `Cs_avg`, the mesh velocity, and each
+  vertex's state, geometry and eigenvalues.
+
+The dump identified the cause on the first run: the fluid state was healthy
+(`rho = 0.996`, `p = 0.994`, `Cs_avg = 1.18`, unit normals) while
+`velvertex_avg` read `2.12e-314` and `-nan`. Denormal heap, not physics.
+
+### Consequences for existing data
+
+The `n=32` RK2 runs that completed did so only because the garbage they drew
+happened not to be a NaN. They were integrating with wrong ghost mesh
+velocities and **their results are discarded**, not retained as the previous
+entry stated. The whole `rk2_nodal_v1` campaign has been relaunched against
+the fixed binary.
+
+Unaffected: all single-rank runs (no ghosts), and the mass-lumped baseline
+campaigns, which read `VelVertex` only after the gradient exchange has
+refilled it. The baseline comparison data therefore stand.
+
+### Note for the moving-mesh target
+
+On a static mesh the correct `VelVertex` is zero, so this bug cost only
+precision. Under ALE it would be a first-order error in the wave speeds, since
+`Lambda = u.n +- c - v_mesh.n` depends on `VelVertex` directly. Worth
+remembering before the geometry work starts.
