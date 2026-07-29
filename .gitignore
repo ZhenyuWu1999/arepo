@@ -35,6 +35,7 @@ run.sh
 #slurm and build-lock artefacts
 slurm-*.out
 .build_case.lock
+/build_artifacts/
 
 #generated initial conditions
 examples/*/ic_*/

@@ -85,15 +85,28 @@ which is a real failure recorded in
 
 Normal workflow:
 
-    # build on a compute node (prints ldd linkage so a silent fallback is visible)
-    sbatch build_case.sbatch --config examples/gresho_2d/Config_RD.sh
-    sbatch build_case.sbatch --config <cfg> --exec <path>     # side-by-side binary
+    # build on a compute node; formal baselines should require a clean tree
+    sbatch build_case.sbatch \
+        --config examples/yee_2d/Config_RD.sh \
+        --name yee-lda-lumped \
+        --require-clean
 
-    # run
-    sbatch --ntasks=N run_case.sbatch --param <param.txt> --binary <binary>
+    # use the immutable artifact path printed by the completed build
+    sbatch --ntasks=N run_case.sbatch \
+        --binary build_artifacts/yee-lda-lumped/<artifact-id>/Arepo \
+        --param <param.txt>
 
-`run_case.sbatch` takes `--param` and `--binary`; `--ntasks` comes from the
-`sbatch` command line. `run_case.sh` is the direct (non-Slurm) launcher and
+`build_case.sh` serialises compilation with a repository-wide `flock`, builds
+in an isolated temporary `BUILD_DIR`, and publishes an immutable bundle
+containing `Arepo`, the exact Config snapshot, generated `arepoconfig.h`,
+binary checksum, linkage, build log, and a manifest. Its fingerprint includes
+the Git commit, tracked diff, Config contents, `Makefile.systype`, compiler
+wrapper and LAPACK backend. Identical inputs reuse the existing bundle.
+
+`run_case.sbatch` requires `--param` and `--binary`; `--ntasks` comes from the
+`sbatch` command line. It delegates to `run_case.sh`, which verifies the binary
+checksum and copies the matching build provenance into a timestamped directory
+under the simulation output. `run_case.sh` is the direct non-Slurm launcher and
 should only be used on an interactive compute node.
 
 For interactive work use `cnode`, or `ssh zwu@fcfs1` (an FCFS node), then
@@ -101,31 +114,16 @@ For interactive work use `cnode`, or `ssh zwu@fcfs1` (an FCFS node), then
 
 ### Always verify which Config a binary was actually built with
 
-When a human edits Config.sh and rebuilds one case at a time, this never goes
-wrong. When an agent builds several variants and launches a batch of runs, it
-does, and the failure is silent — the jobs complete, the numbers look plausible,
-and they are all from the wrong binary. Two real instances of this:
+The former hardcoded `#include "./../../build/arepoconfig.h"` has been replaced
+by `#include <arepoconfig.h>`, resolved through `-I$(BUILD_DIR)`. This makes the
+temporary build directory real isolation rather than cosmetic isolation.
+Concurrent submissions still serialise because full Config changes rebuild
+nearly every object and parallel compilation offers little benefit at this
+stage; the isolation prevents shared state, while the lock limits resource use
+and protects legacy tooling.
 
-1. **Concurrent builds corrupt each other.** Two `build_case.sbatch` jobs
-   submitted at the same time share `./build`, `make clean` each other's
-   objects, and relink whatever is left. Result: two binaries with identical
-   md5. `build_case.sbatch` now takes an `flock` so submissions serialise.
-
-2. **`BUILD_DIR` does not isolate a build.** `src/main/allvars.h:44` has
-   `#include "./../../build/arepoconfig.h"` with the path hardcoded, so
-   overriding `BUILD_DIR` writes the generated config to the new directory while
-   every compilation unit keeps reading the stale `./build/arepoconfig.h`. This
-   is worse than the first failure, because it looks like isolation. Do not use
-   `BUILD_DIR`; serialise instead.
-
-Cheap checks, worth doing before trusting any batch of results:
-
-    grep _SCHEME build/arepoconfig.h                  # what the last build saw
-    md5sum <binaries>                                 # must differ
-    nm -S <binary> | grep -w compute_residuals        # size differs per scheme
-    grep '^Binary' <outputdir>/slurm-*.log            # what each run actually ran
-
-A scheme comparison in which two schemes agree to more than a few digits is
-almost certainly a build accident, not a physics result.
-
+Do not use the repository-root `Arepo`, `build/arepoconfig.h`, or
+`Config.current.build` for validation runs. They are legacy mutable files and
+need not describe the same build. The immutable artifact manifest and checksum
+are authoritative.
 

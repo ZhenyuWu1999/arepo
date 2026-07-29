@@ -1917,3 +1917,150 @@ checked with MKL, long-time Gresho, the planned Yee-plus-boost convergence
 ladder, and eventually moving mesh/hierarchical timebins. None of those later
 tests justifies knowingly introducing an `O(rcond)` residual into the
 consistent element solve now.
+
+## 2026-07-29: isolate and fingerprint builds before the Yee convergence campaign
+
+- Author: `gpt-5.6-sol high`
+- Change recorded: 2026-07-29 12:24:34 BST (+0100).
+- Purpose: remove ambiguity between Config variants without requiring permanent
+  hand-maintained object directories.
+
+### 1. Failure mode
+
+The historical workflow was safe only while a human changed Config files and
+built variants strictly in series. The Makefile accepted `BUILD_DIR`, but
+`src/main/allvars.h` ignored it:
+
+```
+#include "./../../build/arepoconfig.h"
+```
+
+An alternative object directory therefore received its own generated
+`arepoconfig.h`, while every translation unit still compiled against the
+repository-root `build/arepoconfig.h`. Parallel builds could also clean and
+relink each other's shared objects.
+
+Build provenance had a second ambiguity. The mutable files
+
+```
+./Arepo
+./build/arepoconfig.h
+./Config.current.build
+```
+
+were updated by different workflows and could have different ages. A run could
+execute one binary while archiving a header and Config belonging to other
+builds.
+
+### 2. Implemented compromise
+
+The source include is now:
+
+```
+#include <arepoconfig.h>
+```
+
+and the Makefile's existing `-I$(BUILD_DIR)` selects the correct generated
+header.
+
+`build_case.sh` now:
+
+1. acquires the repository-wide `.build_case.lock`, so expensive builds remain
+   serial even if two jobs are submitted together;
+2. copies the requested Config to an immutable input snapshot under a fresh
+   `mktemp` build directory;
+3. builds with explicit, isolated `BUILD_DIR` and `EXEC`;
+4. refuses publication if HEAD or the tracked source diff changes during the
+   build;
+5. computes a fingerprint from the Git commit, tracked diff, Config SHA256,
+   `Makefile.systype`, `mpicc` identity/link command, and MKL/LAPACK backend;
+6. atomically publishes an immutable bundle:
+
+   ```
+   build_artifacts/<name>/<commit>-<fingerprint>/
+       Arepo
+       binary.sha256
+       binary.ldd.txt
+       Config.used
+       arepoconfig.h.used
+       manifest.txt
+       build.log
+       source_status.txt
+       source.patch          # dirty tracked builds only
+   ```
+
+7. reuses a bundle only if all required files exist and the binary checksum
+   passes;
+8. refuses unresolved shared libraries and, for an MKL build, refuses a binary
+   whose `ldd` output lacks `libmkl_rt`;
+9. offers `--require-clean` for formal baselines and an explicit
+   `--allow-system-lapacke` for login-node diagnostics that must not be used on
+   compute nodes.
+
+Temporary object directories are deleted after publication. This retains the
+thing needed for reproducibility—the binary and its inputs—without accumulating
+one permanent object tree for every frequently changing compile option.
+
+`run_case.sh` now requires explicit `--binary` and `--param` arguments. Managed
+binaries are checksum-verified; an unmanaged binary is rejected unless the
+caller explicitly requests a diagnostic exception. Relative `InitCondFile` and
+`OutputDir` paths retain the example convention because AREPO is run from the
+parameter-file directory. Every invocation creates a timestamped provenance
+directory containing the build manifest, Config, generated header, parameter
+snapshot and hash, binary linkage and hash, runner Git state, MPI rank count,
+and final exit status.
+
+The Slurm wrappers now delegate to these two shell wrappers rather than
+maintaining a separate mutable-root build/run implementation. `context.md` has
+been updated to make immutable artifacts the authoritative workflow.
+
+`build_artifacts/` is ignored by Git. Source, Config templates, wrappers and
+logs belong in Git; compiled binaries and large simulation output do not.
+
+### 3. Verification
+
+All checks used local system LAPACKE by the explicit diagnostic opt-in:
+
+- `bash -n` passes for both shell wrappers and both Slurm wrappers.
+- A full Yee LDA build completed in an isolated temporary directory.
+- Repeating identical inputs reused the same fingerprinted bundle.
+- `--require-clean` rejected the deliberately dirty development tree with exit
+  status 5.
+- `run_case.sh` rejected the old repository-root unmanaged `Arepo`.
+- A managed 16-cell Yee run reached `TimeMax = 0.001`; its output records exit
+  status 0 and the matching binary/configuration hashes.
+- Two fresh build requests, Yee LDA (`GAMMA=1.4`) and Gresho B
+  (`GAMMA=5/3`), were launched concurrently. Both returned success, serialised
+  on the lock, and published different headers with the correct scheme macros.
+- The SHA256 values of the legacy root `Arepo`, `build/arepoconfig.h`, and
+  `Config.current.build` were unchanged by all isolated builds.
+- No temporary `.build-case.*` directory remained after success.
+
+The short run also exposed two existing Yee setup details to fix when the
+convergence matrix is generated:
+
+- static-mesh `Config_RD.sh` does not register `CellShapingSpeed` or
+  `CellMaxAngleFactor`, so those legacy moving-mesh parameters must be omitted;
+- AREPO requires `MaxSizeTimestep < TimeMax - TimeBegin`, strictly rather than
+  less-than-or-equal.
+
+The public `examples/yee_2d/param.txt` was not edited during this infrastructure
+change. The convergence driver should generate a separate parameter snapshot
+for each resolution/boost/output directory.
+
+### 4. Remote backup state
+
+A read-only `git ls-remote` check before these changes found:
+
+```
+local  develop_pureC_RD  e95dc5d
+remote develop_pureC_RD  a87c4cc
+```
+
+The local branch was six commits ahead with no remote divergence. No push was
+performed. After this infrastructure change is reviewed and committed, the
+safe backup operation is an explicit push of `develop_pureC_RD`, not
+`git push --all`; local `master` has a separate unpushed commit. An annotated
+pre-Yee tag would provide a useful immutable baseline marker. Untracked ICs and
+outputs are not protected by a Git remote and need separate classification or
+data storage.
