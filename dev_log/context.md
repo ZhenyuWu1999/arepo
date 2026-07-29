@@ -17,6 +17,13 @@ https://academic.oup.com/mnras/article/469/4/4306/3798772 (2017 Paardekooper) is
 
 /home/zwu/MyThesis/useful_resources/RD_schemes_notes.md contains some useful mathematical derivations related to RD.
 
+/home/zwu/MyThesis/useful_resources/ also holds the two 2015 Arpaia papers on ALE residual distribution:
+
+- `2015_Arpaia_An_ALE_Formulation_for_Explicit_Runge–Kutta_Residual_Distribution.pdf` (J. Sci. Comput., 10.1007/s10915-014-9910-5). This is the reference formulation for the moving-mesh target. It is an explicit two-step Runge-Kutta method, not a space-time discretisation, so the static-mesh RK2-RD is its sigma=0 special case. See `dev_log/RK2_timestep_movingmesh_analysis.md` section 7.
+- `2015_Arpaia_Ricchiuto_Mesh_adaptation_by_continuous_deformation_Basics_accuracy_efficiency_well_balancedness.pdf`, on mesh adaptation by continuous deformation.
+
+Note that the CFD residual-distribution literature uses a single global timestep throughout. Hierarchical/local time stepping is an astrophysics requirement with no counterpart there, so it has no reference solution to port.
+
 /home/zwu/rdsolver/rd is the source code developed by Ben Morton, which is a standalone code apart from AREPO.
 
 /home/zwu/arepo_dev is the development version of AREPO in Springel's group. It is much more powerful than the public version because it includes Grackle cooling and chemistry library and many subgrid physics models.
@@ -46,6 +53,7 @@ version controlled together with the code:
     arepo/dev_log/context.md                        (this file)
     arepo/dev_log/RD_DEVELOPMENT_LOG.md
     arepo/dev_log/regularize_matrix_debug_report.md
+    arepo/dev_log/RK2_timestep_movingmesh_analysis.md
 
 The old paths `/home/zwu/arepo_rd/*.md` are symlinks into that directory, so
 anything that refers to them keeps working. Edit either path; they are the same

@@ -534,3 +534,134 @@ Open, in the order they need deciding:
 - Ricchiuto & Abgrall, *Explicit Runge-Kutta residual distribution schemes for
   time dependent problems: Second order case*, JCP 229 (2010):
   https://dl.acm.org/doi/10.1016/j.jcp.2010.04.002
+
+---
+
+## 9. Primary source: Arpaia & Ricchiuto (2015), exact formulation
+
+`MyThesis/useful_resources/2015_Arpaia_An_ALE_Formulation_for_Explicit_Runge–Kutta_Residual_Distribution.pdf`,
+J. Sci. Comput. 63:502-547. Section 3 supplies the definitions that section 1
+above quotes from the thesis, and closes the remaining gap.
+
+### 9.1 The mass matrix has two admissible forms
+
+The time-dependent generalisation of RD, equation (27):
+
+```
+   Σ_{K∈D_i} Σ_{j∈K} m_ij^K du_j/dt  +  Σ_{K∈D_i} β_i^K φ^K = 0
+```
+
+with `m_ij^K = ∫_K φ_j w_i dx` and the Petrov-Galerkin test function
+`w_i = φ_i + γ_i`. Equation (28) gives two choices:
+
+```
+   m_ij^{F1} = (|K|/3) β_i^K                              = |K| m̂_ij^{F1}
+
+   m_ij^{F2} = (|K|/3) ( δ_ij/4 + β_i^K − 1/12 )          = |K| m̂_ij^{F2}
+```
+
+Both satisfy local conservation:
+
+```
+   Σ_i m_ij^{F1} = (|K|/3) Σ_i β_i             = (|K|/3) I     OK
+   Σ_i m_ij^{F2} = (|K|/3) ( 1/4 + I − 3/12 )  = (|K|/3) I     OK
+```
+
+**`F1` is the thesis's choice.** `F2` is an alternative that has not been
+considered here and may be worth testing later.
+
+### 9.2 What the code currently implements has a name
+
+Equation (29). Row-wise mass lumping of *either* formulation gives the median
+dual cell `|S_i| = Σ_{K∈D_i} |K|/3` and the **Mass Lumped (ML) formulation**:
+
+```
+   |S_i| du_i/dt  +  Σ_{K∈D_i} φ_i^K = 0
+```
+
+This is exactly what `residual_distribution_solver.c` implements. The paper
+introduces it as the starting point *before* the time-dependent machinery is
+added.
+
+### 9.3 Why the predictor-corrector structure exists at all
+
+Section 3.5, quoted:
+
+> "Due to the presence of the mass matrix, the use of the general prototype (27)
+> leads inevitably to schemes requiring the solution of a **nonlinear system of
+> algebraic equations**, even if explicit time integration techniques are used.
+> For this reason, time dependent implementations of RD always feature some form
+> of implicit time integration, or a fully coupled space-time formulation."
+>
+> "The explicit RK-RD formulation of [Ricchiuto & Abgrall 2010] provides one
+> possible solution to this flaw, allowing **genuinely explicit time marching**."
+
+So the two-stage structure is not merely a way of reaching second order in time.
+It is the device that avoids an implicit solve while keeping the mass matrix.
+This strengthens the case for option A: the two stages are meant to act
+together as one algebraic object, and separating them across a mesh rebuild or a
+time advance is contrary to their purpose.
+
+### 9.4 The thesis scheme is the Global Lumping variant
+
+Equations (49)-(53). With stage-shifted increments `Δũ^1 = 0`,
+`Δũ^2 = u^1 − u^n`, and
+
+```
+   R_i^{K(k)} = Σ_{j∈K} m_ij^K (Δũ^k_j/Δt) + β_i^K φ^{K(k)}
+```
+
+the paper offers two lumping choices:
+
+```
+   (52) Selective Lumping (SL)   |S_i| Δu^k_i/Δt = − Σ_K [ R_i^{K(k)} − Σ_j m_ij^G Δũ^k_j/Δt ]
+   (53) Global Lumping (GL)      |S_i| ( Δu^k_i − Δũ^k_i )/Δt = − Σ_K R_i^{K(k)}
+```
+
+Expanding GL reproduces the thesis exactly. Stage 1, with `Δũ^1 = 0`:
+
+```
+   |S_i| Δu^1_i/Δt = −Σ_K β_i φ^K(u^n)
+   ⟹  u^1_i = u^n_i − (Δt/|S_i|) Σ_K φ_i^K(u^n)          = eq:RD_RK2_predictor
+```
+
+Stage 2, with `Δũ^2 = u^1 − u^n` and `φ^{K(2)} = ½[φ^K(u^n) + φ^K(u^1)]`:
+
+```
+   u^{n+1}_i = u^1_i − (Δt/|S_i|) Σ_K [ Σ_j m_ij (u^1_j − u^n_j)/Δt
+                                        + ½ β_i ( φ^K(u^n) + φ^K(u^1) ) ]
+                                                          = eq:RD_RK2_corrector
+```
+
+**The thesis scheme is `GL` + `F1`.** `SL`, which retains the Galerkin mass
+matrix `m_ij^G` on the new-value term, is a documented alternative.
+
+### 9.5 The blended scheme blends the mass matrices too
+
+Equations (43)-(44):
+
+```
+   m_ij^{LDA-N} = ( 1 − l(u_h) ) m_ij^{LDA}  +  l(u_h) (|K|/3) δ_ij
+
+   l = |Φ^K| / Σ_j |Φ_j^N|
+```
+
+with the paper stating that in the time-dependent case the blending parameter
+"should now include the whole residual". So for B the *mass matrix itself* is
+blended, and `Θ` must be computed from the total space-time residual, not the
+spatial one. The current code blends only the spatial residuals and has no mass
+matrix, so both halves of this are missing.
+
+### 9.6 Consequences for the implementation plan
+
+1. `m_ij = (|T|/3) β_i` is confirmed as a published, conservative choice, and is
+   `F1`. The thesis indexing is right; the standalone code's LDA branch remains
+   the outlier.
+2. The static-mesh target is fully specified: `GL` + `F1`, equations (50)-(53)
+   with `σ = 0`.
+3. `F2` and `SL` are documented alternatives, available if `GL`+`F1` proves
+   unsatisfactory.
+4. For the B scheme, blending the mass matrix and using the total residual in
+   `Θ` are part of the specification, not refinements.
+5. The predictor-corrector exists to avoid an implicit solve. Any restructuring
+   that separates the stages works against the reason the scheme has that shape.
