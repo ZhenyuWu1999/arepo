@@ -2064,3 +2064,438 @@ safe backup operation is an explicit push of `develop_pureC_RD`, not
 pre-Yee tag would provide a useful immutable baseline marker. Untracked ICs and
 outputs are not protected by a Git remote and need separate classification or
 data storage.
+
+## 2026-07-29: corrected advected-Yee nodal baseline on jittered and
+SWIFT-glass meshes
+
+- Authors: Zhenyu Wu and Codex (`gpt-5.6-sol high`).
+- Initial entry: 2026-07-29 13:26:07 BST (+0100).
+- Nodal-definition correction and final update:
+  2026-07-29 14:46:35 BST (+0100).
+- AREPO source commit tested:
+  `2ce4692dc83c1e52dccd9e9789e1956f916594e2`.
+- Purpose: establish the stationary and advected smooth-vortex convergence of
+  the current lumped-mass RD implementation before changing the mass matrix
+  or time integration.
+
+This update supersedes the earlier interpretation of `pilot_v3_dth` and
+`glass_v1_dth` in this work session. Those campaigns deliberately sampled
+initial data at Voronoi centres of mass and are diagnostics, not the formal RD
+nodal baseline.
+
+### 1. Reusable campaign tooling, version control and data layout
+
+The reusable harness lives at:
+
+```
+/home/zwu/Hydro_data_analysis/Analysis/yee_boost/
+```
+
+It contains deterministic IC preparation, analytic Yee fields with a
+periodically translated centre, separate LDA/N/B Config files, a Slurm
+campaign runner, strict snapshot validation, convergence-table generation and
+plotting. It is now tracked independently at:
+
+```
+https://github.com/ZhenyuWu1999/Hydro_data_analysis.git
+commit 4f104c16daa69f1b4b7aef7cef336bdb7b6fd7ef
+```
+
+The dedicated experiment record is
+`Analysis/yee_boost/YEE_BOOST_TEST_LOG.md`. Raw data remain local and excluded
+from Git:
+
+```
+/home/zwu/Hydro_data_analysis/Data_arepo_RD/yee_boost/
+```
+
+Each case records resolution, seed, mesh family, boost, Config/artifact
+identity, IC and parameter SHA256, actual timestep range, step count, final
+exit status, initial/final conserved quantities and volume-weighted L1/L2/Linf
+errors for density, pressure, internal energy and the full velocity vector.
+Validity requires the requested final time, a zero run exit status, finite
+fields and positive density, pressure and volume. Each formal data campaign
+also contains a `tooling_snapshot/` and SHA256 manifest.
+
+### 2. Correction: the RD reference position is the Delaunay vertex
+
+The first analysis evaluated the analytic field at
+`PartType0/CenterOfMass`. This was incorrect for the current RD
+implementation. Its evolved unknowns are attached to
+`PartType0/Coordinates`, the mesh-generating points and therefore the vertices
+of the Delaunay triangulation.
+
+The old comparison was
+
+```
+q_numerical(x_generator) - q_exact(x_COM),
+```
+
+without interpolating the numerical solution to `x_COM`. The correct nodal
+comparison is
+
+```
+q_numerical(x_generator) - q_exact(x_generator).
+```
+
+On an irregular or jittered mesh,
+`x_generator - x_COM = O(h)`. The old comparison therefore introduced a
+first-order geometric error into both the initial and final norms. In
+particular, the earlier stationary jittered LDA estimate near order 1.3 was an
+analysis-location artefact, not evidence that the RD LDA spatial
+discretisation is intrinsically order 1.3.
+
+The corrected analyser now reports both definitions explicitly:
+
+- primary nodal errors at `Coordinates`, used in `summary.csv` and
+  `convergence.csv`;
+- secondary cell-centre errors at `CenterOfMass`, retained as a diagnostic;
+- initial nodal and cell-centre errors, so a sampling mismatch cannot pass
+  unnoticed.
+
+The formal nodal campaigns sample their initial analytic state directly at
+`Coordinates` and have initial nodal errors at roundoff. The older
+centroid-sampled campaigns remain useful for documenting the ambiguity, but
+must not be mixed with the formal convergence lines.
+
+### 3. Formal campaigns, builds and timestep controls
+
+The two formal baselines are:
+
+```
+nodal_v1_dth
+    deterministic jittered Cartesian mesh
+    n = 32, 64, 128, 256
+    initial_sampling = generator
+
+glass_v2_nodal_dth
+    periodically tiled SWIFT glass
+    n = 48, 96, 192
+    initial_sampling = generator
+```
+
+The glass source is:
+
+```
+/home/zwu/SWIFT/examples/HydroTests/GreshoVortex_2D/glassPlane_48.hdf5
+SHA256 157e1a4767f4678df4cd80d2df9aa248fa520899e12e777a448e17f31e47d88f
+```
+
+The 48-squared glass is wrapped and tiled by factors 1, 2 and 4 to form a
+self-similar refinement sequence. Its repeated tile is a symmetry caveat; it
+is a second mesh-family cross-check, not proof for every possible unstructured
+mesh.
+
+All cases used clean MKL-linked artifacts from commit `2ce4692`:
+
+```
+LDA  build_artifacts/yee-boost-lda-lumped/2ce4692dc83c-3fa34896800a5cc3/
+N    build_artifacts/yee-boost-n-lumped/2ce4692dc83c-f9f9a42e217bd063/
+B    build_artifacts/yee-boost-b-lumped/2ce4692dc83c-2ea5905fcbb2f61f/
+```
+
+They used `VORONOI_STATIC_MESH`, `FORCE_EQUAL_TIMESTEPS`, four MPI ranks,
+`CourantFac=0.2`, `TimeMax=1`, boosts 0 and 1, and the current lumped RD time
+updates.
+
+To prevent AREPO's dyadic timestep rounding from changing `dt/h` between
+levels, the formal campaigns imposed:
+
+```
+jittered 32/64/128/256: MaxSizeTimestep = 0.25 / n
+glass    48/96/192:     MaxSizeTimestep = 0.375 / n
+```
+
+The recorded ladders contain 128/256/512/1024 steps for jittered and
+128/256/512 steps for glass. Thus actual `dt` halves under each factor-two
+spatial refinement. Jobs were confined to one node and set
+`OMPI_MCA_btl_vader_single_copy_mechanism=none` to avoid the cluster's denied
+`process_vm_readv` CMA path.
+
+### 4. Corrected deterministic jittered-mesh result
+
+`nodal_v1_dth` completed 24/24 valid cases. Global nodal L1 orders fitted over
+all four resolutions are:
+
+| scheme | boost | density | velocity |
+|---|---:|---:|---:|
+| LDA | 0 | 1.950 | 1.710 |
+| LDA | 1 | 0.942 | 0.949 |
+| N | 0 | 1.008 | 0.902 |
+| N | 1 | 0.918 | 0.920 |
+| B | 0 | 1.743 | 1.553 |
+| B | 1 | 0.905 | 0.920 |
+
+The stationary LDA density pair orders are `1.861`, `1.978` and `2.002`.
+Thus the finest two levels approach second order rather than degrading toward
+the erroneous COM-based value. Stationary LDA velocity is lower, about order
+1.7 globally. The corresponding stationary pressure and internal-energy
+orders are `1.979` and `2.026`, so the claim of second order should be made
+most strongly for density, pressure and internal energy rather than every
+primitive variable.
+
+N remains the expected approximately first-order control. Adding a unit boost
+reduces LDA density and velocity to approximately first order; B shows the
+same stationary-to-advected reduction.
+
+### 5. Corrected SWIFT-glass result
+
+`glass_v2_nodal_dth` completed 18/18 valid cases. Global nodal L1 orders are:
+
+| scheme | boost | density | velocity |
+|---|---:|---:|---:|
+| LDA | 0 | 1.969 | 1.828 |
+| LDA | 1 | 0.951 | 0.945 |
+| N | 0 | 1.007 | 0.917 |
+| N | 1 | 0.966 | 0.914 |
+| B | 0 | 1.828 | 1.746 |
+| B | 1 | 0.911 | 0.916 |
+
+Stationary LDA density pair orders are `1.929` and `2.009`; boosted LDA gives
+`0.902` and `1.000`. This independently reproduces the jittered-mesh
+transition. Stationary pressure and internal-energy orders are `1.981` and
+`2.013`. N again remains approximately first order with and without boost, and
+B inherits the transition because it contains the LDA branch.
+
+The agreement between the jittered and tiled-glass families shows that the
+main stationary/advected contrast is not peculiar to either of these two
+tested mesh shapes. It is not yet a general mesh-independence proof: only one
+deterministic jitter realisation and one periodically tiled glass family have
+been measured.
+
+### 6. What the baseline establishes
+
+The corrected evidence is:
+
+1. stationary LDA density is approximately second order on both tested mesh
+   families;
+2. N is approximately first order on both families and is not qualitatively
+   changed by the boost;
+3. a unit bulk boost reduces LDA density and velocity to approximately
+   `0.94--0.95`, i.e. essentially first order rather than merely “below
+   1.5”;
+4. B exhibits the corresponding mixed-scheme transition;
+5. the result is reproducible across the current jittered and glass
+   refinement sequences.
+
+This is strong evidence for a defect in the complete advected space-time RD
+discretisation. The current lumped distribution of the time residual is the
+leading mathematical suspect because the stationary case weakly exercises
+the time derivative whereas the translated vortex does not.
+
+The experiment does **not** yet identify the mass matrix in isolation.
+Spatial and temporal errors are coupled because `dt` is refined in proportion
+to `h`. In addition, the current RD predictor/extrapolation and two-stage
+update are not known to be identical to a canonical second-order RD RK2
+formulation. Therefore the defensible conclusion is:
+
+> The baseline is consistent with a lumped-mass time defect, but a defect in
+> the predictor/RK2 integration, or an interaction between the two, remains
+> possible.
+
+### 7. Numerical safety, conservation and linear solve
+
+Across `nodal_v1_dth`:
+
+```
+24/24 valid
+minimum density                  4.8405e-1
+minimum pressure                 3.6881e-1
+maximum |relative mass change|   2.89e-16
+maximum |relative energy change| 3.85e-16
+maximum momentum relative L2     2.01e-14
+```
+
+Across `glass_v2_nodal_dth`:
+
+```
+18/18 valid
+minimum density                  4.9445e-1
+minimum pressure                 3.7304e-1
+maximum |relative mass change|   2.89e-16
+maximum |relative energy change| 1.92e-16
+maximum momentum relative L2     2.38e-14
+```
+
+No exact singular solve, negative state or invariant failure occurred. In the
+glass `n=96, boost=0` geometry, one element triggered the LU-to-DGELSD
+fallback in each solver stage at `time=0.671875`. The event appeared in LDA,
+N and B because all three use the same element matrix. The pivot ratios were
+approximately `5.34e-13` to `8.68e-13`, below the `1e-12` LU guard; DGELSD
+reported full rank 4. Raw conservation defects and global invariants remained
+at roundoff. No other formal campaign case used the fallback.
+
+### 8. Recommended next experiment
+
+Keep the present lumped artifacts and both nodal data sets unchanged as the
+baseline. Add the proposed total-residual LDA mass-matrix treatment behind a
+compile-time switch:
+
+```
+m_ij^LDA = (|T| / 3) beta_i^LDA
+```
+
+Then repeat the same `nodal_v1_dth` and `glass_v2_nodal_dth` LDA and B
+resolution ladders with generator-sampled ICs and identical timestep limits.
+N should be retained as a control where useful.
+
+- If boosted LDA recovers approximately second order on both families while
+  the stationary result is preserved, the mass treatment is identified as
+  the dominant cause.
+- If boosted LDA remains approximately first order, the evidence rejects a
+  mass-matrix-only explanation and the next target is the
+  predictor/extrapolation/RK2 formulation.
+
+A subsequent fixed-resolution boosted timestep ladder is still needed to
+measure the temporal order directly and locate its spatial-error plateau. It
+is complementary to, rather than a replacement for, the controlled
+mass-matrix intervention.
+
+## 2026-07-29: the time integration is the N-scheme special case; structural analysis opened
+
+- Author: `Claude Code Opus5`
+- Full analysis: **`dev_log/RK2_timestep_movingmesh.md`** (new, standing document)
+- Constraint set by Zhenyu for that analysis: a space-time RD rewrite is out of
+  scope. Reuse AREPO's mesh, timebin hierarchy and MPI parallelisation; change
+  only what the mathematics forces.
+
+### Why this was opened
+
+Codex's advected-Yee campaigns established that LDA is second order at boost 0
+and first order at boost 1, on two mesh families, with N unchanged at about 1.
+Zhenyu's reading was that the code may not contain a complete second-order-in-
+time implementation at all, and that the RK2 assumed by RD differs from the
+MUSCL-Hancock scheme AREPO inherits from Pakmor et al. 2016. Re-reading thesis
+chapter 3 against the source confirms this.
+
+### 1. What the code implements
+
+The two half-step calls give
+
+```
+   U^{n+1}_i = U^n_i − (Δt/2|S_i|) Σ_T [ φ_i(W^n) + φ_i(W^n + Δt ∂_t W) ]
+```
+
+which is exactly `eq:RD_RK2_N_Heun`, the **N-scheme special case**, applied to
+all three schemes. The code contains no `U*`, no temporal defect term
+`Σ_j m_ij (U*_j − U^n_j)/Δt`, no total residual `Φ_i^T`, and no mass matrix.
+The one scheme for which the implemented form is correct is the one scheme that
+gains nothing from the second-order machinery.
+
+Note also that the predictor is a Taylor extrapolation of the primitive
+variables using AREPO's least-squares gradients, whereas the thesis predictor
+(`eq:RD_RK2_predictor`) is a first-order RD update. For the N mass matrix the
+`U*` terms cancel identically in the corrector, so this does not change the
+structure; it enters only through `φ_i(U*)`.
+
+### 2. Why LDA degrades exactly to first order
+
+Substituting the exact solution into the lumped semi-discrete scheme leaves
+
+```
+   Σ_{T∋i} ( 1/3 − β_i^T ) |T| · ∂_t U|_i
+```
+
+which vanishes only for `β_i = 1/3` (centred, not upwind) or `∂_t U = 0`
+(steady). **The temporal term is distributed with weight 1/3 and the spatial
+term with weight β_i; the mismatch is the whole defect.** The consistent mass
+matrix `m_ij = (|T|/3)β_i` makes the two weightings agree and the terms cancel.
+
+This accounts for five of the six entries in Codex's convergence table,
+including why N is unaffected, why B follows LDA, and why the two mesh families
+agree. The sixth, stationary velocity at about 1.7 against 2.0 for density,
+pressure and internal energy, is **not** explained and remains open.
+
+### 3. Ben Morton's standalone code was checked and should not be ported
+
+`/home/zwu/rdsolver/rd` implements the thesis scheme and was the natural thing
+to copy. Its N scheme matches. Its LDA branch does not: the implied mass matrix
+is indexed by the source vertex, `m_ij = (|T|/3)β_j`, where the thesis has the
+target vertex, `m_ij = (|T|/3)β_i`. Conservation then fails,
+`Σ_i m_ij = |T| β_j` instead of `(|T|/3) I`.
+
+Numerically, with genuine LDA matrices and random per-vertex `ΔU`: the thesis
+form reproduces `Φ^T` to `1.8e-16`, Ben's form is off by `4.65e-2` against a
+required magnitude of `1.6e-2`, about 285 per cent. With uniform `ΔU` the defect
+falls to `6.5e-16`, so his form is correct to `O(h)`.
+
+A related observation, offered as evidence rather than as a conclusion since it
+concerns published work: Ben's temporal contribution is identical for the three
+vertices, i.e. effectively distributed as `1/3`. By the argument in section 2
+his LDA would carry the same mismatch and also be first order under advection.
+That is consistent with the previously recorded orders having been measured on
+the stationary Yee vortex. Zhenyu to judge how to handle this.
+
+### 4. Hierarchical timesteps: the tension is provable, not incidental
+
+The consistent mass matrix makes the update non-local within the element, since
+vertex `i` needs `ΔU_j` at all vertices of every incident element. That is
+precisely the locality a timebin hierarchy depends on. And:
+
+> If `m_ij^T` is conservative, `Σ_{i∈T} m_ij^T = (|T|/(d+1)) I` for every `j`,
+> and element-local, `m_ij^T = 0` for `i ≠ j`, then `m_ij^T` is the lumped mass.
+> Proof: locality leaves one term in the conservation sum. ∎
+
+So the only conservative element-local mass matrix is the lumped one, whose
+temporal weights are `1/(d+1)` regardless of `β`. Searching for a modified `β̃`
+that keeps locality and restores consistency is therefore futile: the required
+condition `Σ_{T∋i} β̃_i^T |T| = |S_i|` couples the elements around a vertex.
+
+The candidate that best fits the reuse constraint is a **mixed mass matrix**:
+consistent where an element's vertices share a bin, lumped where they straddle
+a boundary. Both are conservative, so conservation stays exact; second order is
+lost only on a codimension-one set of elements. This needs a quantitative
+estimate of the accuracy loss, not merely the observation that it is safe.
+
+Ben's `timestep.cpp` offers `DRIFT` and `JUMP`, both element-based, both behind
+`#ifdef` with the synchronised path as default, neither derived and neither
+addressing the mass-matrix coupling. There is nothing ready to port.
+
+### 5. Main loop restructuring
+
+Three options are analysed in the standing document. The conclusion relevant
+here:
+
+- keeping the present structure and adding only the mass-matrix term is
+  **not viable**, because the temporal term requires `U*` to be the RD
+  predictor and the existing Taylor extrapolation is not that;
+- splitting predictor and corrector across the two existing call sites is the
+  smallest change but is **not a route to a moving mesh**, since AREPO rebuilds
+  the mesh between them;
+- performing both stages inside one call is the only structure compatible with
+  mesh motion.
+
+An algebraic simplification reduces the cost considerably. Since
+`Σ_{T∋i} φ_i^{n,T} = −|S_i|(U*_i − U^n_i)/Δt`, the corrector can be written
+
+```
+   U^{n+1}_i = U*_i + ½(U*_i − U^n_i)
+               − (Δt/|S_i|) Σ_T [ Σ_j m_ij (U*_j − U^n_j)/Δt + ½ φ_i^T(U*) ]
+```
+
+so stage 2 needs one residual sweep and no per-element storage. The only new
+persistent data is `U^n_i` per vertex, which the mass-matrix term requires
+anyway, plus one exchanged field for ghosts.
+
+### 6. Relevance of work already committed
+
+Under ALE the degeneracy condition of `S^-` is `u_n = v_n`, the normal state of
+a Lagrangian mesh. The removal of `regularize_matrix()` and the direct solve in
+`07f264a` are therefore a prerequisite for moving mesh, not only a fix for quiet
+regions.
+
+### Status and next decisions
+
+No implementation decision taken. Ordered as they need deciding:
+
+1. how to handle the discrepancy found in the standalone code;
+2. whether the mixed mass matrix's accuracy loss is acceptable, which needs a
+   quantitative estimate;
+3. whether Arpaia & Ricchiuto's ALE-RD is RK-based rather than space-time, which
+   decides whether the one-call restructuring is a stepping stone or a dead end;
+4. the unexplained stationary velocity order.
+
+The E1–E3 experiments proposed earlier are deferred at Zhenyu's direction; the
+derivation now supersedes their diagnostic purpose, though E1 and E2 retain
+value as falsifiable checks of it. The lumped baseline campaigns and artifacts
+should be preserved unchanged for comparison.
