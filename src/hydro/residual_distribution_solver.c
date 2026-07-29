@@ -106,18 +106,6 @@ static int rd_triangle_is_physical(tessellation *T, int triangle_index)
   return 1;
 }
 
-static int rd_compare_particle_id(const void *a, const void *b)
-{
-  MyIDType id_a = *(const MyIDType *)a;
-  MyIDType id_b = *(const MyIDType *)b;
-
-  if(id_a < id_b)
-    return -1;
-  if(id_a > id_b)
-    return 1;
-  return 0;
-}
-
 /* Per-call diagnostics for the upwind system solve (item A4 of the report). */
 static long long RD_stat_elements;         /* elements whose residual was evaluated */
 static long long RD_stat_pinv_fallback;    /* elements that needed the pseudo-inverse */
@@ -359,15 +347,9 @@ static void rd_assert_K_sum_vanishes(double Kmatrix[4][4][3][3], int kfull, int 
  *  guards currently enforce, but they will not once hierarchical time bins
  *  are enabled. Collapsing them would silently build the wrong dual volume
  *  for that extension.
- *
- *  `label`, `local` and `boundary` are scratch arrays retained only so that
- *  the `mymalloc_movable` LIFO discipline can be honoured on release.
  */
 struct rd_element_set
 {
-  char *label;
-  int *local;
-  int *boundary;
   int *element;
   char *active;
   struct triangle_normals *normals;
@@ -375,88 +357,101 @@ struct rd_element_set
   int n_active;
 };
 
-/*! \brief Classify, deduplicate and measure this task's Delaunay elements.
+/*! \brief Minimum-ID ownership: does this task claim this simplex instance?
+ *
+ *  The owner of a physical simplex is the task holding, as a local primary
+ *  point, the vertex with the globally smallest (ID, task) key. The claim is
+ *  made only on the simplex instance in which that vertex appears as the
+ *  primary copy (`DP index` in `[0, NumGas)`), never on a periodic-image
+ *  instance. This gives, per physical simplex, exactly one claiming task and
+ *  exactly one claimed instance on it:
+ *
+ *  - every task holding a copy sees the same vertex IDs, so all agree on the
+ *    owner key;
+ *  - the winning vertex is a local primary on exactly one task;
+ *  - on that task, the Delaunay star of a primary point contains each
+ *    physical simplex incident to it exactly once, so among the periodic
+ *    images of the simplex exactly one has the winning vertex as the primary
+ *    copy.
+ *
+ *  This replaces the previous majority-task rule plus O(n^2) sorted-ID
+ *  deduplication. Unlike the majority rule it has no ties (IDs are globally
+ *  unique; `task` is only a tie-break for reflective copies, which share the
+ *  ID of their source), and the loop is over `DIMS + 1` vertices, so the same
+ *  code covers triangles and tetrahedra.
+ *
+ *  Hierarchical-timebin extension (documented, NOT implemented): ownership
+ *  must then be restricted to the *active* vertices, so that the owner is
+ *  guaranteed to have constructed the simplex when the mesh is built around
+ *  active cells only. Under the enforced `FORCE_EQUAL_TIMESTEPS` every vertex
+ *  is active and the two rules coincide. The activity of remote vertices must
+ *  come from live `PrimExch` timebins, not from `DP[].timebin`, which is
+ *  stamped at mesh construction and goes stale on a static mesh.
+ */
+static int rd_simplex_claimed(tessellation *T, int i)
+{
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+
+  MyIDType min_id = DP[DT[i].p[0]].ID;
+  int min_task    = DP[DT[i].p[0]].task;
+  int j;
+
+  for(j = 1; j < DIMS + 1; j++)
+    {
+      MyIDType id = DP[DT[i].p[j]].ID;
+      int task    = DP[DT[i].p[j]].task;
+
+      if(id < min_id || (id == min_id && task < min_task))
+        {
+          min_id   = id;
+          min_task = task;
+        }
+    }
+
+  /* Claim if the winning vertex appears in this instance as a local primary
+   * copy. The "exists" form (rather than testing the single minimising entry)
+   * makes the degenerate case of a vertex meeting its own periodic image in
+   * one simplex resolve in favour of the primary copy. */
+  for(j = 0; j < DIMS + 1; j++)
+    {
+      int pt = DT[i].p[j];
+
+      if(DP[pt].ID == min_id && DP[pt].task == ThisTask && DP[pt].task == min_task && DP[pt].index >= 0 &&
+         DP[pt].index < NumGas)
+        return 1;
+    }
+
+  return 0;
+}
+
+/*! \brief Collect, in one pass, the elements this task owns.
  *
  *  Replaces the two near-identical classification passes that previously ran
- *  in `reset_dualarea()` and `compute_residuals()`. The physical criterion is
- *  the one from `reset_dualarea()`; the activity test that used to filter the
- *  classification in `compute_residuals()` is now recorded separately in
- *  `active[]` rather than removing elements from the set.
+ *  in `reset_dualarea()` and `compute_residuals()`, and the majority-rule
+ *  responsibility plus duplicate removal they relied on. The activity test
+ *  that used to filter the classification is recorded in `active[]` rather
+ *  than removing elements from the set.
  */
 static void rd_build_element_set(tessellation *T, struct rd_element_set *set)
 {
   point *DP = T->DP;
   tetra *DT = T->DT;
   int Ndt   = T->Ndt;
-  int i, j, k;
+  int i, j;
 
-  set->label = (char *)mymalloc_movable(&set->label, "RD_DT_label", Ndt * sizeof(char));
-
-  int n_local = 0, n_boundary_owned = 0;
-
+  int n = 0;
   for(i = 0; i < Ndt; i++)
-    {
-      if(!rd_triangle_is_physical(T, i))
-        {
-          set->label[i] = 'o';
-          continue;
-        }
+    if(rd_triangle_is_physical(T, i) && rd_simplex_claimed(T, i))
+      n += 1;
 
-      int pmin = imin_array(DT[i].p, DIMS + 1);
-      int pmax = imax_array(DT[i].p, DIMS + 1);
-
-      if(pmin >= 0 && pmax <= NumGas - 1) /* every vertex is a local original point */
-        {
-          set->label[i] = 'l';
-          n_local += 1;
-        }
-      else if(pmin >= 0 && pmin <= NumGas - 1) /* at least one, but not all */
-        {
-          set->label[i] = 'b';
-          if(boundary_triangle_check_responsibility_thistask(T, i) == ThisTask)
-            {
-              set->label[i] = 't';
-              n_boundary_owned += 1;
-            }
-        }
-      else
-        {
-          set->label[i] = 'o';
-        }
-    }
-
-  set->local    = (int *)mymalloc_movable(&set->local, "RD_local_elements", n_local * sizeof(int));
-  set->boundary = (int *)mymalloc_movable(&set->boundary, "RD_boundary_elements", n_boundary_owned * sizeof(int));
-
-  for(i = 0, j = 0, k = 0; i < Ndt; i++)
-    {
-      if(set->label[i] == 'l')
-        set->local[j++] = i;
-      else if(set->label[i] == 't')
-        set->boundary[k++] = i;
-    }
-
-  /* A periodic image can present the same physical element twice on one task. */
-  int n_repeated = 0;
-  for(i = 0; i < n_boundary_owned; i++)
-    for(j = 0; j < i; j++)
-      if(boundary_triangle_compare(T, set->boundary[i], set->boundary[j]))
-        {
-          set->label[set->boundary[i]] = 'r';
-          set->boundary[i]             = -1;
-          n_repeated += 1;
-        }
-
-  set->n       = n_local + n_boundary_owned - n_repeated;
+  set->n       = n;
   set->element = (int *)mymalloc_movable(&set->element, "RD_elements", set->n * sizeof(int));
   set->active  = (char *)mymalloc_movable(&set->active, "RD_element_active", set->n * sizeof(char));
 
-  for(i = 0; i < n_local; i++)
-    set->element[i] = set->local[i];
-
-  for(i = 0, j = n_local; i < n_boundary_owned; i++)
-    if(set->boundary[i] >= 0)
-      set->element[j++] = set->boundary[i];
+  for(i = 0, n = 0; i < Ndt; i++)
+    if(rd_triangle_is_physical(T, i) && rd_simplex_claimed(T, i))
+      set->element[n++] = i;
 
   set->normals =
       (struct triangle_normals *)mymalloc_movable(&set->normals, "RD_normals", set->n * sizeof(struct triangle_normals));
@@ -495,9 +490,6 @@ static void rd_free_element_set(struct rd_element_set *set)
   myfree_movable(set->normals);
   myfree_movable(set->active);
   myfree_movable(set->element);
-  myfree_movable(set->boundary);
-  myfree_movable(set->local);
-  myfree_movable(set->label);
 }
 
 /*! \brief Accumulate the median dual area over the complete physical set.
@@ -555,6 +547,31 @@ static void rd_accumulate_dual_area(tessellation *T, const struct rd_element_set
   apply_DualArea_list();
 
   myfree_movable(DualArea_list);
+
+#ifdef RD_DEBUG_ASSERTS
+  /* Coverage audit for the ownership rule. Every physical simplex must be
+   * claimed exactly once globally; each claim deposits its full area |T|
+   * (split as |T|/3 per vertex), and the periodic tessellation tiles the box,
+   * so the global dual area must equal the box area. A double claim or a
+   * missed simplex shifts this sum by O(|T|) and is caught immediately. */
+  {
+    double local_area = 0.0, global_area;
+
+    for(i = 0; i < NumGas; i++)
+      local_area += SphP[i].DualArea;
+
+    MPI_Allreduce(&local_area, &global_area, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    double box_area = boxSize_X * boxSize_Y;
+
+    if(fabs(global_area - box_area) > 1.0e-10 * box_area)
+      {
+        printf("RD coverage audit failed: task=%d sum(DualArea)=%.17g box=%.17g rel=%.3e\n", ThisTask, global_area,
+               box_area, fabs(global_area - box_area) / box_area);
+        terminate_program("RD coverage audit: global dual area != box area");
+      }
+  }
+#endif /* #ifdef RD_DEBUG_ASSERTS */
 }
 
 void reset_dualarea(tessellation *T)
@@ -1221,60 +1238,12 @@ void compute_residuals(tessellation *T)
   TIMER_STOP(CPU_RESIDUAL_DISTRIBUTION);
 }
 
-int boundary_triangle_check_responsibility_thistask(tessellation *T, int DTindex)
-{
-  if(!rd_triangle_is_physical(T, DTindex))
-    return -1;
+/* The majority-task responsibility rule and the sorted-ID duplicate scan
+ * that lived here were replaced by the minimum-ID ownership rule in
+ * rd_simplex_claimed(); see dev_log/RD_DEVELOPMENT_LOG.md, entry
+ * "deferred MPI simplex-responsibility redesign", for the failure mode of
+ * the old rule under partial activation. */
 
-  point *DP = T->DP;
-  tetra *DT = T->DT;
-  int tasks[DIMS + 1]; /* tasks of the vertices in this triangle */
-
-  int *task_count; /* counts of each task*/
-  task_count = (int *)mymalloc("task_count", NTask * sizeof(int));
-  for(int i = 0; i < NTask; i++)
-    {
-      task_count[i] = 0;
-    }
-
-  for(int i = 0; i < DIMS + 1; i++)
-    {
-      tasks[i] = DP[DT[DTindex].p[i]].task;
-      task_count[tasks[i]] += 1;
-    }
-  int responsible_task = arg_imax(task_count, NTask);
-
-  myfree(task_count);
-  return responsible_task;
-}
-
-/*same triangle: return 1; different triangles: return 0 */
-int boundary_triangle_compare(tessellation *T, int DTindex1, int DTindex2)
-{
-  if(DTindex1 < 0 || DTindex2 < 0)
-    return 0;
-  if(!rd_triangle_is_physical(T, DTindex1) || !rd_triangle_is_physical(T, DTindex2))
-    return 0;
-  point *DP = T->DP;
-  tetra *DT = T->DT;
-  MyIDType particleIDlist1[DIMS + 1], particleIDlist2[DIMS + 1];
-  for(int i = 0; i < DIMS + 1; i++)
-    {
-      particleIDlist1[i] = DP[DT[DTindex1].p[i]].ID;
-      particleIDlist2[i] = DP[DT[DTindex2].p[i]].ID;
-    }
-
-  qsort(particleIDlist1, DIMS + 1, sizeof(MyIDType), rd_compare_particle_id);
-  qsort(particleIDlist2, DIMS + 1, sizeof(MyIDType), rd_compare_particle_id);
-
-  for(int i = 0; i < DIMS + 1; i++)
-    {
-      if(particleIDlist1[i] != particleIDlist2[i])
-        return 0;
-    }
-
-  return 1;
-}
 
 void triangle_vertex_do_time_extrapolation(struct state_primitive *delta, struct state_primitive *st, struct grad_data *grad, double dt_Extrapolation)
 {
