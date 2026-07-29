@@ -343,165 +343,227 @@ static void rd_assert_K_sum_vanishes(double Kmatrix[4][4][3][3], int kfull, int 
  *  \return void
  */
 
-void reset_dualarea(tessellation *T)
+/*! \brief The set of Delaunay elements this task owns.
+ *
+ *  Two notions are deliberately kept distinct here.
+ *
+ *  1. The **complete physical owned set**, `element[0 .. n-1]`. This defines
+ *     the median dual area and the element geometry. It must not depend on
+ *     which elements happen to be active in a time-integration stage;
+ *     building `DualArea` from the active subset alone was the defect fixed
+ *     in `ebe1be2`.
+ *  2. The **active subset**, marked by `active[]`, whose residuals are
+ *     advanced on the current step.
+ *
+ *  The two coincide under `FORCE_EQUAL_TIMESTEPS`, which the compile-time
+ *  guards currently enforce, but they will not once hierarchical time bins
+ *  are enabled. Collapsing them would silently build the wrong dual volume
+ *  for that extension.
+ *
+ *  `label`, `local` and `boundary` are scratch arrays retained only so that
+ *  the `mymalloc_movable` LIFO discipline can be honoured on release.
+ */
+struct rd_element_set
+{
+  char *label;
+  int *local;
+  int *boundary;
+  int *element;
+  char *active;
+  struct triangle_normals *normals;
+  int n;
+  int n_active;
+};
+
+/*! \brief Classify, deduplicate and measure this task's Delaunay elements.
+ *
+ *  Replaces the two near-identical classification passes that previously ran
+ *  in `reset_dualarea()` and `compute_residuals()`. The physical criterion is
+ *  the one from `reset_dualarea()`; the activity test that used to filter the
+ *  classification in `compute_residuals()` is now recorded separately in
+ *  `active[]` rather than removing elements from the set.
+ */
+static void rd_build_element_set(tessellation *T, struct rd_element_set *set)
 {
   point *DP = T->DP;
   tetra *DT = T->DT;
-  int i, j = 0, k = 0, p;
-  int Ndp = T->Ndp;
-  int Ndt = T->Ndt;
-  char *DT_label;
-  DT_label      = (char *)mymalloc_movable(&DT_label, "DT_label",
-                                           Ndt * sizeof(char)); /* array of labels of the triangles, l = local, b = boundary, o = other*/
-  int Ndt_local = 0, Ndt_boundary = 0, Ndt_other = 0, Ndt_boundary_thistask = 0;
+  int Ndt   = T->Ndt;
+  int i, j, k;
 
-  /* classification of Delaunay triangles*/
+  set->label = (char *)mymalloc_movable(&set->label, "RD_DT_label", Ndt * sizeof(char));
+
+  int n_local = 0, n_boundary_owned = 0;
+
   for(i = 0; i < Ndt; i++)
     {
       if(!rd_triangle_is_physical(T, i))
         {
-          DT_label[i] = 'o';
-          Ndt_other += 1;
+          set->label[i] = 'o';
           continue;
         }
 
       int pmin = imin_array(DT[i].p, DIMS + 1);
       int pmax = imax_array(DT[i].p, DIMS + 1);
 
-      if(pmin >= 0 && pmax <= NumGas - 1) /* all vertices are local (excluding local ghost)*/
+      if(pmin >= 0 && pmax <= NumGas - 1) /* every vertex is a local original point */
         {
-          DT_label[i] = 'l';
-          Ndt_local += 1;
+          set->label[i] = 'l';
+          n_local += 1;
         }
-      else if(pmin >= 0 && pmin <= NumGas - 1) /*at least one vertex is local (excluding local ghost), but not all of them are local*/
+      else if(pmin >= 0 && pmin <= NumGas - 1) /* at least one, but not all */
         {
-          DT_label[i] = 'b';
-          Ndt_boundary += 1;
+          set->label[i] = 'b';
           if(boundary_triangle_check_responsibility_thistask(T, i) == ThisTask)
             {
-              DT_label[i] = 't';
-              Ndt_boundary_thistask += 1;
+              set->label[i] = 't';
+              n_boundary_owned += 1;
             }
         }
       else
         {
-          DT_label[i] = 'o';
-          Ndt_other += 1;
+          set->label[i] = 'o';
         }
     }
 
-  int *local_triangles    = (int *)mymalloc_movable(&local_triangles, "local_triangles", Ndt_local * sizeof(int));
-  int *boundary_triangles = (int *)mymalloc_movable(&boundary_triangles, "boundary_triangles", Ndt_boundary_thistask * sizeof(int));
+  set->local    = (int *)mymalloc_movable(&set->local, "RD_local_elements", n_local * sizeof(int));
+  set->boundary = (int *)mymalloc_movable(&set->boundary, "RD_boundary_elements", n_boundary_owned * sizeof(int));
 
-  for(i = 0; i < Ndt; i++)
+  for(i = 0, j = 0, k = 0; i < Ndt; i++)
     {
-      if(DT_label[i] == 'l')
-        {
-          local_triangles[j] = i;
-          j += 1;
-        }
-      else if(DT_label[i] == 't')
-        {
-          boundary_triangles[k] = i;
-          k += 1;
-        }
-    }
-  /* check uniqueness of boundary triangles of this task*/
-  int Ndt_boundary_thistask_repeated = 0;
-  for(i = 0; i < Ndt_boundary_thistask; i++)
-    {
-      for(j = 0; j < i; j++)
-        {
-          if(boundary_triangle_compare(T, boundary_triangles[i], boundary_triangles[j]))
-            {
-              DT_label[boundary_triangles[i]] = 'r';
-              boundary_triangles[i]           = -1;
-              Ndt_boundary_thistask_repeated += 1;
-            }
-        }
+      if(set->label[i] == 'l')
+        set->local[j++] = i;
+      else if(set->label[i] == 't')
+        set->boundary[k++] = i;
     }
 
-  int Ndt_thistask        = Ndt_local + Ndt_boundary_thistask - Ndt_boundary_thistask_repeated;
-  int *thistask_triangles = (int *)mymalloc_movable(&thistask_triangles, "thistask_triangles", Ndt_thistask * sizeof(int));
-  for(i = 0; i < Ndt_local; i++)
-    {
-      thistask_triangles[i] = local_triangles[i];
-    }
-  j = Ndt_local;
-  for(i = 0; i < Ndt_boundary_thistask; i++)
-    {
-      if(boundary_triangles[i] >= 0)
+  /* A periodic image can present the same physical element twice on one task. */
+  int n_repeated = 0;
+  for(i = 0; i < n_boundary_owned; i++)
+    for(j = 0; j < i; j++)
+      if(boundary_triangle_compare(T, set->boundary[i], set->boundary[j]))
         {
-          thistask_triangles[j] = boundary_triangles[i];
-          j++;
+          set->label[set->boundary[i]] = 'r';
+          set->boundary[i]             = -1;
+          n_repeated += 1;
         }
-    }
 
-  /* compute residual: calculate normal vectors and triangular area; assign dual area to vertices
-   tri_normals_list is a shorter list compared to DT because it only keeps necessary triangles for
-   this task (Ndt_thistask). tri_normal_list[i]  <-->  DT[thistask_triangles[i]]
-   */
-  tri_normals_list = (struct triangle_normals *)mymalloc_movable(&tri_normals_list, "tri_normals_list",
-                                                                 Ndt_thistask * sizeof(struct triangle_normals));
+  set->n       = n_local + n_boundary_owned - n_repeated;
+  set->element = (int *)mymalloc_movable(&set->element, "RD_elements", set->n * sizeof(int));
+  set->active  = (char *)mymalloc_movable(&set->active, "RD_element_active", set->n * sizeof(char));
 
-  for(i = 0; i < Ndt_thistask; i++)
+  for(i = 0; i < n_local; i++)
+    set->element[i] = set->local[i];
+
+  for(i = 0, j = n_local; i < n_boundary_owned; i++)
+    if(set->boundary[i] >= 0)
+      set->element[j++] = set->boundary[i];
+
+  set->normals =
+      (struct triangle_normals *)mymalloc_movable(&set->normals, "RD_normals", set->n * sizeof(struct triangle_normals));
+
+  set->n_active = 0;
+
+  for(i = 0; i < set->n; i++)
     {
 #ifdef TWODIMS
-      triangle_get_normals_area(T, thistask_triangles[i], &tri_normals_list[i]);
+      triangle_get_normals_area(T, set->element[i], &set->normals[i]);
 #endif
-    }
 
-  for(i = 0; i < NumGas; i++)
-    {
-      SphP[i].DualArea = 0.0;
-    }
+      /* An element is advanced when at least one of its vertices that is a
+       * local original point is synchronized on this step. */
+      char is_active = 0;
 
-  N_DualArea_export = 0;
-  for(i = 0; i < Ndt_thistask; i++)
-    {
       for(j = 0; j < DIMS + 1; j++)
         {
-          if(DP[DT[thistask_triangles[i]].p[j]].task == ThisTask)
-            {
-              int SphP_index = DP[DT[thistask_triangles[i]].p[j]].index;
+          int pt = DT[set->element[i]].p[j];
 
-              if(SphP_index >= NumGas)
-                SphP_index -= NumGas;
-
-              SphP[SphP_index].DualArea += tri_normals_list[i].area / (DIMS + 1);
-            }
-          else
+          if(DP[pt].task == ThisTask && DP[pt].index >= 0 && DP[pt].index < NumGas &&
+             TimeBinSynchronized[P[DP[pt].index].TimeBinHydro])
             {
-              N_DualArea_export += 1;
+              is_active = 1;
+              break;
             }
         }
+
+      set->active[i] = is_active;
+      set->n_active += is_active;
     }
+}
+
+static void rd_free_element_set(struct rd_element_set *set)
+{
+  myfree_movable(set->normals);
+  myfree_movable(set->active);
+  myfree_movable(set->element);
+  myfree_movable(set->boundary);
+  myfree_movable(set->local);
+  myfree_movable(set->label);
+}
+
+/*! \brief Accumulate the median dual area over the complete physical set.
+ *
+ *  Uses every owned element, active or not, because the control area is a
+ *  geometric property of the tessellation.
+ */
+static void rd_accumulate_dual_area(tessellation *T, const struct rd_element_set *set)
+{
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+  int i, j, k;
+
+  for(i = 0; i < NumGas; i++)
+    SphP[i].DualArea = 0.0;
+
+  N_DualArea_export = 0;
+
+  for(i = 0; i < set->n; i++)
+    for(j = 0; j < DIMS + 1; j++)
+      {
+        int pt = DT[set->element[i]].p[j];
+
+        if(DP[pt].task == ThisTask)
+          {
+            int SphP_index = DP[pt].index;
+
+            if(SphP_index >= NumGas)
+              SphP_index -= NumGas;
+
+            SphP[SphP_index].DualArea += set->normals[i].area / (DIMS + 1);
+          }
+        else
+          N_DualArea_export += 1;
+      }
 
   DualArea_list = (struct DualArea_list_data *)mymalloc_movable(&DualArea_list, "DualArea_list",
                                                                 N_DualArea_export * sizeof(struct DualArea_list_data));
-  k             = 0;
+  k = 0;
 
-  for(i = 0; i < Ndt_thistask; i++)
-    {
-      for(j = 0; j < DIMS + 1; j++)
-        {
-          if(DP[DT[thistask_triangles[i]].p[j]].task != ThisTask)
-            {
-              DualArea_list[k].task     = DP[DT[thistask_triangles[i]].p[j]].task;
-              DualArea_list[k].index    = DP[DT[thistask_triangles[i]].p[j]].originalindex;
-              DualArea_list[k].DualArea = tri_normals_list[i].area / (DIMS + 1);
-              k += 1;
-            }
-        }
-    }
+  for(i = 0; i < set->n; i++)
+    for(j = 0; j < DIMS + 1; j++)
+      {
+        int pt = DT[set->element[i]].p[j];
+
+        if(DP[pt].task != ThisTask)
+          {
+            DualArea_list[k].task     = DP[pt].task;
+            DualArea_list[k].index    = DP[pt].originalindex;
+            DualArea_list[k].DualArea = set->normals[i].area / (DIMS + 1);
+            k += 1;
+          }
+      }
+
   apply_DualArea_list();
 
   myfree_movable(DualArea_list);
-  myfree_movable(tri_normals_list);
-  myfree_movable(thistask_triangles);
-  myfree_movable(boundary_triangles);
-  myfree_movable(local_triangles);
-  myfree_movable(DT_label);
+}
+
+void reset_dualarea(tessellation *T)
+{
+  struct rd_element_set set;
+
+  rd_build_element_set(T, &set);
+  rd_accumulate_dual_area(T, &set);
+  rd_free_element_set(&set);
 }
 
 void compute_residuals(tessellation *T)
@@ -511,133 +573,23 @@ void compute_residuals(tessellation *T)
 #endif /* #ifdef NOHYDRO */
   TIMER_START(CPU_RESIDUAL_DISTRIBUTION);
 
-  /*
-   * The median control area is a geometric property of the complete physical
-   * tessellation. It must not depend on which elements happen to be active in
-   * a time-integration stage.
-   */
-  reset_dualarea(T);
-
   rd_reset_solver_statistics();
 
   point *DP = T->DP;
   tetra *DT = T->DT;
   int i, j = 0, k = 0, p;
-  int Ndp = T->Ndp;
-  int Ndt = T->Ndt;
-  char *DT_label;
-  DT_label      = (char *)mymalloc_movable(&DT_label, "DT_label",
-                                           Ndt * sizeof(char)); /* array of labels of the triangles, l = local, b = boundary, o = other*/
-  int Ndt_local = 0, Ndt_boundary = 0, Ndt_other = 0, Ndt_boundary_thistask = 0;
 
-  /* classification of Delaunay triangles*/
-  for(i = 0; i < Ndt; i++)
-    {
-      if(!rd_triangle_is_physical(T, i))
-        {
-          DT_label[i] = 'o';
-          Ndt_other += 1;
-          continue;
-        }
+  /* One classification per step, shared by the dual-area accumulation and the
+   * residual sweep. The set carries the complete physical owned elements; the
+   * active subset is marked rather than filtered out, so that the control area
+   * stays a property of the tessellation. */
+  struct rd_element_set set;
+  rd_build_element_set(T, &set);
+  rd_accumulate_dual_area(T, &set);
 
-      int has_one_active_local = 0, all_local = 0, num_local = 0;
-      for (j= 0;j<DIMS+1;j++){
-          if(DP[DT[i].p[j]].task == ThisTask && DP[DT[i].p[j]].index >= 0 && DP[DT[i].p[j]].index < NumGas){
-              num_local += 1;
-              if(TimeBinSynchronized[P[DP[DT[i].p[j]].index].TimeBinHydro]){
-                  has_one_active_local = 1;
-                }
-            }
-        }
-
-      if (num_local == DIMS +1){
-          all_local = 1;
-        }
-
-      if(has_one_active_local && all_local) /* all vertices are local (excluding local ghost)*/
-        {
-          DT_label[i] = 'l';
-          Ndt_local += 1;
-        }
-      else if(has_one_active_local) /*at least one vertex is local (excluding local ghost), but not all of them are local*/
-        {
-          DT_label[i] = 'b';
-          Ndt_boundary += 1;
-          if(boundary_triangle_check_responsibility_thistask(T, i) == ThisTask)
-            {
-              DT_label[i] = 't';
-              Ndt_boundary_thistask += 1;
-            }
-        }
-      else
-        {
-          DT_label[i] = 'o';
-          Ndt_other += 1;
-        }
-    }
-
-  int *local_triangles    = (int *)mymalloc_movable(&local_triangles, "local_triangles", Ndt_local * sizeof(int));
-  int *boundary_triangles = (int *)mymalloc_movable(&boundary_triangles, "boundary_triangles", Ndt_boundary_thistask * sizeof(int));
-
-  j = 0; k =0;
-  for(i = 0; i < Ndt; i++)
-    {
-      if(DT_label[i] == 'l')
-        {
-          local_triangles[j] = i;
-          j += 1;
-        }
-      else if(DT_label[i] == 't')
-        {
-          boundary_triangles[k] = i;
-          k += 1;
-        }
-    }
-
-  /* check uniqueness of boundary triangles of this task*/
-  int Ndt_boundary_thistask_repeated = 0;
-  for(i = 0; i < Ndt_boundary_thistask; i++)
-    {
-      for(j = 0; j < i; j++)
-        {
-          if(boundary_triangle_compare(T, boundary_triangles[i], boundary_triangles[j]))
-            {
-              DT_label[boundary_triangles[i]] = 'r';
-              boundary_triangles[i]           = -1;
-              Ndt_boundary_thistask_repeated += 1;
-            }
-        }
-    }
-
-  int Ndt_thistask        = Ndt_local + Ndt_boundary_thistask - Ndt_boundary_thistask_repeated;
-  int *thistask_triangles = (int *)mymalloc_movable(&thistask_triangles, "thistask_triangles", Ndt_thistask * sizeof(int));
-  for(i = 0; i < Ndt_local; i++)
-    {
-      thistask_triangles[i] = local_triangles[i];
-    }
-  j = Ndt_local;
-  for(i = 0; i < Ndt_boundary_thistask; i++)
-    {
-      if(boundary_triangles[i] >= 0)
-        {
-          thistask_triangles[j] = boundary_triangles[i];
-          j++;
-        }
-    }
-
-  /* compute residual: calculate normal vectors and triangular area; assign dual area to vertices
-   tri_normals_list is a shorter list compared to DT because it only keeps necessary triangles for
-   this task (Ndt_thistask). tri_normal_list[i]  <-->  DT[thistask_triangles[i]]
-   */
-  tri_normals_list = (struct triangle_normals *)mymalloc_movable(&tri_normals_list, "tri_normals_list",
-                                                                 Ndt_thistask * sizeof(struct triangle_normals));
-
-  for(i = 0; i < Ndt_thistask; i++)
-    {
-#ifdef TWODIMS
-      triangle_get_normals_area(T, thistask_triangles[i], &tri_normals_list[i]);
-#endif
-    }
+  int Ndt_thistask        = set.n;
+  int *thistask_triangles = set.element;
+  tri_normals_list        = set.normals;
 
   Max_N_FluxRD_export = 0;
   for(i = 0; i < Ndt_thistask; i++)
@@ -652,7 +604,14 @@ void compute_residuals(tessellation *T)
   // main loop through triangles this task responsible for
   for(i = 0; i < Ndt_thistask; i++)
     {
-      // get triangle timebin/timestep and skip inactive triangles
+      /* The set holds every owned physical element so that the dual area is
+       * complete; only the active subset is advanced. This is the criterion
+       * that previously filtered the classification: at least one vertex that
+       * is a local original point is synchronized. */
+      if(!set.active[i])
+        continue;
+
+      // get triangle timebin/timestep
       int timebin_vertices[DIMS + 1];
       for(j = 0; j < DIMS + 1; j++)
         {
@@ -671,20 +630,11 @@ void compute_residuals(tessellation *T)
             }
         }
 
-      bool is_active            = false;
       int timebin_this_triangle = timebin_vertices[0];
 
       for(j = 0; j < DIMS + 1; j++)
-        {
-          if(TimeBinSynchronized[timebin_vertices[j]])
-            is_active = true;
-
-          if(timebin_vertices[j] < timebin_this_triangle)
-            timebin_this_triangle = timebin_vertices[j];
-        }
-
-      if(is_active == false)
-        continue;
+        if(timebin_vertices[j] < timebin_this_triangle)
+          timebin_this_triangle = timebin_vertices[j];
 
       double triangle_dt = (((integertime)1) << timebin_this_triangle) * All.Timebase_interval;
 
@@ -1266,11 +1216,7 @@ void compute_residuals(tessellation *T)
 #endif /* #ifdef RD_DEBUG_ASSERTS */
 
   myfree_movable(FluxRD_list);
-  myfree_movable(tri_normals_list);
-  myfree_movable(thistask_triangles);
-  myfree_movable(boundary_triangles);
-  myfree_movable(local_triangles);
-  myfree_movable(DT_label);
+  rd_free_element_set(&set);
 
   TIMER_STOP(CPU_RESIDUAL_DISTRIBUTION);
 }
