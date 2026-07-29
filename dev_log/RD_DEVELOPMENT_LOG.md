@@ -3567,3 +3567,63 @@ On a static mesh the correct `VelVertex` is zero, so this bug cost only
 precision. Under ALE it would be a first-order error in the wave speeds, since
 `Lambda = u.n +- c - v_mesh.n` depends on `VelVertex` directly. Worth
 remembering before the geometry work starts.
+
+## 2026-07-30: RK2 convergence measured on Yee + boost
+
+- Author: `Claude Code Opus5`
+- Campaign `rk2_nodal_v1`, rerun in full against the fixed binary. Jittered
+  mesh, seed 20260729, jitter 0.2, courant 0.2, `max_timestep_scale` 0.25,
+  `TimeMax = 1`, LDA, 4 ranks. Baseline is `nodal_v1_dth`, identical mesh,
+  seed and CFL, mass-lumped. All six cases now complete; none terminate.
+
+`L1` error in density against the analytic advected Yee vortex, and the
+observed order between successive resolutions:
+
+| n | lumped | order | RK2 GL+F1 | order |
+| --- | --- | --- | --- | --- |
+| **boost = 0 (stationary vortex)** | | | | |
+| 32 | 7.97e-04 | -- | 9.85e-04 | -- |
+| 64 | 2.19e-04 | 1.86 | 2.45e-04 | 2.01 |
+| 128 | 5.57e-05 | 1.98 | 5.85e-05 | 2.07 |
+| **boost = 1 (advected vortex)** | | | | |
+| 32 | 4.57e-03 | -- | 1.90e-03 | -- |
+| 64 | 2.40e-03 | 0.93 | 6.49e-04 | 1.55 |
+| 128 | 1.24e-03 | 0.95 | 2.61e-04 | 1.31 |
+
+### What this establishes
+
+**The mass-matrix mismatch diagnosis is confirmed quantitatively, and the
+boost test is what exposes it.** At `boost = 0` the Yee vortex is a *steady*
+solution, so `d_t U = 0` and the mismatch term `sum_T (1/3 - beta_i^T) |T|
+d_t U` vanishes identically. Both schemes are second order there and the
+lumped baseline has nothing to lose -- which is exactly why the static test
+never revealed the defect. Advecting the vortex makes the same solution
+genuinely unsteady without changing anything else, the mismatch term switches
+on, and the lumped scheme collapses to **first order** (0.93, 0.95). This is
+the predicted failure, measured.
+
+**GL+F1 recovers most of it.** At `n = 128, boost = 1` the error drops from
+1.24e-03 to 2.61e-04, a factor of 4.7, and the order rises from 0.95 to
+around 1.3--1.6. So the temporal term is now being distributed consistently
+with the spatial one, and the first-order barrier is gone.
+
+**It is not yet clean second order, and the order is drifting downward**
+(1.55 then 1.31). A falling observed order means a more slowly converging term
+is taking over as the leading one, not that the scheme is 1.3-order. The
+leading suspect is the geometric inconsistency already recorded as open
+question 1 in `context.md`: the residual is distributed over median dual cells
+`|S_i| = sum_{T in i} |T|/3` while the update divides by AREPO's Voronoi
+volume. On a jittered mesh those differ at `O(h)` per cell, and unlike the
+mass-matrix term this one does not vanish for a steady solution -- consistent
+with `boost = 0` being clean, since there the error is dominated by the
+spatial residual which uses the same geometry on both sides.
+
+Next diagnostic, cheap and decisive: rerun `boost = 1` on a **regular**
+(unjittered) mesh, where median dual and Voronoi cells coincide by symmetry.
+If the order goes to 2, the geometry is confirmed as the remaining barrier and
+the median-dual question moves from open to blocking. If it stays near 1.3,
+the residual is in the time discretisation and F2 or the SL variant is worth
+testing.
+
+Not yet examined: whether the same recovery holds for N and B, and the 256
+resolution the baseline campaign has but this one does not.
