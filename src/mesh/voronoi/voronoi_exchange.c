@@ -281,6 +281,14 @@ void exchange_primitive_variables(void)
                 {
                   tmpPrimExch[off].VelGas[j] = P[place].Vel[j];
                   tmpPrimExch[off].Center[j] = SphP[place].Center[j];
+                  /* tmpPrimExch comes from mymalloc and is never zeroed, yet the
+                   * whole struct is sent and received straight over PrimExch. Any
+                   * field left unset here therefore overwrites a good ghost value
+                   * with uninitialised heap. In stock AREPO that is invisible
+                   * because exchange_primitive_variables_and_gradients() always
+                   * refills VelVertex before it is read; the RD solver reads it
+                   * directly after this call, so fill it here as well. */
+                  tmpPrimExch[off].VelVertex[j] = SphP[place].VelVertex[j];
                 }
               tmpPrimExch[off].Csnd = get_sound_speed(place);
 #ifdef RD_RK2_TOTAL_RESIDUAL

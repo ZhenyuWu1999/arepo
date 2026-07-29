@@ -1045,12 +1045,32 @@ void compute_residuals(tessellation *T)
       h_avg /= sum_sqrt_rho;
 
       double Cs_avg = sqrt(GAMMA_MINUS1 * (h_avg - (velx_avg * velx_avg + vely_avg * vely_avg) / 2.0));
-      if(isnan(Cs_avg))
+
+      /* Every entry of K is divided by Cs_avg, so Cs_avg == 0 poisons the
+       * matrix with infinities without ever producing a NaN here; isnan()
+       * alone therefore lets the failure through to LAPACK, which reports it
+       * as the opaque "illegal argument 5" of its own non-finite input check.
+       * Guard the whole element state instead, and report the vertex that
+       * caused it -- on this path the usual cause is a predictor state that is
+       * admissible per cell but not as a Roe average. */
+      if(!(Cs_avg > 0) || !isfinite(Cs_avg))
         {
-          printf("cs avg nan error! %d %d    %f    %f %f %f   %f %f %f   %f %f %f\n", ThisTask, thistask_triangles[i], h_avg,
-                 Enthalpy[0], Enthalpy[1], Enthalpy[2], U_fluid[0][DIMS + 1], U_fluid[1][DIMS + 1], U_fluid[2][DIMS + 1], Pressure[0],
-                 Pressure[1], Pressure[2]);
-          terminate_program("Cs avg nan.")
+#ifdef RD_RK2_TOTAL_RESIDUAL
+          int rd_bad_stage = rd_stage;
+#else
+          int rd_bad_stage = -1;
+#endif
+          printf(
+              "RD element state invalid: task=%d triangle=%d stage=%d Cs_avg=%.17g h_avg=%.17g velx_avg=%.17g vely_avg=%.17g\n",
+              ThisTask, thistask_triangles[i], rd_bad_stage, Cs_avg, h_avg, velx_avg, vely_avg);
+          for(j = 0; j < DIMS + 1; j++)
+            {
+              int pt = DT[thistask_triangles[i]].p[j];
+              printf("  vertex %d ID=%llu rho=%.17g p=%.17g H=%.17g vx=%.17g vy=%.17g x=%.17g y=%.17g task=%d\n", j,
+                     (unsigned long long)DP[pt].ID, U_fluid[j][0], Pressure[j], Enthalpy[j], U_fluid[j][1] / U_fluid[j][0],
+                     U_fluid[j][2] / U_fluid[j][0], DP[pt].x, DP[pt].y, DP[pt].task);
+            }
+          terminate_program("RD element Roe average is not a valid state");
         }
 
       // compute residual: Reassign variables to local equivalents
@@ -1270,6 +1290,22 @@ void compute_residuals(tessellation *T)
         {
           printf("RD upwind solve failed on task %d, triangle %d, LAPACK info %d\n", ThisTask, thistask_triangles[i],
                  (int)solve_info);
+          /* A negative info is LAPACKE rejecting an argument; for DGELSD,
+           * info = -5 is its own non-finite check on the matrix. Dump every
+           * input that feeds S^-, so the failure names its own cause instead
+           * of being reported as an opaque illegal argument. */
+          printf("  Cs_avg=%.17g h_avg=%.17g vel_avg=%.17g %.17g velvertex_avg=%.17g %.17g\n", Cs_avg, h_avg, velx_avg, vely_avg,
+                 Velvertex_avg[0], Velvertex_avg[1]);
+          for(int jj = 0; jj < DIMS + 1; jj++)
+            {
+              int pt = DT[thistask_triangles[i]].p[jj];
+              printf("  vertex %d ID=%llu rho=%.17g p=%.17g H=%.17g mag=%.17g n=%.17g %.17g lam=%.17g %.17g %.17g x=%.17g "
+                     "y=%.17g task=%d\n",
+                     jj, (unsigned long long)DP[pt].ID, U_fluid[jj][0], Pressure[jj], Enthalpy[jj], Mag[jj], N_X[jj], N_Y[jj],
+                     Lambda[jj][0], Lambda[jj][1], Lambda[jj][2], DP[pt].x, DP[pt].y, DP[pt].task);
+            }
+          for(int r = 0; r < 4; r++)
+            printf("  Sminus[%d] = %.17g %.17g %.17g %.17g\n", r, Sminus[r][0], Sminus[r][1], Sminus[r][2], Sminus[r][3]);
           terminate_program("RD upwind solve failed");
         }
 
