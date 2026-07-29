@@ -123,6 +123,9 @@ extern struct primexch
 
 #ifdef RESIDUAL_DISTRIBUTION
   MyFloat Energy;
+#ifdef RD_RK2_TOTAL_RESIDUAL
+  MyFloat RD_dU[4]; /* intensive nodal U* - U^n, for the corrector mass-matrix term */
+#endif
 #endif
 
 #ifdef MAXSCALARS

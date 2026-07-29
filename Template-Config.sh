@@ -43,6 +43,7 @@
 #RD_OUTPUT_DIAGNOSTICS         # Write verbose RD triangulation diagnostics
 #RD_DEBUG_ASSERTS              # RD invariant assertions (sum_i K_i = 0, conservation) and solver statistics
 #RD_ALWAYS_PSEUDOINVERSE       # RD: always use the minimum-norm solve (reference path, no pivot branch)
+#RD_RK2_TOTAL_RESIDUAL         # RD: two-stage GL+F1 total-residual RK2 (thesis ch.3 / Arpaia-Ricchiuto); whole step at the second call site
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

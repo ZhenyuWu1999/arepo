@@ -3260,3 +3260,131 @@ the existing LDA well-definedness proof.
 - R. Abgrall, P.-H. Maire and M. Ricchiuto, *Embedding General Conservation
   Constraints in Discretizations of Hyperbolic Systems on Arbitrary Meshes*,
   <https://arxiv.org/abs/2509.25967>.
+
+## 2026-07-29: minimum-ID ownership adopted; GL+F1 RK2 implemented behind a switch; one open defect
+
+- Author: `Claude Code Opus5`
+- Commits: `42d41eb` (element-set refactor, bitwise-verified), `88a7b0d`
+  (minimum-ID ownership), and the RK2 commit following this entry.
+
+### 1. Ownership rule replaced (commit 88a7b0d)
+
+At Zhenyu's direction the majority-task responsibility rule was replaced by
+the minimum-ID ownership rule from the "deferred MPI simplex-responsibility
+redesign" entry, chosen for its clean 3D generalisation: the loop is over
+DIMS+1 vertices, and globally unique IDs cannot tie, where the majority rule
+develops arbitrary 2-2 tie-breaks on tetrahedra.
+
+The owner of a physical simplex is the task holding, as a local primary point,
+the vertex with the smallest (ID, task) key; only the instance in which that
+vertex is the primary copy is claimed. This makes the O(n^2) sorted-ID
+duplicate scan unnecessary — one claiming task, one claimed instance, by
+construction — and removes the majority rule's red/green failure mode, since
+ownership no longer interacts with the activity prefilter.
+
+New coverage audit under RD_DEBUG_ASSERTS: the global sum of DualArea must
+equal the box area, since every physical simplex deposits its area exactly
+once. Verification on Gresho v0/v1e-8 at 1/3/4/16 ranks: element counts
+identical across all rank counts and identical to the old rule
+(4720640/9441280); rank invariance 6e-15..9e-15; fields differ from the old
+rule at roundoff only; the audit never fired, including at 45.7 per cent rank
+deficiency. Under FORCE_EQUAL_TIMESTEPS this rule coincides with the
+minimum-ACTIVE-ID rule; the hierarchical extension (restrict to active
+vertices, live PrimExch bins rather than the stale DP[].timebin of a static
+mesh) is documented at the definition.
+
+### 2. GL+F1 total-residual RK2 implemented (RD_RK2_TOTAL_RESIDUAL)
+
+Following section 10 of the analysis document as amended by the Codex audit
+(section 11) and the Kimi review:
+
+- whole step at the second run.c call site; the first is a no-op under the
+  switch, which also removes the restart asymmetry (Kimi amendment 4);
+- both stages use the full dt; the baseline's triangle_dt *= 0.5 is
+  unreachable under the switch (Codex 11.4);
+- intensive nodal states, SphP.RD_Ustage0[4] and RD_dU[4], with the
+  U-versus-Q distinction documented at the declaration (Codex 11.2);
+  primexch.RD_dU[4] carries ghost increments;
+- rd_rk2_prepare_corrector() is the side-effect-free stage recovery
+  (Codex 11.3): no OldMass/TimeLastPrimUpdate stamping, no energy floor, no
+  EgyInjection mutation; terminates diagnostically on non-physical predictor
+  states; predictor minima reported in a new RD-RK2 diagnostic line;
+- the corrector uses the section-4 identity, so stage 2 is one residual sweep
+  with a local half-kick and no per-element storage;
+- the F1 temporal term goes through a third right-hand side of the existing
+  solve (Kimi's nrhs=3 route; always three columns so the LAPACK ldb matches);
+  on rank-deficient elements it falls back to the lumped mass, the unique
+  conservative element-local choice, counted in RD-DIAG as f1_lumped;
+- B_SCHEME is a compile error under the switch pending the blended mass
+  matrix and total-residual Theta (Arpaia eqs. 43-44);
+- Taylor extrapolation is disabled on this path: stage states are exact.
+
+A2 gained a phi-assembly noise floor: in a quiet element the exact residual is
+zero and Phi is cancellation noise of O(1) products, so the identity can only
+hold to eps times the pre-cancellation assembly scale. Omitting this floor
+made A2 fire on the uniform test at defect 1e-33 — the third instance of a
+quiet-element diagnostic lacking an absolute floor.
+
+### 3. Verification results
+
+- uniform floor test (RK2-LDA, 1/4 ranks, t=0.5): state preserved to 2e-16,
+  mass drift exactly zero; 100 per cent of stage-0 solves take the
+  rank-deficient path on the first call;
+- perturbed test: mass drift zero; predictor minima sane;
+- Gresho v1e-8 (RK2-LDA and RK2-N, t=0.1): total mass exactly 1;
+- RK2-LDA versus baseline-LDA at identical steps: velocity differs at 1.3e-2,
+  density at 6.5e-4 — truncation-level, as Kimi's amendment 1 predicts for a
+  different second-order integrator, not roundoff;
+- f1_lumped = 0 on the perturbed test, and legitimately so: stage 0 at u = 0
+  is rank deficient, but the predictor pushes u off zero, so the corrector's
+  linearisation at U* is comfortably above the pivot threshold. The fallback
+  is exercised only at exact stagnation of U*.
+
+### 4. Open defect: rank invariance degraded to ~1e-11 per step
+
+The new path is not rank-invariant at the baseline's level. np1-vs-np4
+divergence appears in the FIRST step at ~1.6e-11 in velocity and grows
+linearly (~4e-11 per step at dt=1e-4), against the baseline's ~1e-16 per step.
+Conservation is unaffected (mass exactly 1 across ranks).
+
+Bisection evidence, all on Gresho v1e-8 with RK2-N:
+
+| variant | np1-vs-np4 after one step |
+| --- | --- |
+| baseline (switch off) | 2.2e-16 |
+| predictor stage only | 3.3e-16 |
+| full two-stage | 1.6e-11 |
+| temporal term zeroed | 1.6e-11 (unchanged) |
+| half-kick suppressed | 1.6e-11 (unchanged) |
+| stage 1 run on stage-0 inputs (no prepare/exchange) | 4.4e-16 |
+
+So the injection requires the stage-1 sweep to run on the recovered W* state,
+and is independent of the temporal term and the half-kick. Per-element traces
+show interior elements with inputs matching to 1e-17; a definitive
+cross-decomposition attribution was frustrated by multi-rank stdout
+interleaving in the trace instrumentation (a step tag is needed). The
+amplification chain from ulp-level W* differences remains unexplained: the
+same chain applied to the baseline's step-to-step W differences produces the
+observed 1e-16, so a mechanism specific to the mid-step recovery/exchange is
+being missed.
+
+Diagnostic hooks are retained behind RD_DIAG_ZERO_TEMPORAL,
+RD_DIAG_PREDICTOR_ONLY, RD_DIAG_SKIP_PREPARE, RD_DIAG_NO_KICK and
+RD_DIAG_TRACE_ELEMENT (all in defines_extra, all excluded from production
+configs) so the next session can resume the bisection with a step-tagged
+trace.
+
+**This defect blocks using the switch for convergence measurements** — a
+1e-11-per-step decomposition dependence is far below physical error levels
+but disqualifies bit-level regression testing and must be understood before
+the Yee ladders are rerun. Review by Codex and Kimi requested; the most
+useful next step is a step-tagged single-element trace comparing np1 and np4
+at the first corrector sweep.
+
+### Status against the agreed order (11.10)
+
+Items 1-3 are now implemented (data contract, element-set refactor, LDA/N
+GL+F1 behind the switch, nrhs=3 route, rank-deficient fallback). Item 4's
+algebraic tests exist as the uniform/perturbed pair plus A1/A2/A3 and the
+coverage audit. Item 5's N on/off dt-ladder and items 6-8 (full rank matrix,
+Yee ladders) are blocked on the open defect above.

@@ -226,7 +226,15 @@ void run(void)
 
         /* compute intercell flux with Riemann solver and update the cells with the fluxes */
 #ifdef RESIDUAL_DISTRIBUTION
+#ifndef RD_RK2_TOTAL_RESIDUAL
           compute_residuals(&Mesh);
+#else
+          /* Under RD_RK2_TOTAL_RESIDUAL the complete two-stage step runs at
+           * the second, unconditional call site. Doing nothing here also
+           * removes the restart asymmetry of the half-step pair: this call
+           * sits inside the RestartFlag branch and is skipped on a restart
+           * iteration. */
+#endif
 #else
           compute_interface_fluxes(&Mesh);
 #endif /*ifdef RESIDUAL_DISTRIBUTION*/

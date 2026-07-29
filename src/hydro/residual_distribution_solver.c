@@ -67,6 +67,10 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "Select exactly one residual-distribution scheme: LDA_SCHEME, N_SCHEME, or B_SCHEME."
 #endif
 
+#if defined(RD_RK2_TOTAL_RESIDUAL) && defined(B_SCHEME)
+#error "RD_RK2_TOTAL_RESIDUAL does not yet support B_SCHEME: the blend needs the blended mass matrix and a total-residual Theta (Arpaia & Ricchiuto eqs. 43-44)."
+#endif
+
 static struct FluxRD_list_data
 {
   int task, index;
@@ -116,6 +120,11 @@ static double RD_stat_min_pivot_ratio;     /* smallest min|diag(U)|/max|diag(U)|
 static double RD_stat_max_cons_defect_abs; /* largest raw conservation defect, absolute */
 static double RD_stat_max_phi;             /* largest |phi^T| seen, for context on the absolute figure */
 static double RD_stat_ever_max_cons_defect_abs; /* high-water mark across calls; NOT reset per call */
+#ifdef RD_RK2_TOTAL_RESIDUAL
+static long long RD_stat_f1_lumped;        /* corrector elements whose temporal term fell back to the lumped mass */
+static double RD_stat_min_stage_rho;       /* smallest predictor density seen this step */
+static double RD_stat_min_stage_press;     /* smallest predictor pressure seen this step */
+#endif
 static double RD_stat_min_dt_extrap;       /* smallest dt_Extrapolation seen this call */
 static double RD_stat_max_dt_extrap;       /* largest dt_Extrapolation seen this call */
 
@@ -130,6 +139,11 @@ static void rd_reset_solver_statistics(void)
   RD_stat_min_pivot_ratio     = 1.0;
   RD_stat_max_cons_defect_abs = 0.0;
   RD_stat_max_phi             = 0.0;
+#ifdef RD_RK2_TOTAL_RESIDUAL
+  RD_stat_f1_lumped       = 0;
+  RD_stat_min_stage_rho   = MAX_DOUBLE_NUMBER;
+  RD_stat_min_stage_press = MAX_DOUBLE_NUMBER;
+#endif
   RD_stat_min_dt_extrap   = MAX_DOUBLE_NUMBER;
   RD_stat_max_dt_extrap   = -MAX_DOUBLE_NUMBER;
 }
@@ -159,7 +173,7 @@ static void rd_record_dt_extrapolation(double dt_extrapolation)
  *
  *  \return LAPACK info of the step that produced the returned solution.
  */
-static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapack_int nrhs)
+static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapack_int nrhs, int *used_svd)
 {
   double A[16];
   lapack_int ipiv[4];
@@ -209,6 +223,8 @@ static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapa
         use_pseudo_inverse = 1;
     }
 #endif /* #ifdef RD_ALWAYS_PSEUDOINVERSE */
+
+  *used_svd = use_pseudo_inverse;
 
   if(!use_pseudo_inverse)
     return LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', 4, nrhs, A, 4, ipiv, rhs, nrhs);
@@ -583,6 +599,94 @@ void reset_dualarea(tessellation *T)
   rd_free_element_set(&set);
 }
 
+#ifdef RD_RK2_TOTAL_RESIDUAL
+/*! \brief Snapshot the intensive nodal state U^n before the predictor sweep. */
+static void rd_rk2_save_stage0(void)
+{
+  for(int i = 0; i < NumGas; i++)
+    {
+      double inv_area = 1.0 / SphP[i].DualArea;
+
+      SphP[i].RD_Ustage0[0] = P[i].Mass * inv_area;
+      SphP[i].RD_Ustage0[1] = SphP[i].Momentum[0] * inv_area;
+      SphP[i].RD_Ustage0[2] = SphP[i].Momentum[1] * inv_area;
+      SphP[i].RD_Ustage0[3] = SphP[i].Energy * inv_area;
+
+      for(int k = 0; k < 4; k++)
+        SphP[i].RD_dU[k] = 0.0;
+    }
+}
+
+/*! \brief Between the stages: form dU, recover the stage primitives, and
+ *         apply the corrector's local +1/2 (Q* - Q^n) contribution.
+ *
+ *  This deliberately does NOT call update_primitive_variables(): that routine
+ *  stamps OldMass and TimeLastPrimUpdate and, when the MinEgySpec floor
+ *  fires, rewrites the conserved energy and the global EgyInjection
+ *  accumulator, so the corrector would no longer see the predictor the RD
+ *  equations define (Codex audit 11.3). The recovery here is side-effect free
+ *  apart from writing the primitive fields themselves; a non-finite or
+ *  non-positive predictor state terminates diagnostically instead of being
+ *  floored.
+ *
+ *  The corrector update is
+ *      U^{n+1}_i = U*_i + 1/2 (U*_i - U^n_i)
+ *                  - (dt/|S_i|) sum_T [ sum_j m_ij dU_j/dt + 1/2 phi_i^T(U*) ]
+ *  (analysis document section 4); the +1/2 dU term is purely local and is
+ *  added here, before the corrector sweep contributes the element sums.
+ */
+static void rd_rk2_prepare_corrector(void)
+{
+  for(int i = 0; i < NumGas; i++)
+    {
+      double inv_area = 1.0 / SphP[i].DualArea;
+
+      double u0 = P[i].Mass * inv_area;
+      double u1 = SphP[i].Momentum[0] * inv_area;
+      double u2 = SphP[i].Momentum[1] * inv_area;
+      double u3 = SphP[i].Energy * inv_area;
+
+      SphP[i].RD_dU[0] = u0 - SphP[i].RD_Ustage0[0];
+      SphP[i].RD_dU[1] = u1 - SphP[i].RD_Ustage0[1];
+      SphP[i].RD_dU[2] = u2 - SphP[i].RD_Ustage0[2];
+      SphP[i].RD_dU[3] = u3 - SphP[i].RD_Ustage0[3];
+
+      double rho   = u0;
+      double velx  = u1 / u0;
+      double vely  = u2 / u0;
+      double egy   = u3 / u0 - 0.5 * (velx * velx + vely * vely);
+      double press = GAMMA_MINUS1 * rho * egy;
+
+      if(!isfinite(rho) || !isfinite(press) || rho <= 0 || press <= 0)
+        {
+          printf("RD predictor state invalid: task=%d i=%d ID=%llu rho=%g press=%g pos=%g|%g\n", ThisTask, i,
+                 (unsigned long long)P[i].ID, rho, press, P[i].Pos[0], P[i].Pos[1]);
+          terminate_program("RD predictor produced a non-physical state");
+        }
+
+      RD_stat_min_stage_rho   = dmin(RD_stat_min_stage_rho, rho);
+      RD_stat_min_stage_press = dmin(RD_stat_min_stage_press, press);
+
+      SphP[i].Density  = rho;
+      P[i].Vel[0]      = velx;
+      P[i].Vel[1]      = vely;
+      SphP[i].Utherm   = egy;
+      SphP[i].Pressure = press;
+#ifdef TREE_BASED_TIMESTEPS
+      SphP[i].Csnd = sqrt(GAMMA * press / rho);
+#endif
+
+#ifndef RD_DIAG_NO_KICK /* diagnostic only: suppress the local half-kick */
+      /* the local +1/2 (Q* - Q^n) part of the corrector */
+      P[i].Mass += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[0];
+      SphP[i].Momentum[0] += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[1];
+      SphP[i].Momentum[1] += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[2];
+      SphP[i].Energy += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[3];
+#endif
+    }
+}
+#endif /* #ifdef RD_RK2_TOTAL_RESIDUAL */
+
 void compute_residuals(tessellation *T)
 {
 #ifdef NOHYDRO
@@ -613,6 +717,51 @@ void compute_residuals(tessellation *T)
     for(j = 0; j < DIMS + 1; j++)
       if(DP[DT[thistask_triangles[i]].p[j]].task != ThisTask)
         Max_N_FluxRD_export++;
+
+#ifdef RD_RK2_TOTAL_RESIDUAL
+  /* Two-stage GL+F1 total-residual step (analysis document sections 1, 9,
+   * 10): stage 0 is the RD predictor U* = U^n - (dt/|S_i|) sum phi_i(U^n),
+   * stage 1 the corrector distributing the total residual. Both stages use
+   * the FULL timestep; the half-step convention of the baseline pair is
+   * unreachable on this path. */
+  int rd_stage;
+  for(rd_stage = 0; rd_stage < 2; rd_stage++)
+    {
+      if(rd_stage == 0)
+        rd_rk2_save_stage0();
+      else
+        {
+#ifdef RD_DIAG_PREDICTOR_ONLY /* diagnostic only: stop after the predictor stage */
+          break;
+#endif
+#ifndef RD_DIAG_SKIP_PREPARE /* diagnostic only: run stage 1 on the stage-0 inputs */
+          rd_rk2_prepare_corrector();
+          exchange_primitive_variables(); /* ghosts receive W* and RD_dU */
+#endif
+        }
+
+#ifdef RD_DEBUG_ASSERTS
+      /* Stage-boundary checksums: locate, not merely detect, any
+       * decomposition dependence. Printed at full precision. */
+      {
+        double loc[4] = {0, 0, 0, 0}, glob[4];
+
+        for(int ck = 0; ck < NumGas; ck++)
+          {
+            loc[0] += P[ck].Mass;
+            loc[1] += SphP[ck].Energy;
+            loc[2] += fabs(SphP[ck].RD_dU[0]) + fabs(SphP[ck].RD_dU[3]);
+            loc[3] += fabs(SphP[ck].Density) + fabs(SphP[ck].Pressure);
+          }
+        MPI_Reduce(loc, glob, 4, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        if(ThisTask == 0)
+          printf("RD-CKSUM stage=%d mass=%.17g energy=%.17g sum|dU|=%.17g sum|prim|=%.17g\n", rd_stage, glob[0], glob[1],
+                 glob[2], glob[3]);
+      }
+#endif
+
+      rd_record_dt_extrapolation(0.0); /* no Taylor extrapolation on this path */
+#endif
 
   N_FluxRD_export     = 0;
   FluxRD_list =
@@ -655,7 +804,9 @@ void compute_residuals(tessellation *T)
 
       double triangle_dt = (((integertime)1) << timebin_this_triangle) * All.Timebase_interval;
 
-      triangle_dt *= 0.5;  // RK2 half timestep
+#ifndef RD_RK2_TOTAL_RESIDUAL
+      triangle_dt *= 0.5; /* the baseline applies two half-weight Heun calls per step */
+#endif
 
       // compute residual: set up initial states
       double U_fluid[DIMS + 1][DIMS + 2];  // specific conserved fluid variables
@@ -667,6 +818,10 @@ void compute_residuals(tessellation *T)
         {
           Velvertex_avg[j] = 0.0;
         }
+
+#ifdef RD_RK2_TOTAL_RESIDUAL
+      double dU_vertex[DIMS + 1][4]; /* intensive nodal U* - U^n per vertex; corrector stage only */
+#endif
 
       for(j = 0; j < DIMS + 1; j++)  // loop through vertices of this triangle
         {
@@ -687,6 +842,15 @@ void compute_residuals(tessellation *T)
               vertex_state.vely  = P[SphP_index].Vel[1];
               vertex_state.velz  = P[SphP_index].Vel[2];
 
+#ifdef RD_RK2_TOTAL_RESIDUAL
+              /* The stage states are exact: W^n before the predictor, the
+               * recovered W* before the corrector. No Taylor extrapolation. */
+              (void)grad;
+              (void)delta_time;
+              if(rd_stage == 1)
+                for(k = 0; k < 4; k++)
+                  dU_vertex[j][k] = SphP[SphP_index].RD_dU[k];
+#else
               double dt_Extrapolation = All.Time - SphP[SphP_index].TimeLastPrimUpdate;
               rd_record_dt_extrapolation(dt_Extrapolation);
 
@@ -698,6 +862,7 @@ void compute_residuals(tessellation *T)
               vertex_state.velx += SphP[SphP_index].VelVertex[0];
               vertex_state.vely += SphP[SphP_index].VelVertex[1];
               vertex_state.velz += SphP[SphP_index].VelVertex[2];
+#endif
 
               Velvertex_avg[0] += SphP[SphP_index].VelVertex[0];
               Velvertex_avg[1] += SphP[SphP_index].VelVertex[1];
@@ -753,6 +918,13 @@ void compute_residuals(tessellation *T)
               vertex_state.velx       = PrimExch[PrimExch_index].VelGas[0];
               vertex_state.vely       = PrimExch[PrimExch_index].VelGas[1];
               vertex_state.velz       = PrimExch[PrimExch_index].VelGas[2];
+#ifdef RD_RK2_TOTAL_RESIDUAL
+              (void)grad;
+              (void)delta_time;
+              if(rd_stage == 1)
+                for(k = 0; k < 4; k++)
+                  dU_vertex[j][k] = PrimExch[PrimExch_index].RD_dU[k];
+#else
               double dt_Extrapolation = All.Time - PrimExch[PrimExch_index].TimeLastPrimUpdate;
               rd_record_dt_extrapolation(dt_Extrapolation);
 
@@ -764,6 +936,7 @@ void compute_residuals(tessellation *T)
               vertex_state.velx += PrimExch[PrimExch_index].VelVertex[0];
               vertex_state.vely += PrimExch[PrimExch_index].VelVertex[1];
               vertex_state.velz += PrimExch[PrimExch_index].VelVertex[2];
+#endif
 
               Velvertex_avg[0] += PrimExch[PrimExch_index].VelVertex[0];
               Velvertex_avg[1] += PrimExch[PrimExch_index].VelVertex[1];
@@ -961,7 +1134,15 @@ void compute_residuals(tessellation *T)
         }
 
       // compute residual: get residual Phi
+      /* phi_scale is the pre-cancellation magnitude of Phi's own assembly.
+       * In a quiet element the exact residual is zero and Phi is cancellation
+       * noise of O(1) products, so any conservation identity involving it can
+       * only hold to eps * phi_scale. Omitting this floor made A2 compare
+       * noise against noise and fire on the uniform test at defect ~1e-33 --
+       * the third instance of a quiet-element diagnostic without an absolute
+       * floor. */
       double Phi[4];
+      double phi_scale = 0.0;
       for(k = 0; k < 4; k++)
         {
           Phi[k] = 0.0;
@@ -969,6 +1150,9 @@ void compute_residuals(tessellation *T)
             {
               Phi[k] += Kmatrix[k][0][j][kfull] * U_hat[0][j] + Kmatrix[k][1][j][kfull] * U_hat[1][j] +
                         Kmatrix[k][2][j][kfull] * U_hat[2][j] + Kmatrix[k][3][j][kfull] * U_hat[3][j];
+
+              for(p = 0; p < 4; p++)
+                phi_scale += fabs(Kmatrix[k][p][j][kfull]) * fabs(U_hat[p][j]);
             }
         }
 
@@ -997,12 +1181,16 @@ void compute_residuals(tessellation *T)
        *   N:    y = (S^-)^dagger b,   b = sum_j K_j^- Uhat_j
        * One factorisation therefore serves both, and no regularisation of
        * S^- is required.  See dev_log/regularize_matrix_debug_report.md. */
-      double rhs[4][2];
+      /* Always three columns so the row stride matches the LAPACK ldb; the
+       * third column is zero (solving to zero) except in the corrector stage
+       * of the total-residual path. */
+      double rhs[4][3];
 
       for(k = 0; k < 4; k++)
         {
           rhs[k][0] = Phi[k];
           rhs[k][1] = 0.0;
+          rhs[k][2] = 0.0;
 
           for(j = 0; j < 3; j++)
             {
@@ -1011,7 +1199,51 @@ void compute_residuals(tessellation *T)
             }
         }
 
-      lapack_int solve_info = rd_solve_upwind_system(Sminus, &rhs[0][0], 2);
+#if defined(RD_RK2_TOTAL_RESIDUAL) && defined(LDA_SCHEME)
+      /* Third right-hand side: the F1 temporal target (|T|/3) sum_j dU_j/dt.
+       * beta_i only ever multiplies a vector, so T_i = -K_i^+ z with
+       * S^- z = target reuses the factorisation (one extra back-substitution,
+       * no beta tensor) and inherits the rank policy (Kimi amendment 2). */
+      if(rd_stage == 1)
+        {
+          for(k = 0; k < 4; k++)
+            rhs[k][2] = (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / triangle_dt;
+
+        }
+#endif
+
+#ifdef RD_DIAG_TRACE_ELEMENT
+      /* diagnostic only: full-precision dump of one element's inputs/outputs */
+      int rd_trace = 0;
+      for(j = 0; j < DIMS + 1; j++)
+        if(DP[DT[thistask_triangles[i]].p[j]].ID == 1908)
+          rd_trace = 1;
+      if(rd_trace)
+        {
+          printf("RD-TRACE stage=%d elem_minid: ", rd_stage);
+          for(j = 0; j < DIMS + 1; j++)
+            printf("[ID=%llu rho=%.17g p=%.17g u=%.17g cs=%.17g] ", (unsigned long long)DP[DT[thistask_triangles[i]].p[j]].ID,
+                   U_fluid[j][0], Pressure[j], U_fluid[j][1] / U_fluid[j][0], C_sound[j]);
+          printf("Phi0=%.17g Phi3=%.17g dt=%.17g\n", Phi[0], Phi[3], triangle_dt);
+          for(j = 0; j < DIMS + 1; j++)
+            {
+              int pt = DT[thistask_triangles[i]].p[j];
+              printf("RD-TRACE-V stage=%d ID=%llu v=%.17g dU0=%.17g dU1=%.17g dU3=%.17g x=%.17g y=%.17g task=%d idx=%d\n",
+                     rd_stage, (unsigned long long)DP[pt].ID, U_fluid[j][2] / U_fluid[j][0],
+#ifdef RD_RK2_TOTAL_RESIDUAL
+                     (rd_stage == 1) ? dU_vertex[j][0] : 0.0, (rd_stage == 1) ? dU_vertex[j][1] : 0.0,
+                     (rd_stage == 1) ? dU_vertex[j][3] : 0.0,
+#else
+                     0.0, 0.0, 0.0,
+#endif
+                     DP[pt].x, DP[pt].y, DP[pt].task, DP[pt].index);
+            }
+          printf("RD-TRACE-VV stage=%d velvtx=%.17g %.17g\n", rd_stage, Velvertex_avg[0], Velvertex_avg[1]);
+        }
+#endif
+      int used_svd          = 0;
+      lapack_int solve_info = rd_solve_upwind_system(Sminus, &rhs[0][0], 3, &used_svd);
+      (void)used_svd;
 
       if(solve_info != 0)
         {
@@ -1067,9 +1299,9 @@ void compute_residuals(tessellation *T)
         }
 
 #ifdef LDA_SCHEME
-      rd_check_conservation(Flux_RD, Phi, LDA_roundoff_scale, thistask_triangles[i], "LDA");
+      rd_check_conservation(Flux_RD, Phi, LDA_roundoff_scale + phi_scale, thistask_triangles[i], "LDA");
 #else
-      rd_check_conservation(Flux_LDA, Phi, LDA_roundoff_scale, thistask_triangles[i], "LDA");
+      rd_check_conservation(Flux_LDA, Phi, LDA_roundoff_scale + phi_scale, thistask_triangles[i], "LDA");
 #endif
 
 #endif  // LDA scheme or B scheme
@@ -1117,9 +1349,9 @@ void compute_residuals(tessellation *T)
         }
 
 #ifdef N_SCHEME
-      rd_check_conservation(Flux_RD, Phi, N_roundoff_scale, thistask_triangles[i], "N");
+      rd_check_conservation(Flux_RD, Phi, N_roundoff_scale + phi_scale, thistask_triangles[i], "N");
 #else
-      rd_check_conservation(Flux_N, Phi, N_roundoff_scale, thistask_triangles[i], "N");
+      rd_check_conservation(Flux_N, Phi, N_roundoff_scale + phi_scale, thistask_triangles[i], "N");
 #endif
 
 #endif  // N scheme or B scheme
@@ -1154,9 +1386,102 @@ void compute_residuals(tessellation *T)
         }
 
       B_roundoff_scale = dmax(B_roundoff_scale, dmax(LDA_roundoff_scale, N_roundoff_scale));
-      rd_check_conservation(Flux_RD, Phi, B_roundoff_scale, thistask_triangles[i], "B");
+      rd_check_conservation(Flux_RD, Phi, B_roundoff_scale + phi_scale, thistask_triangles[i], "B");
 
 #endif  // B scheme
+
+#ifdef RD_RK2_TOTAL_RESIDUAL
+      if(rd_stage == 1)
+        {
+          /* Corrector: replace the spatial distribution by the total nodal
+           * residual  T_i + 1/2 phi_i(U*).  The predictor half of the
+           * trapezoid, -1/2 phi_i(U^n), was already applied as the local
+           * +1/2 (U*_i - U^n_i) term in rd_rk2_prepare_corrector() via the
+           * predictor identity sum_T phi_i^n = -|S_i| dU_i / dt. */
+          double T_time[4][3];
+          double T_target[4];
+          double rk2_scale = 0.0;
+
+          for(k = 0; k < 4; k++)
+            T_target[k] =
+                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / triangle_dt;
+
+#ifdef LDA_SCHEME
+          if(!used_svd)
+            {
+              /* F1 mass matrix through the third right-hand side:
+               * T_i = -K_i^+ z with S^- z = T_target. Conservation is the
+               * identity sum_i K_i^+ = -S^- plus the solve residual. */
+              double Z_f1[4];
+              for(k = 0; k < 4; k++)
+                Z_f1[k] = rhs[k][2];
+
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  {
+                    T_time[k][j] = -1.0 * (Kmatrix[k][0][j][kplus] * Z_f1[0] + Kmatrix[k][1][j][kplus] * Z_f1[1] +
+                                           Kmatrix[k][2][j][kplus] * Z_f1[2] + Kmatrix[k][3][j][kplus] * Z_f1[3]);
+
+                    for(p = 0; p < 4; p++)
+                      rk2_scale += fabs(Kmatrix[k][p][j][kplus]) * fabs(Z_f1[p]);
+                  }
+            }
+          else
+            {
+              /* Rank-deficient element: beta_i is undefined there (the F1
+               * temporal target is an arbitrary vector, unprotected by
+               * Lemma 1), and no generalized inverse can restore
+               * sum_i beta_i = I on a singular S^-. The lumped mass is the
+               * unique conservative element-local choice, so fall back to it
+               * and count the event. */
+              RD_stat_f1_lumped++;
+
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
+            }
+#else /* N_SCHEME: the lumped mass IS the thesis choice m^N = (|T|/3) delta_ij */
+          for(k = 0; k < 4; k++)
+            for(j = 0; j < 3; j++)
+              T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
+#endif
+
+#ifdef RD_DIAG_ZERO_TEMPORAL /* diagnostic only: isolate the temporal term's contribution */
+          for(k = 0; k < 4; k++)
+            {
+              T_target[k] = 0.0;
+              for(j = 0; j < 3; j++)
+                T_time[k][j] = 0.0;
+            }
+#endif
+          double total_target[4];
+          for(k = 0; k < 4; k++)
+            {
+              total_target[k] = T_target[k] + 0.5 * Phi[k];
+
+              rk2_scale += fabs(total_target[k]);
+              for(j = 0; j < 3; j++)
+                {
+                  rk2_scale += fabs(T_time[k][j]);
+                  Flux_RD[k][j] = T_time[k][j] + 0.5 * Flux_RD[k][j];
+                }
+            }
+
+#ifdef LDA_SCHEME
+          rk2_scale += 0.5 * LDA_roundoff_scale;
+#else
+          rk2_scale += 0.5 * N_roundoff_scale;
+#endif
+
+          rd_check_conservation(Flux_RD, total_target, rk2_scale + 0.5 * phi_scale, thistask_triangles[i], "RK2-total");
+        }
+#endif /* #ifdef RD_RK2_TOTAL_RESIDUAL */
+
+#ifdef RD_DIAG_TRACE_ELEMENT
+      if(rd_trace)
+        printf("RD-TRACE-OUT stage=%d flux00=%.17g flux30=%.17g flux01=%.17g flux31=%.17g\n", rd_stage, Flux_RD[0][0],
+               Flux_RD[3][0], Flux_RD[0][1], Flux_RD[3][1]);
+#endif
 
       /*use residuals to update fluid state of local points or export to other tasks*/
 
@@ -1201,6 +1526,13 @@ void compute_residuals(tessellation *T)
 
   apply_FluxRD_list();
 
+#ifdef RD_RK2_TOTAL_RESIDUAL
+      myfree_movable(FluxRD_list);
+    } /* stage loop */
+
+  FluxRD_list = NULL; /* freed inside the stage loop */
+#endif
+
 #ifdef RD_DEBUG_ASSERTS
   /* Item A4: instrumentation, not an assertion.  Reports how often the
    * upwind system used DGELSD, how often LU found an exact singularity, the
@@ -1229,10 +1561,25 @@ void compute_residuals(tessellation *T)
           (double)RD_SVD_RCOND, stat_rank_counts[0], stat_rank_counts[1], stat_rank_counts[2], stat_rank_counts[3],
           stat_rank_counts[4], (stat_totals[1] > 0) ? stat_min_rank : -1, stat_min_out[0], stat_max_out[0], stat_max_out[2],
           (stat_max_out[2] > 0.0) ? stat_max_out[0] / stat_max_out[2] : 0.0, stat_min_out[1], stat_max_out[1]);
+
+#ifdef RD_RK2_TOTAL_RESIDUAL
+    long long f1_lumped_total;
+    double stage_mins[2] = {RD_stat_min_stage_rho, RD_stat_min_stage_press};
+    double stage_min_out[2];
+
+    MPI_Reduce(&RD_stat_f1_lumped, &f1_lumped_total, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(stage_mins, stage_min_out, 2, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    if(ThisTask == 0)
+      printf("RD-RK2 time=%.8g f1_lumped=%lld predictor_min_rho=%.6e predictor_min_press=%.6e\n", All.Time, f1_lumped_total,
+             stage_min_out[0], stage_min_out[1]);
+#endif
   }
 #endif /* #ifdef RD_DEBUG_ASSERTS */
 
+#ifndef RD_RK2_TOTAL_RESIDUAL
   myfree_movable(FluxRD_list);
+#endif
   rd_free_element_set(&set);
 
   TIMER_STOP(CPU_RESIDUAL_DISTRIBUTION);
