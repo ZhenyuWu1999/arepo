@@ -667,6 +667,27 @@ static void rd_rk2_prepare_corrector(void)
       RD_stat_min_stage_rho   = dmin(RD_stat_min_stage_rho, rho);
       RD_stat_min_stage_press = dmin(RD_stat_min_stage_press, press);
 
+#ifdef RD_DIAG_DUMP_STAGE
+      /* diagnostic only: per-rank dump of the recovered stage state */
+      {
+        static int rd_dump_step = 0;
+        static FILE *rd_dump_fp = NULL;
+        if(i == 0)
+          rd_dump_step++;
+        if(rd_dump_step == 1)
+          {
+            if(rd_dump_fp == NULL)
+              {
+                char nm[256];
+                sprintf(nm, "%s/rdstage_task%03d.txt", All.OutputDir, ThisTask);
+                rd_dump_fp = fopen(nm, "w");
+              }
+            if(rd_dump_fp)
+              fprintf(rd_dump_fp, "%llu %.17g %.17g %.17g %.17g %.17g %.17g\n", (unsigned long long)P[i].ID, rho, velx, vely,
+                      press, SphP[i].DualArea, P[i].Mass);
+          }
+      }
+#endif
       SphP[i].Density  = rho;
       P[i].Vel[0]      = velx;
       P[i].Vel[1]      = vely;

@@ -3388,3 +3388,94 @@ GL+F1 behind the switch, nrhs=3 route, rank-deficient fallback). Item 4's
 algebraic tests exist as the uniform/perturbed pair plus A1/A2/A3 and the
 coverage audit. Item 5's N on/off dt-ladder and items 6-8 (full rank matrix,
 Yee ladders) are blocked on the open defect above.
+
+## 2026-07-29 (later): the rank-divergence is explained, and the Yee campaign finds a real defect
+
+- Author: `Claude Code Opus5`
+- Supersedes section 4 of the preceding entry, which over-graded the
+  divergence as a blocking defect of the RK2 implementation.
+
+### 1. The 1e-11 rank divergence: mechanism identified
+
+It is **not** a defect of the RK2 code. It is the known ill-conditioning of
+`S^-` near stagnation, newly exposed because the corrector evaluates the
+residual at `U*` rather than at `U^n`.
+
+Direct evidence, from an A2 dump on a quiet element:
+
+```
+k=3  phi^T=-8.33e-17   phi_0=-8.10e-12  phi_1=-9.48e-12  phi_2=-5.45e-12
+     element residual ~ 0        distributed residuals ~ 1e-11
+```
+
+With `Phi ~ 1e-16` and `cond(S^-) ~ 3.6e10` (Gresho `v1e-8` has
+`min_pivot_ratio = 2.8e-11`), `x = (S^-)^dagger Phi` reaches `~1e-5`, and
+`K^+ x` leaves `~1e-11` after the suppression established earlier. A roundoff
+perturbation of `Phi` is not constrained to `range(S^-)`, so it takes the full
+`1/sigma_min` amplification — the same unprotected-right-hand-side mechanism
+found for the F1 temporal target, here acting on `Phi` itself.
+
+This accounts for every bisection result:
+
+| observation | explanation |
+| --- | --- |
+| baseline clean (1e-16) | at `U^n` the quiet region is bitwise uniform, so `Phi` is exactly 0 and `x` is exactly 0 |
+| predictor-only clean | same, stage 0 also evaluates at `U^n` |
+| stage 1 on stage-0 inputs clean | also evaluates at `U^n` |
+| full path dirty (1e-11) | stage 1 evaluates at `U*`, which the predictor has perturbed off exact uniformity at the 1e-16 level, so `Phi != 0` and the amplification engages |
+| `dU`, temporal term, half-kick all irrelevant | the injection is in `phi(U*)` itself; note the earlier bisection tested the two `dU` consumers separately, and each alone leaves the other path open — testing both together confirms `dU` is not the carrier |
+| `RD_ALWAYS_PSEUDOINVERSE` unchanged | `RD_SVD_RCOND = -1` truncates only at machine precision, and `2.8e-11 >> eps`, so all four directions are retained and the minimum-norm solve is essentially the LU result. My earlier reading of this test as exonerating the solve was wrong. |
+| `RD_SVD_RCOND = 1e-8` terminates on A2 | truncating a resolvable direction breaks the consistent solve, exactly as Codex's rcond sensitivity study concluded; this knob is not an available mitigation |
+
+Measured inputs to stage 1 are clean: a per-rank dump of the recovered state
+gives `max|np1 - np4|` of `5.6e-16` in density, `3.3e-16` in velocity,
+`3.6e-15` in pressure, `4.3e-19` in `DualArea` and `Mass`. The amplification is
+entirely inside the stage-1 sweep.
+
+Consequence for the conserved variables: `dt` times a `1e-11` spurious flux is
+`~1e-15` per step, physically negligible. **It does not block convergence
+measurements**, where physical errors are `1e-3`. It does disqualify bit-level
+cross-decomposition regression testing on near-stagnant initial conditions, and
+it is worth recording that the quiet regions of `v0`/`v1e-8` Gresho are the
+worst possible case for it.
+
+### 2. A real defect found by the Yee campaign
+
+The first RK2 Yee+boost campaign (`rk2_nodal_v1`, jittered, n = 32/64/128,
+boosts 0 and 1, LDA) completed `n=32` at both boosts and then failed at
+`n=64, boost=0`:
+
+```
+RD upwind solve failed on task 3, triangle 27, LAPACK info -5
+```
+
+`info = -5` from LAPACKE is the NaN/Inf check on argument 5, the matrix. So
+`S^-` contained a non-finite entry, meaning the `K` matrices did, meaning the
+Roe average or `Cs_avg` went non-finite at a vertex whose per-cell state passed
+the predictor positivity check in `rd_rk2_prepare_corrector()`.
+
+This is a genuine robustness defect of the RK2 path, not a diagnostic
+artefact. The Yee vortex reaches `rho ~ 0.48` and `p ~ 0.37`, far lower than
+Gresho, so the predictor can produce an admissible per-cell state whose
+element-level Roe average is not admissible. The per-cell check is necessary
+but not sufficient.
+
+Next step: catch it at the element level. `Cs_avg` already has an `isnan`
+check that terminates; the `info = -5` path fired first, so the non-finite
+value is entering through `U_hat` or `Enthalpy` rather than through `Cs_avg`.
+A finiteness check on the assembled `Kmatrix`, or on `U_hat` and `Pressure` per
+vertex at the top of the element loop, will localise it. Whether the correct
+fix is a predictor limiter (the RD predictor is an LDA update, and LDA is not
+positive — Kimi amendment 3 anticipated exactly this) or a stricter stage
+recovery is the open question.
+
+**This does block the convergence campaign** until fixed.
+
+### 3. Status
+
+- `n=32` RK2 data exist at both boosts and are retained.
+- Diagnostic hooks retained: `RD_DIAG_ZERO_TEMPORAL`, `RD_DIAG_PREDICTOR_ONLY`,
+  `RD_DIAG_SKIP_PREPARE`, `RD_DIAG_NO_KICK`, `RD_DIAG_TRACE_ELEMENT`,
+  `RD_DIAG_DUMP_STAGE`, all in `defines_extra` and out of production configs.
+- The lumped baseline campaigns remain the comparison reference and are
+  untouched.
