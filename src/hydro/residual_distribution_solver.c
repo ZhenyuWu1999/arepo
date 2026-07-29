@@ -12,13 +12,17 @@
 #include "../main/proto.h"
 #include "../mesh/mesh.h"
 #include "../mesh/voronoi/voronoi.h"
-#define THRESHOLD 1e-15
-#define REGULARIZATION_CONSTANT 1e-10
+/* Relative pivot ratio below which the LU factorisation of S^- is considered
+ * rank deficient and the minimum-norm least-squares solution is used instead.
+ * See regularize_matrix_debug_report.md, section 4. */
+#define RD_PIVOT_RATIO_TOLERANCE 1e-12
+
+/* Relative conservation defect  ||sum_i phi_i - phi^T|| / scale  above which
+ * assertion A2 reports.  Only active with RD_DEBUG_ASSERTS. */
+#define RD_CONSERVATION_TOLERANCE 1e-8
 
 static lapack_int mat_inv(double *A, unsigned n);
 static lapack_int solve_system(int n, double *A, double *b);
-static int needs_regularization(int rows, int cols, double *A);
-static void regularize_matrix(int rows, int cols, double *A);
 
 // static struct flux_list_data
 //{
@@ -104,6 +108,216 @@ static int rd_compare_particle_id(const void *a, const void *b)
     return 1;
   return 0;
 }
+
+/* Per-call diagnostics for the upwind system solve (item A4 of the report). */
+static long long RD_stat_elements;         /* elements whose residual was evaluated */
+static long long RD_stat_pinv_fallback;    /* elements that needed the pseudo-inverse */
+static double RD_stat_min_pivot_ratio;     /* smallest |U_nn|/|U_11| seen */
+static double RD_stat_max_cons_defect_abs; /* largest pre-rebalance conservation defect, absolute */
+static double RD_stat_max_phi;             /* largest |phi^T| seen, for context on the absolute figure */
+static double RD_stat_ever_max_rel;        /* high-water mark across calls; NOT reset per call */
+static double RD_stat_min_dt_extrap;       /* smallest dt_Extrapolation seen this call */
+static double RD_stat_max_dt_extrap;       /* largest dt_Extrapolation seen this call */
+
+static void rd_reset_solver_statistics(void)
+{
+  RD_stat_elements        = 0;
+  RD_stat_pinv_fallback   = 0;
+  RD_stat_min_pivot_ratio     = 1.0;
+  RD_stat_max_cons_defect_abs = 0.0;
+  RD_stat_max_phi             = 0.0;
+  RD_stat_min_dt_extrap   = MAX_DOUBLE_NUMBER;
+  RD_stat_max_dt_extrap   = -MAX_DOUBLE_NUMBER;
+}
+
+/* The two compute_residuals() call sites in run.c are expected to see
+ * dt_Extrapolation = 0 (before find_next_sync_point) and dt (after), which is
+ * what makes the pair a two-stage update rather than two Euler steps. Recording
+ * the range lets that be confirmed at runtime instead of by static reading. */
+static void rd_record_dt_extrapolation(double dt_extrapolation)
+{
+  RD_stat_min_dt_extrap = dmin(RD_stat_min_dt_extrap, dt_extrapolation);
+  RD_stat_max_dt_extrap = dmax(RD_stat_max_dt_extrap, dt_extrapolation);
+}
+
+/*! \brief Solve  S^- X = B  for the residual-distribution upwind system.
+ *
+ *  S^- = sum_{j in T} K_j^- is singular whenever the element is stagnant with
+ *  respect to the mesh (u_n = v_n), because both stationary characteristic
+ *  fields then contribute nothing to K_j^-.  The system nevertheless stays
+ *  consistent, and the distributed residuals are independent of which solution
+ *  is selected, so the minimum-norm least-squares solution is a valid choice.
+ *  See regularize_matrix_debug_report.md, sections 3 and 4.
+ *
+ *  \param[in] S Row-major 4x4 matrix S^-; left unmodified.
+ *  \param[in,out] rhs Row-major 4 x nrhs right-hand sides, overwritten by X.
+ *  \param[in] nrhs Number of right-hand sides.
+ *
+ *  \return LAPACK info of the step that produced the returned solution.
+ */
+static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapack_int nrhs)
+{
+  double A[16];
+  lapack_int ipiv[4];
+  int use_pseudo_inverse = 0;
+
+  memcpy(A, &S[0][0], sizeof(A));
+
+#ifdef RD_ALWAYS_PSEUDOINVERSE
+  /* Reference path: skip the LU shortcut entirely and always take the
+   * minimum-norm solution. Slower, but free of the pivot-ratio branch, so the
+   * result is independent of the domain decomposition. Use it to confirm that
+   * the fast path below has not changed the answer. */
+  lapack_int info    = 0;
+  use_pseudo_inverse = 1;
+#else
+  lapack_int info = LAPACKE_dgetrf(LAPACK_ROW_MAJOR, 4, 4, A, 4, ipiv);
+
+  if(info != 0)
+    {
+      use_pseudo_inverse = 1; /* exactly singular pivot */
+    }
+  else
+    {
+      /* Partial pivoting orders the pivots by magnitude, so |U_nn|/|U_11| is a
+       * cheap scale-free rank proxy.  A backward-stable LU can return a small
+       * residual while producing a solution whose null-space component is
+       * enormous; that component is annihilated by K_i^+ only in exact
+       * arithmetic, so a near-singular factorisation must not be used. */
+      double pivot_max = fabs(A[0]);
+      double pivot_min = fabs(A[0]);
+
+      for(int n = 1; n < 4; n++)
+        {
+          double pivot = fabs(A[n * 4 + n]);
+          pivot_max    = dmax(pivot_max, pivot);
+          pivot_min    = dmin(pivot_min, pivot);
+        }
+
+      double ratio = (pivot_max > 0.0) ? pivot_min / pivot_max : 0.0;
+
+      if(ratio < RD_stat_min_pivot_ratio)
+        RD_stat_min_pivot_ratio = ratio;
+
+      if(!(ratio >= RD_PIVOT_RATIO_TOLERANCE))
+        use_pseudo_inverse = 1;
+    }
+#endif /* #ifdef RD_ALWAYS_PSEUDOINVERSE */
+
+  if(!use_pseudo_inverse)
+    return LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', 4, nrhs, A, 4, ipiv, rhs, nrhs);
+
+  /* Minimum-norm least-squares (Moore-Penrose) solution.  rcond = -1 selects
+   * machine precision as the singular-value cut-off. */
+  double singular_values[4];
+  lapack_int rank;
+
+  memcpy(A, &S[0][0], sizeof(A));
+  info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 4, 4, nrhs, A, 4, rhs, nrhs, singular_values, -1.0, &rank);
+
+  RD_stat_pinv_fallback++;
+
+  return info;
+}
+
+/*! \brief Enforce  sum_{i in T} phi_i = phi^T  exactly.
+ *
+ *  Both the LDA and the N distribution satisfy this identity in exact
+ *  arithmetic (see report section 1), so the correction applied here is pure
+ *  round-off and never changes the scheme.  Splitting it equally over the
+ *  DIMS+1 vertices is the only isotropic choice, and it coincides with the
+ *  centred distribution phi_i = phi^T/(d+1), which is the correct fallback in
+ *  the subspace where upwinding carries no directional information.
+ *
+ *  \param[in,out] flux Distributed residuals, flux[variable][vertex].
+ *  \param[in] Phi Element residual phi^T.
+ *
+ *  \return Relative conservation defect measured before the correction.
+ */
+static void rd_enforce_conservation(double flux[4][3], const double Phi[4], int triangle_index, const char *label)
+{
+  double defect = 0.0, scale = 0.0, phi_max = 0.0;
+  double sum_before[4];
+
+  for(int k = 0; k < 4; k++)
+    {
+      sum_before[k] = flux[k][0] + flux[k][1] + flux[k][2];
+
+      defect  = dmax(defect, fabs(Phi[k] - sum_before[k]));
+      phi_max = dmax(phi_max, fabs(Phi[k]));
+      scale   = dmax(scale, fabs(Phi[k]));
+      scale   = dmax(scale, dmax(fabs(flux[k][0]), dmax(fabs(flux[k][1]), fabs(flux[k][2]))));
+    }
+
+  /* Do NOT normalise by the element's own magnitude. In a quiet region the
+   * exact answer is phi^T = 0, every quantity is at machine epsilon, and such a
+   * ratio is round-off over round-off: it saturates near its algebraic maximum
+   * of 4 and reports a catastrophe where nothing is wrong. (That false alarm
+   * cost a full investigation once; see regularize_matrix_debug_report.md.)
+   * The absolute defect is the meaningful quantity, and it is put in context at
+   * report time by dividing by the largest |phi^T| in the same call. */
+  (void)scale;
+
+  RD_stat_max_cons_defect_abs = dmax(RD_stat_max_cons_defect_abs, defect);
+  RD_stat_max_phi             = dmax(RD_stat_max_phi, phi_max);
+
+#ifdef RD_DEBUG_ASSERTS
+  if(defect > RD_stat_ever_max_rel)
+    {
+      RD_stat_ever_max_rel = defect;
+
+      printf("RD-WORST task=%d %s triangle=%d abs=%.3e |phi^T|max=%.3e\n", ThisTask, label, triangle_index, defect,
+             phi_max);
+      for(int k = 0; k < 4; k++)
+        printf("           k=%d  phi^T=% .6e  phi_0=% .6e  phi_1=% .6e  phi_2=% .6e  sum=% .6e  diff=% .3e\n", k, Phi[k],
+               flux[k][0], flux[k][1], flux[k][2], sum_before[k], Phi[k] - sum_before[k]);
+    }
+#endif
+
+  for(int k = 0; k < 4; k++)
+    {
+      double correction = (Phi[k] - sum_before[k]) / (DIMS + 1);
+
+      flux[k][0] += correction;
+      flux[k][1] += correction;
+      flux[k][2] += correction;
+    }
+}
+
+#ifdef RD_DEBUG_ASSERTS
+/*! \brief Assertion A1:  sum_{i in T} K_i = 0.
+ *
+ *  This follows from sum_i n_i = 0 together with K_i^+ + K_i^- = K_i, and each
+ *  entry of K_i is linear in the eigenvalues, so the identity must hold to
+ *  round-off.  Failure indicates a broken triangle orientation, an
+ *  inconsistent normal/magnitude convention, or a faulty eigenvalue splitting.
+ */
+static void rd_assert_K_sum_vanishes(double Kmatrix[4][4][3][3], int kfull, int triangle_index)
+{
+  double sum_max = 0.0, entry_max = 0.0;
+
+  for(int k = 0; k < 4; k++)
+    for(int p = 0; p < 4; p++)
+      {
+        double sum = 0.0;
+
+        for(int j = 0; j < 3; j++)
+          {
+            sum       = sum + Kmatrix[k][p][j][kfull];
+            entry_max = dmax(entry_max, fabs(Kmatrix[k][p][j][kfull]));
+          }
+
+        sum_max = dmax(sum_max, fabs(sum));
+      }
+
+  if(entry_max > 0.0 && sum_max > 1e-10 * entry_max)
+    {
+      printf("RD assertion A1 failed: task=%d triangle=%d ||sum_i K_i||=%g max|K|=%g ratio=%g\n", ThisTask, triangle_index,
+             sum_max, entry_max, sum_max / entry_max);
+      terminate_program("RD assertion A1: sum_i K_i != 0");
+    }
+}
+#endif /* #ifdef RD_DEBUG_ASSERTS */
 
 /*! \brief Compute residuals of triangles/tetrahedra and distribute them.
  *  This function is used for Residual Distribution hydrodynamics method, which is equivalent to
@@ -288,6 +502,8 @@ void compute_residuals(tessellation *T)
    * a time-integration stage.
    */
   reset_dualarea(T);
+
+  rd_reset_solver_statistics();
 
   point *DP = T->DP;
   tetra *DT = T->DT;
@@ -490,6 +706,7 @@ void compute_residuals(tessellation *T)
               vertex_state.velz  = P[SphP_index].Vel[2];
 
               double dt_Extrapolation = All.Time - SphP[SphP_index].TimeLastPrimUpdate;
+              rd_record_dt_extrapolation(dt_Extrapolation);
 
               vertex_state.velx -= SphP[SphP_index].VelVertex[0];
               vertex_state.vely -= SphP[SphP_index].VelVertex[1];
@@ -555,6 +772,7 @@ void compute_residuals(tessellation *T)
               vertex_state.vely       = PrimExch[PrimExch_index].VelGas[1];
               vertex_state.velz       = PrimExch[PrimExch_index].VelGas[2];
               double dt_Extrapolation = All.Time - PrimExch[PrimExch_index].TimeLastPrimUpdate;
+              rd_record_dt_extrapolation(dt_Extrapolation);
 
               vertex_state.velx -= PrimExch[PrimExch_index].VelVertex[0];
               vertex_state.vely -= PrimExch[PrimExch_index].VelVertex[1];
@@ -772,28 +990,67 @@ void compute_residuals(tessellation *T)
             }
         }
 
-      double Kmatrix_minus_sum[4][4];
+      /* S^- = sum_{j in T} K_j^-  (thesis notation, chapter 3) */
+      double Sminus[4][4];
 
       for(k = 0; k < 4; k++)
         {
           for(p = 0; p < 4; p++)
             {
-              Kmatrix_minus_sum[k][p] = 0.0;
+              Sminus[k][p] = 0.0;
               for(j = 0; j < 3; j++)
                 {
-                  Kmatrix_minus_sum[k][p] += Kmatrix[k][p][j][kminus];
+                  Sminus[k][p] += Kmatrix[k][p][j][kminus];
                 }
             }
         }
 
-      // use matrix inversion
-      regularize_matrix(4, 4, (double *)Kmatrix_minus_sum);
-      lapack_int inverse_info = mat_inv(&Kmatrix_minus_sum[0][0], 4);
-      if(inverse_info != 0)
+#ifdef RD_DEBUG_ASSERTS
+      rd_assert_K_sum_vanishes(Kmatrix, kfull, thistask_triangles[i]);
+#endif
+
+      /* Solve the upwind system instead of forming (S^-)^-1 explicitly.
+       * Both schemes need a solve against the same matrix:
+       *   LDA:  x = (S^-)^dagger phi^T
+       *   N:    y = (S^-)^dagger b,   b = sum_j K_j^- Uhat_j
+       * One factorisation therefore serves both, and no regularisation of
+       * S^- is required.  See regularize_matrix_debug_report.md. */
+      double rhs[4][2];
+
+      for(k = 0; k < 4; k++)
         {
-          printf("RD matrix inversion failed on task %d, triangle %d, LAPACK info %d\n", ThisTask, thistask_triangles[i], inverse_info);
-          terminate_program("RD matrix inversion failed");
+          rhs[k][0] = Phi[k];
+          rhs[k][1] = 0.0;
+
+          for(j = 0; j < 3; j++)
+            {
+              rhs[k][1] += Kmatrix[k][0][j][kminus] * U_hat[0][j] + Kmatrix[k][1][j][kminus] * U_hat[1][j] +
+                           Kmatrix[k][2][j][kminus] * U_hat[2][j] + Kmatrix[k][3][j][kminus] * U_hat[3][j];
+            }
         }
+
+      lapack_int solve_info = rd_solve_upwind_system(Sminus, &rhs[0][0], 2);
+
+      if(solve_info != 0)
+        {
+          printf("RD upwind solve failed on task %d, triangle %d, LAPACK info %d\n", ThisTask, thistask_triangles[i],
+                 (int)solve_info);
+          terminate_program("RD upwind solve failed");
+        }
+
+      RD_stat_elements++;
+
+#if(defined(LDA_SCHEME) || defined(B_SCHEME))
+      double X_lda[4]; /* x = (S^-)^dagger phi^T */
+      for(k = 0; k < 4; k++)
+        X_lda[k] = rhs[k][0];
+#endif
+
+#if(defined(N_SCHEME) || defined(B_SCHEME))
+      double Y_in[4]; /* y = (S^-)^dagger b, the N-scheme inflow state Uhat_in^T */
+      for(k = 0; k < 4; k++)
+        Y_in[k] = rhs[k][1];
+#endif
 
       double Flux_RD[4][3];
 #ifdef B_SCHEME
@@ -801,57 +1058,44 @@ void compute_residuals(tessellation *T)
 #endif
 
 #if(defined(LDA_SCHEME) || defined(B_SCHEME))
-      double BetaLDA[4][4][3]; /* distributed residual phi_j= BetaLDA_j * phi_total */
-      for(k = 0; k < 4; k++)
-        {
-          for(p = 0; p < 4; p++)
-            {
-              for(j = 0; j < 3; j++)
-                {
-                  BetaLDA[k][p][j] =
-                      -1.0 * (Kmatrix[k][0][j][kplus] * Kmatrix_minus_sum[0][p] + Kmatrix[k][1][j][kplus] * Kmatrix_minus_sum[1][p] +
-                              Kmatrix[k][2][j][kplus] * Kmatrix_minus_sum[2][p] + Kmatrix[k][3][j][kplus] * Kmatrix_minus_sum[3][p]);
-                }
-            }
-        }
-
+      /* phi_i^{LDA,T} = -K_i^+ x,  with x = (S^-)^dagger phi^T.  This is the
+       * same operator as beta_i^{LDA,T} phi^T = -K_i^+ (S^-)^-1 phi^T, but it
+       * never forms the inverse, so it stays well defined when S^- is
+       * singular. */
       for(k = 0; k < 4; k++)
         {
           for(j = 0; j < 3; j++)
             {
+              double flux_lda = -1.0 * (Kmatrix[k][0][j][kplus] * X_lda[0] + Kmatrix[k][1][j][kplus] * X_lda[1] +
+                                        Kmatrix[k][2][j][kplus] * X_lda[2] + Kmatrix[k][3][j][kplus] * X_lda[3]);
 #ifdef LDA_SCHEME
-              Flux_RD[k][j] =
-                  BetaLDA[k][0][j] * Phi[0] + BetaLDA[k][1][j] * Phi[1] + BetaLDA[k][2][j] * Phi[2] + BetaLDA[k][3][j] * Phi[3];
+              Flux_RD[k][j] = flux_lda;
 #else
-              Flux_LDA[k][j] =
-                  BetaLDA[k][0][j] * Phi[0] + BetaLDA[k][1][j] * Phi[1] + BetaLDA[k][2][j] * Phi[2] + BetaLDA[k][3][j] * Phi[3];
+              Flux_LDA[k][j] = flux_lda;
 #endif
             }
         }
+
+      /* Restore sum_i phi_i = phi^T to machine precision.  Must happen before
+       * any blending, because the B blend is conservative only if both of its
+       * inputs already are. */
+#ifdef LDA_SCHEME
+      rd_enforce_conservation(Flux_RD, Phi, thistask_triangles[i], "LDA");
+#else
+      rd_enforce_conservation(Flux_LDA, Phi, thistask_triangles[i], "LDA");
+#endif
 
 #endif  // LDA scheme or B scheme
 
 #if(defined(N_SCHEME) || defined(B_SCHEME))
 
       double Bracket[4][3];
-      double KU_Sum[4];
-
-      for(k = 0; k < 4; k++)
-        {
-          KU_Sum[k] = 0.0;
-          for(j = 0; j < 3; j++)
-            {
-              KU_Sum[k] += Kmatrix[k][0][j][kminus] * U_hat[0][j] + Kmatrix[k][1][j][kminus] * U_hat[1][j] +
-                           Kmatrix[k][2][j][kminus] * U_hat[2][j] + Kmatrix[k][3][j][kminus] * U_hat[3][j];
-            }
-        }
 
       for(k = 0; k < 4; k++)
         {
           for(j = 0; j < 3; j++)
             {
-              Bracket[k][j] = U_hat[k][j] - (Kmatrix_minus_sum[k][0] * KU_Sum[0] + Kmatrix_minus_sum[k][1] * KU_Sum[1] +
-                                             Kmatrix_minus_sum[k][2] * KU_Sum[2] + Kmatrix_minus_sum[k][3] * KU_Sum[3]);
+              Bracket[k][j] = U_hat[k][j] - Y_in[k];
             }
         }
 
@@ -875,6 +1119,13 @@ void compute_residuals(tessellation *T)
               // #endif
             }
         }
+
+#ifdef N_SCHEME
+      rd_enforce_conservation(Flux_RD, Phi, thistask_triangles[i], "N");
+#else
+      rd_enforce_conservation(Flux_N, Phi, thistask_triangles[i], "N");
+#endif
+
 #endif  // N scheme or B scheme
 
 #ifdef B_SCHEME
@@ -898,6 +1149,31 @@ void compute_residuals(tessellation *T)
         }
 
 #endif  // B scheme
+
+#ifdef RD_DEBUG_ASSERTS
+      /* Assertion A2: the final distribution must be conservative.  After
+       * rd_enforce_conservation() this is exact by construction, so a failure
+       * here means the blending or an indexing step broke the identity. */
+      {
+        double residual_defect = 0.0, residual_scale = 0.0;
+
+        for(k = 0; k < 4; k++)
+          {
+            double sum = Flux_RD[k][0] + Flux_RD[k][1] + Flux_RD[k][2];
+
+            residual_defect = dmax(residual_defect, fabs(Phi[k] - sum));
+            residual_scale  = dmax(residual_scale, fabs(Phi[k]));
+            residual_scale  = dmax(residual_scale, dmax(fabs(Flux_RD[k][0]), dmax(fabs(Flux_RD[k][1]), fabs(Flux_RD[k][2]))));
+          }
+
+        if(residual_scale > 0.0 && residual_defect > RD_CONSERVATION_TOLERANCE * residual_scale)
+          {
+            printf("RD assertion A2 failed: task=%d triangle=%d defect=%g scale=%g ratio=%g\n", ThisTask,
+                   thistask_triangles[i], residual_defect, residual_scale, residual_defect / residual_scale);
+            terminate_program("RD assertion A2: sum_i phi_i != phi^T");
+          }
+      }
+#endif /* #ifdef RD_DEBUG_ASSERTS */
 
       /*use residuals to update fluid state of local points or export to other tasks*/
 
@@ -941,6 +1217,32 @@ void compute_residuals(tessellation *T)
     }   // for loop of triangles, i= 0~ Ndt_thistask
 
   apply_FluxRD_list();
+
+#ifdef RD_DEBUG_ASSERTS
+  /* Item A4: instrumentation, not an assertion.  Reports how often the
+   * upwind system is rank deficient and how large the pre-rebalance
+   * conservation defect was. */
+  {
+    long long stat_counts[2] = {RD_stat_elements, RD_stat_pinv_fallback};
+    long long stat_totals[2];
+    double stat_mins[2] = {RD_stat_min_pivot_ratio, RD_stat_min_dt_extrap};
+    double stat_maxs[3] = {RD_stat_max_cons_defect_abs, RD_stat_max_dt_extrap, RD_stat_max_phi};
+    double stat_min_out[2], stat_max_out[3];
+
+    MPI_Reduce(stat_counts, stat_totals, 2, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(stat_mins, stat_min_out, 2, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(stat_maxs, stat_max_out, 3, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    if(ThisTask == 0)
+      printf(
+          "RD-DIAG time=%.8g elements=%lld pseudo_inverse=%lld (%.3g%%) min_pivot_ratio=%.3e cons_defect_abs=%.3e "
+          "max_phi=%.3e cons_defect_rel=%.3e dt_extrap=[%.6e,%.6e]\n",
+          All.Time, stat_totals[0], stat_totals[1],
+          (stat_totals[0] > 0) ? 100.0 * (double)stat_totals[1] / (double)stat_totals[0] : 0.0, stat_min_out[0],
+          stat_max_out[0], stat_max_out[2],
+          (stat_max_out[2] > 0.0) ? stat_max_out[0] / stat_max_out[2] : 0.0, stat_min_out[1], stat_max_out[1]);
+  }
+#endif /* #ifdef RD_DEBUG_ASSERTS */
 
   myfree_movable(FluxRD_list);
   myfree_movable(tri_normals_list);
@@ -1231,34 +1533,12 @@ lapack_int solve_system(int n, double *A, double *b)
   return info;
 }
 
-int needs_regularization(int rows, int cols, double *A)
-{
-  double min_value = DBL_MAX;
-
-  for(int i = 0; i < rows; i++)
-    {
-      for(int j = 0; j < cols; j++)
-        {
-          double value = *(A + i * cols + j);
-          if(fabs(value) < min_value)
-            {
-              min_value = fabs(value);
-            }
-        }
-    }
-
-  return min_value < THRESHOLD;
-}
-
-void regularize_matrix(int rows, int cols, double *A)
-{
-  if(needs_regularization(rows, cols, A))
-    {
-      for(int i = 0; i < rows; i++)
-        {
-          *(A + i * cols + i) += REGULARIZATION_CONSTANT;
-        }
-    }
-}
+/* needs_regularization() and regularize_matrix() were removed here.  They
+ * added an absolute shift REGULARIZATION_CONSTANT to the diagonal of S^-
+ * whenever any entry fell below an absolute threshold.  That test is not a
+ * conditioning test, the constants are dimensional, and the shift breaks the
+ * identity sum_i K_i^+ = -S^- on which the conservation of both the LDA and
+ * the N distribution rests.  See regularize_matrix_debug_report.md; the
+ * previous behaviour is preserved in git at commit ebe1be2. */
 
 #endif  // #ifdef RESIDUAL_DISTRIBUTION

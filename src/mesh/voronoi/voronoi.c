@@ -1166,9 +1166,32 @@ void triangle_get_normals_area(tessellation *T, int i, struct triangle_normals *
       tri_normals->normal[i][1] /= tri_normals->mag[i];
     }
 
-  double half_perimeter = 0.5*(tri_normals->mag[0]+tri_normals->mag[1]+tri_normals->mag[2]);
-  tri_normals->area = sqrt(half_perimeter*(half_perimeter-tri_normals->mag[0])*(half_perimeter-tri_normals->mag[1])*(half_perimeter-tri_normals->mag[2]));
+  /* Signed area from the cross product, not from Heron's formula.  The naive
+   * Heron expression sqrt(s(s-a)(s-b)(s-c)) suffers catastrophic cancellation
+   * on the sliver triangles that Delaunay triangulations of random or glass
+   * point sets routinely contain, and can return NaN when round-off drives the
+   * product slightly negative.  Since this area is the residual-distribution
+   * control area (Density = Mass/DualArea), such a failure propagates directly
+   * into the primitive variables. */
+  double signed_area = 0.5 * ((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0));
 
+  /* Assertion A3.  The normals constructed above are the inward normals with
+   * |n_i| equal to the length of the opposite edge only when the vertices are
+   * ordered counter-clockwise, which is what a positive signed area means.  A
+   * flipped orientation would negate all three normals, exchange the roles of
+   * K^+ and K^-, and silently reverse the upwind direction of the residual
+   * distribution scheme.  AREPO's 2D Delaunay construction does guarantee
+   * positive orientation, but nothing on the RD path checked it, and the cross
+   * product makes the check free. */
+  if(!(signed_area > 0.0))
+    {
+      char msg[512];
+      sprintf(msg, "triangle_get_normals_area: non-positive signed area %g for triangle %d (p = %d %d %d)", signed_area, i,
+              DT[i].p[0], DT[i].p[1], DT[i].p[2]);
+      terminate_program(msg);
+    }
+
+  tri_normals->area = signed_area;
 }
 
 /*! \brief Calculates distance of a cell to boundary of computational box.

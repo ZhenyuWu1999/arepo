@@ -41,6 +41,8 @@
 #N_SCHEME                      # N scheme for residual distribution
 #B_SCHEME                      # Blended scheme for residual distribution
 #RD_OUTPUT_DIAGNOSTICS         # Write verbose RD triangulation diagnostics
+#RD_DEBUG_ASSERTS              # RD invariant assertions (sum_i K_i = 0, conservation) and solver statistics
+#RD_ALWAYS_PSEUDOINVERSE       # RD: always use the minimum-norm solve (reference path, no pivot branch)
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

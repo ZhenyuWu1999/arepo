@@ -31,3 +31,10 @@ run.sh
 
 #documentation build
 /documentation/build
+
+#slurm and build-lock artefacts
+slurm-*.out
+.build_case.lock
+
+#generated initial conditions
+examples/*/ic_*/

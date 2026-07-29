@@ -1,19 +1,34 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=ArepoHydro
 #SBATCH --time=00:20:00
-#SBATCH --ntasks=4
+#SBATCH --ntasks=4                  # override on the command line: sbatch --ntasks=N ...
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=16G
 
 set -euo pipefail
 
-# Before submitting, rebuild ./Arepo with the matching Config via
-#   ./build_case.sh --config <path-to-config>
-# Then update PARAM_FILE below to the case you want to run.
+# Before submitting, rebuild the binary with the matching Config via
+#   sbatch build_case.sbatch --config <path-to-config>      (builds on a compute
+#                                                            node, so MKL is found)
+# or ./build_case.sh --config <path> from an interactive compute/FCFS node.
+#
+# Usage:
+#   sbatch --ntasks=N run_case.sbatch [--param PATH] [--binary PATH]
+#
+# Both options fall back to the defaults below when omitted, so the historical
+# "edit the two variables and submit" workflow still works.
 
 REPO_ROOT="/home/zwu/arepo_rd/arepo"
 BINARY="${REPO_ROOT}/Arepo"
 PARAM_FILE="${REPO_ROOT}/examples/gresho_2d/param_RD.txt"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --param) PARAM_FILE="$2"; shift 2 ;;
+    --binary) BINARY="$2"; shift 2 ;;
+    *) echo "unknown option: $1" >&2; exit 64 ;;
+  esac
+done
 
 param_value() {
   local param_file="${1}"
@@ -40,6 +55,7 @@ PY
 if command -v module >/dev/null 2>&1; then
   module load openmpi || true
   module load hdf5-openmpi || true
+  module load mkl/latest || true
 fi
 
 if [[ ! -x "${BINARY}" ]]; then
