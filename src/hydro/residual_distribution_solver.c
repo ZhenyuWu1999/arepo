@@ -12,14 +12,23 @@
 #include "../main/proto.h"
 #include "../mesh/mesh.h"
 #include "../mesh/voronoi/voronoi.h"
-/* Relative pivot ratio below which the LU factorisation of S^- is considered
- * rank deficient and the minimum-norm least-squares solution is used instead.
- * See dev_log/regularize_matrix_debug_report.md, section 4. */
-#define RD_PIVOT_RATIO_TOLERANCE 1e-12
+/* The LU diagonal-pivot spread is only a cheap trigger for switching to the
+ * more reliable SVD solver.  It is not a numerical-rank decision. */
+#define RD_LU_FALLBACK_PIVOT_RATIO 1e-12
 
-/* Relative conservation defect  ||sum_i phi_i - phi^T|| / scale  above which
- * assertion A2 reports.  Only active with RD_DEBUG_ASSERTS. */
-#define RD_CONSERVATION_TOLERANCE 1e-8
+/* DGELSD makes the authoritative numerical-rank decision.  Its machine-
+ * precision default preserves every resolvable direction and therefore the
+ * consistent equation S^- x = rhs.  A sensitivity scan found that forcing
+ * rcond=1e-12 truncated resolvable fourth singular values and enlarged the raw
+ * conservation defect; see the 2026-07-29 development-log entry. */
+#ifndef RD_SVD_RCOND
+#define RD_SVD_RCOND -1.0
+#endif
+
+/* Safety factor for assertion A2's forward round-off bound.  The scale passed
+ * to the assertion is built from absolute pre-cancellation matrix-vector
+ * products, not from the possibly vanishing element residual. */
+#define RD_CONSERVATION_ROUNDOFF_FACTOR 4096.0
 
 static lapack_int mat_inv(double *A, unsigned n);
 static lapack_int solve_system(int n, double *A, double *b);
@@ -112,10 +121,13 @@ static int rd_compare_particle_id(const void *a, const void *b)
 /* Per-call diagnostics for the upwind system solve (item A4 of the report). */
 static long long RD_stat_elements;         /* elements whose residual was evaluated */
 static long long RD_stat_pinv_fallback;    /* elements that needed the pseudo-inverse */
-static double RD_stat_min_pivot_ratio;     /* smallest |U_nn|/|U_11| seen */
-static double RD_stat_max_cons_defect_abs; /* largest pre-rebalance conservation defect, absolute */
+static long long RD_stat_exact_singular;   /* LU factorizations with an exactly singular pivot */
+static lapack_int RD_stat_min_svd_rank;    /* smallest numerical rank returned by DGELSD */
+static long long RD_stat_svd_rank_count[5]; /* DGELSD calls returning each rank 0,...,4 */
+static double RD_stat_min_pivot_ratio;     /* smallest min|diag(U)|/max|diag(U)| seen */
+static double RD_stat_max_cons_defect_abs; /* largest raw conservation defect, absolute */
 static double RD_stat_max_phi;             /* largest |phi^T| seen, for context on the absolute figure */
-static double RD_stat_ever_max_rel;        /* high-water mark across calls; NOT reset per call */
+static double RD_stat_ever_max_cons_defect_abs; /* high-water mark across calls; NOT reset per call */
 static double RD_stat_min_dt_extrap;       /* smallest dt_Extrapolation seen this call */
 static double RD_stat_max_dt_extrap;       /* largest dt_Extrapolation seen this call */
 
@@ -123,6 +135,10 @@ static void rd_reset_solver_statistics(void)
 {
   RD_stat_elements        = 0;
   RD_stat_pinv_fallback   = 0;
+  RD_stat_exact_singular  = 0;
+  RD_stat_min_svd_rank    = 5; /* sentinel: no DGELSD call in this solver pass */
+  for(int rank = 0; rank <= 4; rank++)
+    RD_stat_svd_rank_count[rank] = 0;
   RD_stat_min_pivot_ratio     = 1.0;
   RD_stat_max_cons_defect_abs = 0.0;
   RD_stat_max_phi             = 0.0;
@@ -175,15 +191,17 @@ static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapa
 
   if(info != 0)
     {
-      use_pseudo_inverse = 1; /* exactly singular pivot */
+      use_pseudo_inverse          = 1; /* exactly singular pivot */
+      RD_stat_exact_singular++;
+      RD_stat_min_pivot_ratio = 0.0;
     }
   else
     {
-      /* Partial pivoting orders the pivots by magnitude, so |U_nn|/|U_11| is a
-       * cheap scale-free rank proxy.  A backward-stable LU can return a small
-       * residual while producing a solution whose null-space component is
-       * enormous; that component is annihilated by K_i^+ only in exact
-       * arithmetic, so a near-singular factorisation must not be used. */
+      /* The spread of the diagonal pivots of U is a cheap scale-free trigger,
+       * not a condition-number estimate and not the authoritative rank test.
+       * A backward-stable LU can return a small residual while producing a
+       * solution whose near-null-space component is enormous, so DGELSD is
+       * asked to determine the numerical rank when this proxy is small. */
       double pivot_max = fabs(A[0]);
       double pivot_min = fabs(A[0]);
 
@@ -199,7 +217,7 @@ static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapa
       if(ratio < RD_stat_min_pivot_ratio)
         RD_stat_min_pivot_ratio = ratio;
 
-      if(!(ratio >= RD_PIVOT_RATIO_TOLERANCE))
+      if(!(ratio >= RD_LU_FALLBACK_PIVOT_RATIO))
         use_pseudo_inverse = 1;
     }
 #endif /* #ifdef RD_ALWAYS_PSEUDOINVERSE */
@@ -207,81 +225,78 @@ static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapa
   if(!use_pseudo_inverse)
     return LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', 4, nrhs, A, 4, ipiv, rhs, nrhs);
 
-  /* Minimum-norm least-squares (Moore-Penrose) solution.  rcond = -1 selects
-   * machine precision as the singular-value cut-off. */
+  /* Minimum-norm least-squares solution.  RD_SVD_RCOND=-1 asks DGELSD to use
+   * its machine-precision cut-off.  The LU threshold above selects the solver;
+   * it must not also discard a resolvable singular direction. */
   double singular_values[4];
   lapack_int rank;
 
   memcpy(A, &S[0][0], sizeof(A));
-  info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 4, 4, nrhs, A, 4, rhs, nrhs, singular_values, -1.0, &rank);
+  info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 4, 4, nrhs, A, 4, rhs, nrhs, singular_values, RD_SVD_RCOND, &rank);
 
   RD_stat_pinv_fallback++;
+  if(info == 0)
+    {
+      if(rank < RD_stat_min_svd_rank)
+        RD_stat_min_svd_rank = rank;
+      if(rank >= 0 && rank <= 4)
+        RD_stat_svd_rank_count[rank]++;
+    }
 
   return info;
 }
 
-/*! \brief Enforce  sum_{i in T} phi_i = phi^T  exactly.
+/*! \brief Check the raw identity sum_{i in T} phi_i = phi^T.
  *
- *  Both the LDA and the N distribution satisfy this identity in exact
- *  arithmetic (see report section 1), so the correction applied here is pure
- *  round-off and never changes the scheme.  Splitting it equally over the
- *  DIMS+1 vertices is the only isotropic choice, and it coincides with the
- *  centred distribution phi_i = phi^T/(d+1), which is the correct fallback in
- *  the subspace where upwinding carries no directional information.
+ *  LDA, N, and therefore B satisfy this identity without a correction.  This
+ *  routine deliberately never modifies flux: an excessive defect must expose
+ *  a broken solve, distribution, or data path instead of being hidden by a
+ *  conservation rebalance.
  *
- *  \param[in,out] flux Distributed residuals, flux[variable][vertex].
+ *  \param[in] flux Distributed residuals, flux[variable][vertex].
  *  \param[in] Phi Element residual phi^T.
- *
- *  \return Relative conservation defect measured before the correction.
+ *  \param[in] roundoff_scale Maximum, over the four equations, of |phi^T| plus
+ *  the absolute matrix-vector products accumulated before cancellation.
  */
-static void rd_enforce_conservation(double flux[4][3], const double Phi[4], int triangle_index, const char *label)
+static void rd_check_conservation(const double flux[4][3], const double Phi[4], double roundoff_scale, int triangle_index,
+                                  const char *label)
 {
-  double defect = 0.0, scale = 0.0, phi_max = 0.0;
-  double sum_before[4];
+  double defect = 0.0, phi_max = 0.0;
+  double sum_flux[4];
 
   for(int k = 0; k < 4; k++)
     {
-      sum_before[k] = flux[k][0] + flux[k][1] + flux[k][2];
+      sum_flux[k] = flux[k][0] + flux[k][1] + flux[k][2];
 
-      defect  = dmax(defect, fabs(Phi[k] - sum_before[k]));
+      defect  = dmax(defect, fabs(Phi[k] - sum_flux[k]));
       phi_max = dmax(phi_max, fabs(Phi[k]));
-      scale   = dmax(scale, fabs(Phi[k]));
-      scale   = dmax(scale, dmax(fabs(flux[k][0]), dmax(fabs(flux[k][1]), fabs(flux[k][2]))));
     }
-
-  /* Do NOT normalise by the element's own magnitude. In a quiet region the
-   * exact answer is phi^T = 0, every quantity is at machine epsilon, and such a
-   * ratio is round-off over round-off: it saturates near its algebraic maximum
-   * of 4 and reports a catastrophe where nothing is wrong. (That false alarm
-   * cost a full investigation once; see dev_log/regularize_matrix_debug_report.md.)
-   * The absolute defect is the meaningful quantity, and it is put in context at
-   * report time by dividing by the largest |phi^T| in the same call. */
-  (void)scale;
 
   RD_stat_max_cons_defect_abs = dmax(RD_stat_max_cons_defect_abs, defect);
   RD_stat_max_phi             = dmax(RD_stat_max_phi, phi_max);
 
 #ifdef RD_DEBUG_ASSERTS
-  if(defect > RD_stat_ever_max_rel)
+  if(defect > RD_stat_ever_max_cons_defect_abs)
     {
-      RD_stat_ever_max_rel = defect;
+      RD_stat_ever_max_cons_defect_abs = defect;
 
-      printf("RD-WORST task=%d %s triangle=%d abs=%.3e |phi^T|max=%.3e\n", ThisTask, label, triangle_index, defect,
-             phi_max);
+      printf("RD-WORST task=%d %s triangle=%d abs=%.3e |phi^T|max=%.3e roundoff_scale=%.3e\n", ThisTask, label,
+             triangle_index, defect, phi_max, roundoff_scale);
       for(int k = 0; k < 4; k++)
         printf("           k=%d  phi^T=% .6e  phi_0=% .6e  phi_1=% .6e  phi_2=% .6e  sum=% .6e  diff=% .3e\n", k, Phi[k],
-               flux[k][0], flux[k][1], flux[k][2], sum_before[k], Phi[k] - sum_before[k]);
+               flux[k][0], flux[k][1], flux[k][2], sum_flux[k], Phi[k] - sum_flux[k]);
     }
-#endif
 
-  for(int k = 0; k < 4; k++)
+  double tolerance = RD_CONSERVATION_ROUNDOFF_FACTOR * DBL_EPSILON * roundoff_scale;
+  if(defect > tolerance)
     {
-      double correction = (Phi[k] - sum_before[k]) / (DIMS + 1);
-
-      flux[k][0] += correction;
-      flux[k][1] += correction;
-      flux[k][2] += correction;
+      printf("RD assertion A2 failed: task=%d %s triangle=%d defect=%.17g tolerance=%.17g roundoff_scale=%.17g\n",
+             ThisTask, label, triangle_index, defect, tolerance, roundoff_scale);
+      terminate_program("RD assertion A2: raw sum_i phi_i != phi^T within round-off");
     }
+#else
+  (void)roundoff_scale;
+#endif
 }
 
 #ifdef RD_DEBUG_ASSERTS
@@ -1062,10 +1077,16 @@ void compute_residuals(tessellation *T)
        * same operator as beta_i^{LDA,T} phi^T = -K_i^+ (S^-)^-1 phi^T, but it
        * never forms the inverse, so it stays well defined when S^- is
        * singular. */
+      double LDA_roundoff_scale = 0.0;
       for(k = 0; k < 4; k++)
         {
+          double equation_scale = fabs(Phi[k]);
+
           for(j = 0; j < 3; j++)
             {
+              for(p = 0; p < 4; p++)
+                equation_scale += fabs(Kmatrix[k][p][j][kplus]) * fabs(X_lda[p]);
+
               double flux_lda = -1.0 * (Kmatrix[k][0][j][kplus] * X_lda[0] + Kmatrix[k][1][j][kplus] * X_lda[1] +
                                         Kmatrix[k][2][j][kplus] * X_lda[2] + Kmatrix[k][3][j][kplus] * X_lda[3]);
 #ifdef LDA_SCHEME
@@ -1074,15 +1095,14 @@ void compute_residuals(tessellation *T)
               Flux_LDA[k][j] = flux_lda;
 #endif
             }
+
+          LDA_roundoff_scale = dmax(LDA_roundoff_scale, equation_scale);
         }
 
-      /* Restore sum_i phi_i = phi^T to machine precision.  Must happen before
-       * any blending, because the B blend is conservative only if both of its
-       * inputs already are. */
 #ifdef LDA_SCHEME
-      rd_enforce_conservation(Flux_RD, Phi, thistask_triangles[i], "LDA");
+      rd_check_conservation(Flux_RD, Phi, LDA_roundoff_scale, thistask_triangles[i], "LDA");
 #else
-      rd_enforce_conservation(Flux_LDA, Phi, thistask_triangles[i], "LDA");
+      rd_check_conservation(Flux_LDA, Phi, LDA_roundoff_scale, thistask_triangles[i], "LDA");
 #endif
 
 #endif  // LDA scheme or B scheme
@@ -1090,6 +1110,7 @@ void compute_residuals(tessellation *T)
 #if(defined(N_SCHEME) || defined(B_SCHEME))
 
       double Bracket[4][3];
+      double N_roundoff_scale = 0.0;
 
       for(k = 0; k < 4; k++)
         {
@@ -1101,8 +1122,14 @@ void compute_residuals(tessellation *T)
 
       for(k = 0; k < 4; k++)
         {
+          double equation_scale = fabs(Phi[k]);
+
           for(j = 0; j < 3; j++)
             {
+              for(p = 0; p < 4; p++)
+                equation_scale +=
+                    fabs(Kmatrix[k][p][j][kplus]) * (fabs(U_hat[p][j]) + fabs(Y_in[p]));
+
 #ifdef N_SCHEME
               Flux_RD[k][j] = Kmatrix[k][0][j][kplus] * Bracket[0][j] + Kmatrix[k][1][j][kplus] * Bracket[1][j] +
                               Kmatrix[k][2][j][kplus] * Bracket[2][j] + Kmatrix[k][3][j][kplus] * Bracket[3][j];
@@ -1118,12 +1145,14 @@ void compute_residuals(tessellation *T)
               //                              Kmatrix[k][2][j][kplus] * UminusX[2][j] + Kmatrix[k][3][j][kplus] * UminusX[3][j];
               // #endif
             }
+
+          N_roundoff_scale = dmax(N_roundoff_scale, equation_scale);
         }
 
 #ifdef N_SCHEME
-      rd_enforce_conservation(Flux_RD, Phi, thistask_triangles[i], "N");
+      rd_check_conservation(Flux_RD, Phi, N_roundoff_scale, thistask_triangles[i], "N");
 #else
-      rd_enforce_conservation(Flux_N, Phi, thistask_triangles[i], "N");
+      rd_check_conservation(Flux_N, Phi, N_roundoff_scale, thistask_triangles[i], "N");
 #endif
 
 #endif  // N scheme or B scheme
@@ -1131,6 +1160,7 @@ void compute_residuals(tessellation *T)
 #ifdef B_SCHEME
       double Sum_Flux_N[4];
       double Theta_E[4];
+      double B_roundoff_scale = 0.0;
 
       for(k = 0; k < 4; k++)
         {
@@ -1143,37 +1173,23 @@ void compute_residuals(tessellation *T)
             {
               Theta_E[k] = dmin(1.0, fabs(Phi[k]) / Sum_Flux_N[k]);
             }
+
+          double equation_scale = fabs(Phi[k]);
+          for(j = 0; j < 3; j++)
+            equation_scale +=
+                fabs(Theta_E[k] * Flux_N[k][j]) + fabs((1.0 - Theta_E[k]) * Flux_LDA[k][j]);
+
           Flux_RD[k][0] = Theta_E[k] * Flux_N[k][0] + (1.0 - Theta_E[k]) * Flux_LDA[k][0];
           Flux_RD[k][1] = Theta_E[k] * Flux_N[k][1] + (1.0 - Theta_E[k]) * Flux_LDA[k][1];
           Flux_RD[k][2] = Theta_E[k] * Flux_N[k][2] + (1.0 - Theta_E[k]) * Flux_LDA[k][2];
+
+          B_roundoff_scale = dmax(B_roundoff_scale, equation_scale);
         }
 
+      B_roundoff_scale = dmax(B_roundoff_scale, dmax(LDA_roundoff_scale, N_roundoff_scale));
+      rd_check_conservation(Flux_RD, Phi, B_roundoff_scale, thistask_triangles[i], "B");
+
 #endif  // B scheme
-
-#ifdef RD_DEBUG_ASSERTS
-      /* Assertion A2: the final distribution must be conservative.  After
-       * rd_enforce_conservation() this is exact by construction, so a failure
-       * here means the blending or an indexing step broke the identity. */
-      {
-        double residual_defect = 0.0, residual_scale = 0.0;
-
-        for(k = 0; k < 4; k++)
-          {
-            double sum = Flux_RD[k][0] + Flux_RD[k][1] + Flux_RD[k][2];
-
-            residual_defect = dmax(residual_defect, fabs(Phi[k] - sum));
-            residual_scale  = dmax(residual_scale, fabs(Phi[k]));
-            residual_scale  = dmax(residual_scale, dmax(fabs(Flux_RD[k][0]), dmax(fabs(Flux_RD[k][1]), fabs(Flux_RD[k][2]))));
-          }
-
-        if(residual_scale > 0.0 && residual_defect > RD_CONSERVATION_TOLERANCE * residual_scale)
-          {
-            printf("RD assertion A2 failed: task=%d triangle=%d defect=%g scale=%g ratio=%g\n", ThisTask,
-                   thistask_triangles[i], residual_defect, residual_scale, residual_defect / residual_scale);
-            terminate_program("RD assertion A2: sum_i phi_i != phi^T");
-          }
-      }
-#endif /* #ifdef RD_DEBUG_ASSERTS */
 
       /*use residuals to update fluid state of local points or export to other tasks*/
 
@@ -1220,26 +1236,31 @@ void compute_residuals(tessellation *T)
 
 #ifdef RD_DEBUG_ASSERTS
   /* Item A4: instrumentation, not an assertion.  Reports how often the
-   * upwind system is rank deficient and how large the pre-rebalance
-   * conservation defect was. */
+   * upwind system used DGELSD, how often LU found an exact singularity, the
+   * smallest DGELSD rank, and the largest raw conservation defect. */
   {
-    long long stat_counts[2] = {RD_stat_elements, RD_stat_pinv_fallback};
-    long long stat_totals[2];
+    long long stat_counts[4] = {RD_stat_elements, RD_stat_pinv_fallback, RD_stat_exact_singular, RD_stat_min_svd_rank};
+    long long stat_totals[3], stat_min_rank;
+    long long stat_rank_counts[5];
     double stat_mins[2] = {RD_stat_min_pivot_ratio, RD_stat_min_dt_extrap};
     double stat_maxs[3] = {RD_stat_max_cons_defect_abs, RD_stat_max_dt_extrap, RD_stat_max_phi};
     double stat_min_out[2], stat_max_out[3];
 
-    MPI_Reduce(stat_counts, stat_totals, 2, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(stat_counts, stat_totals, 3, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&stat_counts[3], &stat_min_rank, 1, MPI_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(RD_stat_svd_rank_count, stat_rank_counts, 5, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(stat_mins, stat_min_out, 2, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     MPI_Reduce(stat_maxs, stat_max_out, 3, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if(ThisTask == 0)
       printf(
-          "RD-DIAG time=%.8g elements=%lld pseudo_inverse=%lld (%.3g%%) min_pivot_ratio=%.3e cons_defect_abs=%.3e "
-          "max_phi=%.3e cons_defect_rel=%.3e dt_extrap=[%.6e,%.6e]\n",
+          "RD-DIAG time=%.8g elements=%lld svd_fallback=%lld (%.3g%%) exact_singular=%lld "
+          "svd_rcond=%.3e rank_counts=[%lld,%lld,%lld,%lld,%lld] min_svd_rank=%lld "
+          "min_pivot_ratio=%.3e cons_defect_abs=%.3e max_phi=%.3e cons_defect_rel=%.3e dt_extrap=[%.6e,%.6e]\n",
           All.Time, stat_totals[0], stat_totals[1],
-          (stat_totals[0] > 0) ? 100.0 * (double)stat_totals[1] / (double)stat_totals[0] : 0.0, stat_min_out[0],
-          stat_max_out[0], stat_max_out[2],
+          (stat_totals[0] > 0) ? 100.0 * (double)stat_totals[1] / (double)stat_totals[0] : 0.0, stat_totals[2],
+          (double)RD_SVD_RCOND, stat_rank_counts[0], stat_rank_counts[1], stat_rank_counts[2], stat_rank_counts[3],
+          stat_rank_counts[4], (stat_totals[1] > 0) ? stat_min_rank : -1, stat_min_out[0], stat_max_out[0], stat_max_out[2],
           (stat_max_out[2] > 0.0) ? stat_max_out[0] / stat_max_out[2] : 0.0, stat_min_out[1], stat_max_out[1]);
   }
 #endif /* #ifdef RD_DEBUG_ASSERTS */

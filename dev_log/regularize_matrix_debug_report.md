@@ -300,60 +300,66 @@ explicit inverse and then built the full `BetaLDA[4][4][3]` tensor.
 Implementation (`rd_solve_upwind_system()`):
 
 1. `LAPACKE_dgetrf` on a copy of `S^-`.
-2. If `info != 0`, or if the pivot ratio `|U_nn| / |U_11|` falls below
-   `RD_PIVOT_RATIO_TOLERANCE` (`1e-12`), fall back to `LAPACKE_dgelsd` with
-   `rcond = -1`, which returns the minimum-norm least-squares solution.
-3. Otherwise `LAPACKE_dgetrs` with `nrhs = 2`.
+2. If `info != 0`, or if `min|diag(U)| / max|diag(U)|` falls below
+   `RD_LU_FALLBACK_PIVOT_RATIO` (`1e-12`), fall back to `LAPACKE_dgelsd`.
+   The pivot ratio is only a cheap trigger, not a condition-number estimate.
+3. `DGELSD` uses `rcond = -1`, its machine-precision cutoff, and makes the
+   authoritative numerical-rank decision.
+4. Otherwise `LAPACKE_dgetrs` with `nrhs = 2`.
 
-The pivot-ratio guard matters. A backward-stable LU returns a *small residual*
-even for a nearly singular matrix, but the corresponding solution can have an
-enormous null-space component. That component is annihilated by `K_i^+` only in
-exact arithmetic (Lemma 2), so a near-singular factorisation must not be used
-even though its residual looks acceptable.
+The LU trigger and the SVD cutoff intentionally answer different questions.
+The former asks when LU should be replaced by a more reliable solver; it does
+not declare the matrix rank deficient. The latter asks whether a singular
+direction is numerically resolvable. A controlled `rcond` scan (section 7)
+showed that forcing both thresholds to `1e-12` truncates resolvable fourth
+singular values, changes `S^- x = rhs` into a non-zero-residual least-squares
+problem, and enlarges the raw conservation defect by one to two orders of
+magnitude. Switching from LU to SVD is therefore not a no-op even when DGELSD
+reports full rank.
 
-### 4.2 Explicit conservation rebalance
+`RD_SVD_RCOND` can be overridden at compile time for sensitivity tests; its
+production default is `-1.0`. A direct condition estimator such as `dgecon`
+would be stronger than the pivot heuristic and remains a possible later
+refinement.
 
-> **SUPERSEDED.** Codex and Kimi reviewed `07f264a` and judged the *correction*
-> below to be unnecessary and, as engineering, capable of masking defects. That
-> is accepted: the measurements in section 7 show the correction is of size
-> `1.4e-17` (LDA) to `1.8e-15` (N, B) against `max|phi^T| = 3.3e-2`, so the
-> argument made here — that it never changes anything — is itself the argument
-> for not having it. It is also redundant with assertion A2, and keeping it
-> weakens A2 by guaranteeing that the check it performs always passes.
->
-> The *measurement* stays and A2 is promoted to a hard assertion; only the
-> correction goes. See the log entry
-> "2026-07-29: review by Codex and Kimi". This section is retained as written
-> so that the reasoning being overturned is on the record, and should be
-> rewritten once the change is made.
+### 4.2 Raw conservation assertion; no rebalance
+
+The LDA and N conservation identities in section 1 are exact properties of the
+distribution. B is conservative because it blends two distributions whose
+vertex sums are both `phi^T`. No correction belongs in the scheme.
+
+`rd_enforce_conservation()` was therefore replaced by
+`rd_check_conservation()`. It computes and records the raw defect
 
 ```
-     phi_i^T  <-  phi_i^T  +  (1/(d+1)) ( phi^T  -  sum_{j in T} phi_j^T )
+     delta = max_k |phi_k^T - sum_i phi_{i,k}^T|
 ```
 
-Two justifications:
+and never modifies a distributed residual. Under `RD_DEBUG_ASSERTS`, A2
+terminates if this raw defect exceeds a forward round-off bound. The bound is
+based on the absolute matrix-vector products *before* cancellation:
 
-- *Exactness.* `sum_i phi_i^T = phi^T` then holds to machine precision by
-  construction, independently of what the linear solver did.
-- *Harmlessness and correctness of the choice.* By the conservation proofs in
-  section 1, the correction is identically zero in exact arithmetic; in floating
-  point it is `O( kappa(S^-) * eps_mach * ||phi^T|| )`. It therefore never
-  changes the scheme, it only removes round-off. Splitting it equally over the
-  `d+1` vertices is the unique isotropic choice, and it coincides with the
-  centred distribution `phi_i^T = phi^T/(d+1)` — the correct fallback in the
-  subspace where upwinding provides no directional information.
+```
+     scale_LDA = max_k ( |phi_k^T| + sum_{i,l} |K^+_{kli}| |x_l| )
+     scale_N   = max_k ( |phi_k^T| + sum_{i,l} |K^+_{kli}| (|U_{l,i}|+|y_l|) )
+     tolerance = 4096 eps_machine scale
+```
 
-The rebalance is applied to `phi^{N,T}` and `phi^{LDA,T}` **separately, before**
-the B-scheme blend, because the blend is conservative only if both inputs
-already are.
+Using `|U|+|y|`, rather than the already-cancelled `|U-y|`, is essential in
+quiet elements: `U-y` can be at machine epsilon even though it was formed by
+subtracting two order-unity states. The B check also includes the LDA and N
+operation scales plus the absolute blend operands.
+
+This makes A2 an independent assertion again. A broken solve, distribution,
+index or MPI path now terminates instead of being silently repaired.
 
 ### 4.3 Code changes in `src/hydro/residual_distribution_solver.c`
 
 | change | detail |
 | --- | --- |
 | removed | `needs_regularization()`, `regularize_matrix()`, `THRESHOLD`, `REGULARIZATION_CONSTANT`, and the `regularize_matrix()` + `mat_inv()` call site |
-| added | `rd_solve_upwind_system()` — LU with pivot-ratio guard, `dgelsd` minimum-norm fallback, `nrhs = 2` |
-| added | `rd_enforce_conservation()` — isotropic rebalance, returns the pre-correction relative defect |
+| added | `rd_solve_upwind_system()` — LU with a `1e-12` pivot-ratio solver-selection trigger, then `dgelsd` with its machine-precision numerical-rank cutoff, `nrhs = 2` |
+| added | `rd_check_conservation()` — measures and asserts the raw conservation defect without modifying the distribution |
 | rewrote | LDA branch: `phi_i = -K_i^+ x` directly; the `BetaLDA[4][4][3]` tensor is gone |
 | rewrote | N branch: `Bracket[k][j] = Uhat[k][j] - y[k]`; `KU_Sum` folded into the shared right-hand side |
 | added | `rd_assert_K_sum_vanishes()` (assertion A1) and the in-loop conservation assertion A2, both under `RD_DEBUG_ASSERTS` |
@@ -385,18 +391,20 @@ happens. All of them compile out unless `RD_DEBUG_ASSERTS` is set.
 | id | check | catches | kind |
 | --- | --- | --- | --- |
 | A1 | `\|\|sum_i K_i\|\|_inf <= tau max_i \|\|K_i\|\|_inf` | flipped triangle orientation, inconsistent normal/magnitude convention, faulty eigenvalue splitting | assertion |
-| A2 | `\|\|sum_i phi_i^T - phi^T\|\| <= tau \|\|phi^T\|\|` | any break in the distribution chain; measured both before and after the rebalance | assertion |
-| A3 | signed area `> 0` | triangle orientation, the precondition for `K_i` using inward normals | assertion — **not yet implemented**, deferred to the Heron-to-cross-product change |
-| A4 | `pseudo_inverse` count, `min_pivot_ratio`, `max_cons_defect` | how often the upwind system is actually rank deficient | instrumentation, not a pass/fail check |
+| A2 | raw `\|\|sum_i phi_i^T - phi^T\|\|` bounded by a pre-cancellation floating-point scale | any break in the solve or distribution chain; no correction is applied | assertion |
+| A3 | signed area `> 0` | triangle orientation, the precondition for `K_i` using inward normals | assertion |
+| A4 | SVD-fallback count, exact-singular count, SVD rank histogram, `rcond`, `min_pivot_ratio`, raw conservation defect | separates “LU was not trusted” from “SVD found a deficient rank” | instrumentation, not a pass/fail check |
 
 A4 emits one line per `compute_residuals()` call:
 
 ```
-RD-DIAG time=... elements=... pseudo_inverse=... (...%) min_pivot_ratio=... max_cons_defect=...
+RD-DIAG time=... elements=... svd_fallback=... exact_singular=...
+        svd_rcond=... rank_counts=[n0,n1,n2,n3,n4] min_svd_rank=...
+        min_pivot_ratio=... cons_defect_abs=...
 ```
 
-`max_cons_defect` is the *pre-rebalance* relative defect, so it is the direct
-measure of what this change bought.
+`cons_defect_abs` is the unmodified raw defect and is the direct measure of
+whether the mathematical conservation identity still holds numerically.
 
 ---
 
@@ -404,8 +412,8 @@ measure of what this change bought.
 
 1. **Accuracy of the split when `S^-` is near-singular but not singular.**
    At `|u_n - v_n| / c ~ 1e-8`, `kappa(S^-) ~ 1e8` and `x` loses roughly eight
-   significant digits. A2 plus the rebalance keep *conservation* at machine
-   precision; what degrades is the *accuracy* of the split. Since `phi^T -> 0`
+   significant digits. A2 now exposes any resulting conservation defect
+   directly; what may also degrade is the *accuracy* of the split. Since `phi^T -> 0`
    as the element state becomes uniform, the absolute error stays bounded. This
    belongs to A4 measurement, not to a fix.
 
@@ -440,7 +448,7 @@ timesteps, double precision) with system LAPACKE, and run on one rank on
 `IC_gresho_v1e-8_random48`. Totals were recomputed from the snapshots, because
 `energy.txt` is written with `%g` and only carries six significant digits.
 
-| | `ebe1be2` (regularised inverse) | this change (solve + rebalance) |
+| | `ebe1be2` (regularised inverse) | `07f264a` (solve + historical rebalance) |
 | --- | --- | --- |
 | gas-mass drift at `t = 0.5` | `-2.198e-14` | `-2.220e-16` |
 | gas-mass drift at `t = 1.0` | `-2.276e-14` | `-8.882e-16` |
@@ -470,9 +478,9 @@ so the solutions themselves are not measurably different here.
     global maximum pre-rebalance defect     : 1.64e-14
 ```
 
-The LU path was therefore always taken here, and it already conserves to machine
-precision on its own — the rebalance corrects nothing beyond round-off, exactly
-as section 4.2 predicts.
+The LU path was therefore always taken here, and it already conserved to
+machine precision on its own. This historical measurement was one reason the
+later review removed the redundant rebalance.
 
 ### Exercising the rank-deficient path
 
@@ -706,8 +714,8 @@ worth recording:
 
 So N is structurally more delicate than LDA at the same conditioning, and its
 absolute defect is about a hundred times larger — `1.8e-15` against `1.4e-17`.
-Both are machine noise. The conclusion of section 4.2 stands for both schemes:
-the rebalance never changes the scheme, it only removes round-off.
+Both are machine noise. This is why the later review removed the rebalance:
+the raw defect is the useful diagnostic, while correcting it only weakens A2.
 
 The metric was changed accordingly. `RD-DIAG` now reports `cons_defect_abs`
 together with `max_phi` from the same call, and derives the relative figure as
@@ -715,6 +723,81 @@ together with `max_phi` from the same call, and derives the relative figure as
 elements. `RD-WORST` now triggers on the absolute defect. Note that in the
 uniform case the relative figure is still meaningless, because `max_phi` is
 itself machine zero there — read the absolute number for that test.
+
+### 2026-07-29 verification after removing rebalance (provisional `rcond = 1e-12`)
+
+All LDA, N and B configurations compile against system LAPACKE. A B-scheme
+Gresho `v0_random48` run exercises both pure distributions and the blend:
+
+- one rank and four ranks both reach `t = 0.01` without A2 firing;
+- at `t = 0`, 2108/4610 elements use DGELSD, all with numerical rank 3;
+- the run subsequently traverses pivot ratios from below machine precision
+  through the previously uncovered `2e-16`--`1e-12` band;
+- raw conservation defects peak around `1.2e-13` in this short run and remain
+  within the pre-cancellation forward-error bound;
+- snapshot mass drift at `t = 0.01` is `-4.77e-15`, momentum drift is below
+  `1.5e-16`, and total-energy drift is zero at printed double precision;
+- matching one- and four-rank snapshots by particle ID gives maximum relative
+  field differences of `2.7e-15` or smaller.
+
+A 256-cell uniform static B run reaches `t = 0.005` with every solve taking
+DGELSD at rank 3. With no residual correction:
+
+```
+mass change             = 0
+max density change      = 8.88e-16
+max velocity magnitude  = 6.29e-17
+max internal-U change   = 0
+```
+
+The raw `cons_defect_abs/max_phi` diagnostic is deliberately large in this
+case because both quantities are numerical zero. A2 instead uses the absolute
+pre-cancellation operation scale and correctly accepts defects of order
+`1e-15` without modifying the residual.
+
+### 2026-07-29 DGELSD cutoff sensitivity
+
+The preceding run established that the implementation survived
+`rcond = 1e-12`; it did not establish that this was the correct cutoff. A
+controlled scan held the LU fallback trigger at `1e-12` and varied only
+DGELSD's `rcond` over `-1`, `1e-14`, `1e-12`, and `1e-10`. Each one-rank
+B-scheme Gresho `v0_random48` run contained 128 residual calls and 590080
+element solves:
+
+| `rcond` | DGELSD rank 3 | DGELSD rank 4 | max raw defect | mass drift |
+| --- | ---: | ---: | ---: | ---: |
+| `-1` | 18996 | 15676 | `5.25e-15` | `-1.11e-16` |
+| `1e-14` | 25331 | 9341 | `7.87e-15` | `-1.11e-16` |
+| `1e-12` | 34672 | 0 | `1.19e-13` | `-4.77e-15` |
+| `1e-10` | 34672 | 0 | `1.19e-13` | `-4.77e-15` |
+
+A second initial condition with a uniform `vx += 1e-11` boost directly places
+full-rank systems below the LU pivot trigger. Its 620 SVD calls all return rank
+4 for `rcond = -1` and `1e-14`, and all return rank 3 for `1e-12` and `1e-10`.
+The maximum raw defect rises from `1.69e-15` to `9.72e-14` when the fourth
+direction is truncated. A proposed `vx += 1e-5` test was also run, but its
+minimum pivot ratio is about `6e-8`; it correctly serves only as a no-fallback
+control.
+
+Four-rank repetitions reproduce the same distinction. For `v0`, the maximum
+raw defect is `6.17e-15` with DGELSD's default and `1.19e-13` with
+`rcond = 1e-12`; the two final internal-energy fields differ by `1.52e-12`.
+For `vx += 1e-11`, the corresponding defects are `2.23e-15` and `9.72e-14`.
+
+The conclusion is mathematical as well as empirical. For a near-singular but
+full-rank consistent system, imposing an unnecessarily large SVD cutoff
+changes an exact solve into a least-squares solve with a residual. Since the
+LDA conservation identity is the residual equation itself,
+
+```
+sum_i phi_i = S^- x = phi^T,
+```
+
+the resulting `O(rcond)` defect is expected, not round-off. The current policy
+therefore uses `1e-12` only to select SVD over LU and leaves the authoritative
+DGELSD rank cutoff at its machine-precision default (`rcond = -1`). Full
+details and field comparisons are in the development-log entry at
+2026-07-29 11:53:15 BST.
 
 ### Not yet verified
 - Behaviour with MKL rather than system LAPACKE. MKL was unavailable on the

@@ -1643,3 +1643,277 @@ Items 1 and 2 are assigned to Codex. Section 4.2 of
 `regularize_matrix_debug_report.md` currently argues *for* the rebalance and
 carries a note marking it superseded by this entry; it should be rewritten once
 the change is made.
+
+## 2026-07-29: remove conservation rebalance and make the numerical-rank policy consistent
+
+- Author: `gpt-5.6-sol high`
+- Change recorded: 2026-07-29 11:41:42 BST (+0100).
+- Implements the two items assigned in the preceding review.
+
+### 1. Conservation rebalance removed
+
+`rd_enforce_conservation()` has been replaced by
+`rd_check_conservation()`. The new routine never modifies `Flux_RD`,
+`Flux_LDA`, or `Flux_N`. The LDA, N and B distributions now enter the cell
+update exactly as computed by the scheme.
+
+The raw defect
+
+```
+max_k |phi_k^T - sum_i phi_{i,k}|
+```
+
+is still recorded in `RD-DIAG`. Under `RD_DEBUG_ASSERTS`, A2 is now evaluated
+on the raw distribution and terminates instead of repairing an excessive
+defect.
+
+The A2 scale is formed from the absolute matrix-vector products before
+cancellation:
+
+```
+LDA: |phi^T| + sum |K_i^+| |x|
+N:   |phi^T| + sum |K_i^+| (|U_i| + |y|)
+```
+
+and B includes both input scales plus the absolute blend operands. The
+tolerance is `4096 * DBL_EPSILON * scale`.
+
+The distinction between `|U|+|y|` and `|U-y|` was verified by a useful failed
+test. The first implementation scaled N with the already-cancelled bracket.
+On a quiet Gresho element, `U-y` was about `1e-15` although it came from
+subtracting order-unity states; A2 correctly fired on a `9.39e-17` defect
+against an incorrectly tiny `1.22e-27` bound. Using the pre-cancellation scale
+fixes the diagnostic without weakening it into a residual correction.
+
+### 2. LU/DGELSD rank thresholds unified
+
+The LU diagonal-pivot ratio remains a cheap trigger at
+`RD_PIVOT_RATIO_TOLERANCE = 1e-12`; it is no longer described as a condition
+estimate or as ordered pivots. When the trigger fires, DGELSD now receives
+
+```
+rcond = RD_PIVOT_RATIO_TOLERANCE
+```
+
+instead of `-1`. DGELSD therefore makes the authoritative singular-value rank
+decision using the same relative threshold, closing the previous
+machine-epsilon-to-`1e-12` gap.
+
+Diagnostics now distinguish:
+
+- the number of SVD fallbacks;
+- the number of exactly singular LU factorizations;
+- the minimum numerical rank returned by DGELSD;
+- the minimum LU pivot ratio.
+
+An exactly singular LU path records a zero pivot ratio rather than leaving the
+misleading initial value `1`.
+
+### 3. Build verification
+
+The LDA, N and B Gresho configurations were built sequentially against system
+LAPACKE. All three compile and link. Only the pre-existing warnings in AREPO
+and the previously noted unused RD variables remain.
+
+Sequential builds were used deliberately because `BUILD_DIR` isolation is
+still broken by the hardcoded generated-header include.
+
+### 4. Runtime verification
+
+#### B-scheme Gresho `v0_random48`
+
+This case exercises LDA, N and the blend in one binary and starts with a large
+rank-deficient region.
+
+- 1 rank and 4 ranks both reached `t = 0.01` without A2 firing.
+- At `t = 0`, 2108/4610 elements used DGELSD and returned rank 3.
+- The subsequent run traversed pivot ratios from below machine precision
+  through the previously untested `2e-16`--`1e-12` band.
+- The largest raw conservation defect in the short run was about `1.2e-13`;
+  it remained inside the pre-cancellation forward-error bound and was not
+  corrected.
+- Snapshot totals on one rank:
+
+  ```
+  mass drift      = -4.77e-15
+  momentum drift  <  1.5e-16 per component
+  energy drift    =  0 at double-precision recomputation
+  ```
+
+- Matching the 1-rank and 4-rank final snapshots by particle ID gave maximum
+  relative field differences no larger than `2.7e-15`.
+
+#### Uniform static medium, B scheme
+
+A 256-cell uniform run reached `t = 0.005`; every solve used DGELSD at rank 3.
+With no conservation correction:
+
+```
+mass change             = 0
+max density change      = 8.88e-16
+max velocity magnitude  = 6.29e-17
+max internal-U change   = 0
+```
+
+As expected, `cons_defect_abs/max_phi` is meaningless in this case because
+both numerator and denominator are numerical zero. The pre-cancellation A2
+scale accepts the order-`1e-15` raw defect while leaving the state and
+distribution untouched.
+
+### 5. Documentation
+
+`dev_log/regularize_matrix_debug_report.md` section 4 has been rewritten:
+
+- the obsolete rebalance argument is replaced by the implemented raw A2 check;
+- the LU trigger and DGELSD rank threshold are documented separately;
+- the assertion/diagnostic tables reflect the current code;
+- the new one-/four-rank and uniform results are recorded.
+
+### Status
+
+The two accepted changes are implemented and pass the local system-LAPACKE
+regressions. A compute-node MKL rerun and longer final-time regressions remain
+useful confirmation, but there is no longer a conservation rebalance in the
+numerical path and the previously inconsistent rank thresholds are closed.
+
+## 2026-07-29: DGELSD `rcond` sensitivity test revises the rank policy
+
+- Author: `gpt-5.6-sol high`
+- Change recorded: 2026-07-29 11:53:15 BST (+0100).
+- This entry tests, and supersedes, the preceding entry's provisional choice
+  `rcond = 1e-12`.
+
+### 1. Question and controlled comparison
+
+The LU pivot-ratio trigger was held fixed at `1e-12`. Only DGELSD's
+singular-value cutoff was varied:
+
+```
+rcond = -1       DGELSD machine-precision default
+rcond = 1e-14
+rcond = 1e-12    provisional production choice
+rcond = 1e-10
+```
+
+All binaries used the B scheme, a static random-48 Gresho mesh, equal
+timesteps, double precision, `RD_DEBUG_ASSERTS`, system LAPACKE, and
+`TimeMax = 0.01`. The test added a rank histogram to `RD-DIAG`, so “SVD was
+called” and “SVD discarded a direction” can be distinguished directly.
+
+Three background velocities were tested on otherwise identical HDF5 initial
+conditions:
+
+- `v0`, which begins with structurally rank-3 elements and later traverses the
+  near-singular band;
+- `vx += 1e-11`, chosen after measurement to put full-rank systems below the LU
+  trigger;
+- `vx += 1e-5`, retained as a negative control. Contrary to the earlier
+  estimate, its minimum pivot ratio is about `6e-8`, so it never calls DGELSD.
+
+### 2. One-rank results
+
+The following values aggregate 128 residual calls and 590080 element solves in
+each run. Rank counts include only the DGELSD fallback calls.
+
+#### Gresho `v0`
+
+| DGELSD `rcond` | rank 3 | rank 4 | max raw A2 defect | mass drift |
+| --- | ---: | ---: | ---: | ---: |
+| `-1` | 18996 | 15676 | `5.25e-15` | `-1.11e-16` |
+| `1e-14` | 25331 | 9341 | `7.87e-15` | `-1.11e-16` |
+| `1e-12` | 34672 | 0 | `1.19e-13` | `-4.77e-15` |
+| `1e-10` | 34672 | 0 | `1.19e-13` | `-4.77e-15` |
+
+Relative to `rcond = -1`, the `1e-14` final fields agree at approximately
+machine precision. With `rcond = 1e-12`, the maximum final differences are:
+
+```
+density          1.76e-13
+pressure         1.33e-14
+internal energy  1.53e-12
+velocity         2.00e-15
+mass             5.50e-17
+```
+
+The `1e-10` run is bitwise-equivalent to the `1e-12` result at the reported
+level because all fallback fourth singular values already lie below `1e-12`.
+
+#### Gresho with `vx += 1e-11`
+
+This is the direct test of a resolvable but near-singular fourth direction.
+There are 620 DGELSD calls and no exactly singular LU factorization:
+
+| DGELSD `rcond` | rank 3 | rank 4 | max raw A2 defect |
+| --- | ---: | ---: | ---: |
+| `-1` | 0 | 620 | `1.69e-15` |
+| `1e-14` | 0 | 620 | `1.69e-15` |
+| `1e-12` | 620 | 0 | `9.72e-14` |
+| `1e-10` | 620 | 0 | `9.72e-14` |
+
+Thus `1e-12` does not merely choose a safer solver. It deletes a singular
+direction that DGELSD can resolve. The resulting least-squares solution no
+longer satisfies the consistent equation `S^- x = rhs` to round-off, and the
+raw conservation identity worsens by roughly a factor of 58.
+
+The `vx += 1e-5` control takes the LU path in every element for every binary;
+all four final snapshots are identical. This also corrects the earlier
+prediction that a boost of order `1e-5` would probe the threshold band.
+
+All runs remain positive. The smallest final density is about `0.993785` and
+the smallest pressure about `5.00027`. Total momentum and energy drift remain
+at round-off, so this short test exposes a numerical-policy error rather than a
+macroscopic instability.
+
+### 3. Four-rank cross-check
+
+The `v0` and `vx += 1e-11` cases were repeated with four MPI ranks for
+`rcond = -1` and `1e-12`.
+
+- `v0`: maximum raw defect `6.17e-15` versus `1.19e-13`; maximum final
+  internal-energy difference `1.52e-12`.
+- `vx += 1e-11`: maximum raw defect `2.23e-15` versus `9.72e-14`; maximum
+  final internal-energy difference `7.11e-13`.
+- Rank decisions reproduce the one-rank pattern: the default retains the
+  resolvable fourth direction, while `1e-12` truncates every fallback solve.
+- No A2 assertion, negative density, negative pressure, or non-finite value was
+  observed.
+
+This does not validate the existing MPI triangle-responsibility algorithm; it
+only shows that the `rcond` conclusion is not a one-rank artefact.
+
+### 4. Revised numerical policy
+
+The proposed “unified threshold” conflated two different decisions:
+
+```
+LU pivot ratio < 1e-12:
+    LU is not trusted; use a backward-stable SVD solver
+
+DGELSD rcond:
+    decide whether a singular direction is numerically unresolvable
+```
+
+The first is a solver-selection heuristic. It need not, and based on these
+tests must not, force the second to discard the same direction. The previous
+“fallback is a no-op” wording was therefore incorrect: switching from LU to
+SVD is already meaningful even when DGELSD reports full rank.
+
+The production policy is now:
+
+- `RD_LU_FALLBACK_PIVOT_RATIO = 1e-12`;
+- `RD_SVD_RCOND = -1.0`, DGELSD's machine-precision rank cutoff;
+- DGELSD is the sole authoritative numerical-rank decision;
+- `RD_SVD_RCOND` remains compile-time overridable for sensitivity studies;
+- `RD-DIAG` reports `svd_rcond` and rank counts 0 through 4.
+
+The test override is registered in `defines_extra`. A no-fallback diagnostic
+now reports `min_svd_rank = -1` instead of the misleading value 4.
+
+### 5. Remaining validation
+
+This is strong evidence against `rcond = 1e-12`, but it is still a short
+B-scheme/static-mesh test. The retained machine-default policy should later be
+checked with MKL, long-time Gresho, the planned Yee-plus-boost convergence
+ladder, and eventually moving mesh/hierarchical timebins. None of those later
+tests justifies knowingly introducing an `O(rcond)` residual into the
+consistent element solve now.
