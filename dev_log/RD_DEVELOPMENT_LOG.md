@@ -3627,3 +3627,129 @@ testing.
 
 Not yet examined: whether the same recovery holds for N and B, and the 256
 resolution the baseline campaign has but this one does not.
+
+## 2026-07-30: Review of the GL+F1 RK2 path and the boosted-order attribution
+
+- Author: `Kimi K3`
+
+Code-level review of `e529da3` (GL+F1 total-residual RK2), `40a0bbb` (ghost
+`VelVertex` fix), `88a7b0d` (min-ID ownership) and the `rk2_nodal_v1`
+convergence results (`553a61e`), followed by an attempted experimental
+discrimination of the remaining order defect. The experiments were called off
+(cluster instability); the code changes made for them were fully reverted and
+are documented below for re-implementation. One of the three proposed suspects
+was nevertheless settled from existing output.
+
+### Verification of the implementation
+
+The corrector identity was re-derived independently. As implemented,
+
+```
+U^{n+1} = U* + (1/2) dU - (dt/|S_i|) sum_T [ T_i + (1/2) phi_i(U*) ],
+dU = U* - U^n = -(dt/|S_i|) sum_T phi_i(U^n).
+```
+
+`U* + (1/2) dU = U^n + (3/2) dU` looks one `dU` too many relative to the
+trapezoid. It is not: the temporal term carries the missing `-dU`, because by
+row-sum consistency of the mass distribution `sum_{T in i} T_i ~= |S_i|
+dU_i/dt` (exact for the lumped fallback), so the net coefficient is the
+correct `1/2`. At a discrete steady state `dU = 0` identically, so steady
+preservation is exact in both branches. Conservation of the F1 temporal term
+rests on `sum_i K_i^+ = -S^-` plus an exact LU solve; gating the F1 branch on
+`!used_svd` means the term is only used where the solve is exact, so
+conservation holds by construction, with the A2 check as backstop.
+
+The `40a0bbb` fix is confirmed correct in form: ghost `VelVertex` is filled
+with the true `SphP[].VelVertex`, not zeroed, so it remains valid under ALE.
+The root-cause analysis (mymalloc'd `tmpPrimExch` never zeroed, whole struct
+sent as `MPI_BYTE`, stock AREPO masked by the gradient exchange) is credible
+and the diagnostic trail (two self-corrections, both evidence-backed) is
+sound.
+
+### Suspect 1 settled: the lumped fallback never fires
+
+`f1_lumped` was extracted from the RD-RK2 lines of all six `rk2_nodal_v1`
+cases (n = 32/64/128, boost = 0/1, 128--512 steps each): **zero in every step
+of every case**. The rank-deficient-element lumped fallback contributes
+nothing to the measured order defect and is excluded as a suspect.
+
+### Objection: the "median-dual vs Voronoi volume" suspect does not exist here
+
+The attribution of the downward-drifting order (1.55 -> 1.31) to a conflict
+between median-dual distribution and Voronoi-volume updates is **incorrect for
+the RD path**. All three channels through which a Voronoi volume could enter
+are absent:
+
+- the update is in integrated form, `Mass += -dt * Flux_RD`
+  (`residual_distribution_solver.c:1557`); no division by any volume occurs
+  anywhere in the update;
+- `DualArea` is by construction `sum_T |T|/3` (`:539`), and density recovery
+  uses it: `Density = Mass/DualArea`;
+- the analysis norm weights by `volume = mass / density`
+  (`analyze_yee_boost.py:65`), which on this path is identically `DualArea`.
+
+Voronoi volumes enter neither the scheme nor the error norm. The suspect also
+cannot explain why the two schemes respond differently, since both share the
+same geometry and norm. The unjittered `boost = 1` run remains the right next
+experiment, but what it actually tests is **triangle quality and beta
+consistency**, not dual-versus-Voronoi; the interpretation in the previous
+entry should be corrected accordingly.
+
+### Proposed mechanism: beta-weighted temporal row sums
+
+The corrector identity above is exact only if, node by node,
+
+```
+sum_{T in i} T_i(dU) = |S_i| dU_i/dt .
+```
+
+With the F1 choice `T_i = beta_i^T (|T|/3) sum_j dU_j/dt` this splits into
+
+- a constant-field part: `gamma_i = sum_{T in i} beta_i^T |T| / |S_i|` must
+  equal 1. `beta_i^T = -K_i^+ (S^-)^{-1}` is solution-dependent upwind
+  weighting; per-element conservation (`sum_i beta_i^T = 1`) holds exactly,
+  but the per-node area-weighted sum has no reason to be 1 on an irregular
+  mesh. On a regular mesh, patch symmetry plausibly enforces it up to `O(h)`.
+- a variation part: `sum_T beta_i^T (|T|/3) sum_j (dU_j - dU_i)`, which is
+  `O(h)` for non-constant `dU` and vanishes at steady state.
+
+Both parts vanish identically when `dU = 0`, which is exactly the observed
+pattern: clean second order at `boost = 0`, degraded and drifting order at
+`boost = 1`. A down-drifting observed order is the signature of an
+`A h^2 + B h^p, p < 2` error decomposition, consistent with a first-order
+unsteady-only contaminant.
+
+**Predictions.** If unjittered `boost = 1` returns to order ~2, mesh-regularity
+via the two terms above is the cause. If it stays near 1.3, the F1
+distribution form itself is at fault; the discriminating variant is then to
+distribute the temporal term with the consistent P1 Galerkin matrix
+`m_ij = |T| (1 + delta_ij) / 12` (row sums exact by construction, a ~10-line
+change), and to re-check the literature definition of F1.
+
+### Work performed and reverted
+
+- Implemented `RD_DIAG_GAMMA_ROWSUM` (reverted): a passive fourth right-hand
+  side with unit target `(|T|,0,0,0)` measuring `beta_i^T |T|` per element,
+  per-node accumulators `RD_GammaAccum` / `RD_TnodAccum`, and an `RD-GAMMA`
+  line reporting max/mean `|gamma_i - 1|` and the relative actual-field
+  temporal defect. Exact on one rank (no ghost export path). Verified to
+  compile; binary remains at
+  `build_artifacts/yee-rk2-gamma/553a61edfe74-e5053e5b2702690c/Arepo`, but the
+  source changes (solver, `allvars.h`, `defines_extra`, config) were reverted
+  when the experiments were postponed.
+- Prepared but not submitted campaigns under
+  `/home/zwu/Hydro_data_analysis/Data_arepo_RD/yee_boost/`:
+  `rk2_unjit_v1` (unjittered, boost = 1, n = 32/64/128/256, TimeMax = 1) and
+  `rk2_jit256` (jittered n = 256), plus short `gamma_jit` / `gamma_unjit`
+  (TimeMax = 0.1) for the diagnostic. Note: `deterministic_jittered_mesh`
+  rejects `jitter_fraction = 0`; generating the unjittered ICs required a
+  one-line relaxation in `yee_boost_common.py` (also reverted).
+
+### Recommended priority
+
+1. Run `rk2_unjit_v1` (decisive, cheap; binary already exists).
+2. Re-apply the gamma diagnostic and run `gamma_jit` vs `gamma_unjit` on one
+   rank to measure `gamma_i` directly.
+3. If unjittered stays near 1.3: Galerkin-mass-matrix variant.
+4. Fill in n = 256 jittered, N-scheme RK2, and the full rank-invariance suite
+   (1/3/4/16, long runs) on the RK2 path.
