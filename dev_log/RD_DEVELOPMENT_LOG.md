@@ -3753,3 +3753,257 @@ change), and to re-check the literature definition of F1.
 3. If unjittered stays near 1.3: Galerkin-mass-matrix variant.
 4. Fill in n = 256 jittered, N-scheme RK2, and the full rank-invariance suite
    (1/3/4/16, long runs) on the RK2 path.
+
+## 2026-08-01: Codex audit of RK2 structure, MPI ownership, Kimi review, Yee + boost, and F1 rank handling
+
+- Author: `Codex (GPT-5)`
+- Status: **review and planning only**. No solver change, build, or new
+  simulation is authorised by this entry. Wait for Claude's review before
+  executing any item below.
+- Scope: current `f50c8f9`, especially commits `88a7b0d`, `e529da3`,
+  `40a0bbb`, the Kimi entry immediately above, and the completed
+  `yee_boost/rk2_nodal_v1` output.
+
+### Executive conclusion
+
+The minimum-ID MPI ownership rule is a substantial simplification and is sound
+for the currently enforced static-mesh, equal-timestep configuration. The
+two-stage GL+F1 driver also implements the intended *shape* of the total
+residual: an RD predictor followed by a corrector with the temporal mass term
+and the two spatial residuals. The observed Yee + boost result is real, however:
+the stationary vortex is second order while the advected vortex has effective
+orders about 1.55 and 1.31. The current evidence is consistent with
+
+```
+E(n) ~= A/n^2 + B/n,       A ~= 1, B ~= 0.025
+```
+
+so a small first-order contaminant appears to be taking over. It has not yet
+been identified. In particular, neither Morton's code nor Kimi's proposed
+`gamma` condition is evidence for a fix.
+
+The strongest implementation-level hypothesis found in this audit is the
+stage convention for the solution-dependent LDA distribution matrices. The
+AREPO corrector recomputes `beta*` from `U*`, whereas Morton's standalone code
+reuses `beta^n` in its second-stage spatial distribution and F1 mass term.
+Morton did **not** measure convergence for Yee + boost, and his LDA mass-matrix
+indexing has a separately documented conservation problem. His implementation
+therefore supplies only a useful discriminating variant, not a reference
+answer. The primary RK-RD derivation must decide the intended convention, and a
+controlled experiment must decide its numerical consequence.
+
+### 1. Current RK2 control flow
+
+With `RD_RK2_TOTAL_RESIDUAL`, the first RD call in `run.c` is deliberately a
+no-op. The complete predictor/corrector pair runs inside `compute_residuals()`
+at the later, unconditional call site:
+
+1. save intensive `U^n`;
+2. sweep the complete owned element set at `U^n` with the full `dt`, exchange
+   exported nodal increments, and obtain `U*`;
+3. form `dU = U* - U^n`, recover `W*` without the side effects of
+   `update_primitive_variables()`, add the folded local `+dU/2`, and exchange
+   `W*` plus `dU`;
+4. sweep the same element set at `U*`, distribute
+   `T_i(dU) + phi_i(U*)/2`, and obtain `U^{n+1}`.
+
+This explains the apparent skipped first update: it is intentional under the
+switch, not a missing predictor. It also confirms Zhenyu's concern that the
+placement is provisional. It is convenient and restart-symmetric for the
+present compile-time guards, but it does not by itself define what should
+happen when the active set, domain decomposition, or tessellation can change.
+
+The algebraic `+dU/2` in the corrector is correct. It represents the already
+applied `phi_i(U^n)/2`, using the *assembled predictor identity*
+
+```
+sum_{T in i} phi_i^{n,T} = -|S_i| dU_i/dt.
+```
+
+It is not justified by, and does not require, the F1 temporal contribution to
+equal `|S_i| dU_i/dt` node by node.
+
+### 2. MPI simplex responsibility
+
+`rd_simplex_claimed()` assigns a physical simplex to the rank holding the
+globally minimum `(particle ID, task)` vertex as a local primary point. For the
+present all-active mesh this gives a deterministic, dimension-independent
+owner and removes the former majority vote, 3-D ties, task-sized scratch work,
+and quadratic duplicate scan. The shared element set also correctly separates
+the complete physical set used for `DualArea` from the subset marked active.
+The existing 1/3/4/16-rank checks and global-area audit support this design.
+
+This rule is not yet a hierarchical-timestep rule. The comment proposing
+"minimum active ID" is a design note, not an implementation: remote activity
+must be live, the same physical element must use one agreed timestep, and an
+element containing active and inactive vertices still couples their conserved
+updates through the RD residual and F1 mass matrix. These semantics must be
+specified before removing `FORCE_EQUAL_TIMESTEPS`; ownership alone cannot solve
+them.
+
+### 3. Correction to Kimi's beta-row-sum argument
+
+The condition proposed in the preceding entry,
+
+```
+sum_{T in i} beta_i^T |T| / |S_i| = I,
+```
+
+is not a GL+F1 consistency requirement. F1 requires the **elementwise column
+conservation** of the mass matrix,
+
+```
+sum_i m_ij^T = (|T|/3) I,
+```
+
+which follows from `sum_i beta_i^T = I` when the defining solve is valid. It
+does not require a patchwise row sum at a fixed node. Consequently:
+
+- a passive `gamma` diagnostic may describe the mesh-dependent beta weights,
+  but `gamma != 1` is not evidence that the implemented F1 residual is wrong;
+- replacing F1 by the P1 Galerkin mass matrix solely to enforce this row sum
+  would change the method, not repair a demonstrated algebraic defect;
+- the Galerkin variant can remain a research comparison only after its own
+  RK-RD derivation is stated.
+
+The earlier median-dual versus Voronoi attribution is also excluded for this
+campaign. RD updates integrated quantities directly, density recovery uses
+`DualArea = sum_T |T|/3`, and the analysis weight `Mass/Density` recovers the
+same `DualArea`. No Voronoi volume enters this error measurement.
+
+### 4. Yee + boost audit
+
+Errors were recomputed read-only from the current snapshots rather than
+trusting partially stale `errors.json` files. The timestep halves exactly with
+resolution (`128`, `256`, `512` steps for `n=32`, `64`, `128`), and the initial
+nodal error is at machine precision. Representative density L1 results are:
+
+| n | boost 0 | order | boost 1 | order |
+| --- | ---: | ---: | ---: | ---: |
+| 32 | 9.845e-4 | -- | 1.901e-3 | -- |
+| 64 | 2.451e-4 | 2.01 | 6.486e-4 | 1.55 |
+| 128 | 5.855e-5 | 2.07 | 2.612e-4 | 1.31 |
+
+The same degradation appears in density L2, velocity, and pressure, so it is
+not an isolated norm or variable. A best-fit uniform x phase shift removes only
+about 3--6 per cent of density L1; the error is not primarily a single
+advection-speed phase offset. Exact global conservation in the RD checks also
+rules out loss of the element total as the explanation.
+
+The grids at successive resolutions use different deterministic jitter seeds
+and are not nested. With only three resolutions this can perturb adjacent
+orders, and an unjittered/multiple-seed test is still useful, but the
+cross-variable pattern and the downward drift make mesh sampling alone an
+incomplete explanation.
+
+The stationary case is a weak test of the unsteady coupling: analytically
+`d_t U = 0`, so `dU`, the F1 term, and any inconsistency activated by changing
+stage distributions are suppressed. Its clean second order validates the
+spatial steady calculation, but not the full moving-solution RK2 path.
+
+### 5. Leading hypothesis: which beta belongs to the corrector?
+
+The current code computes LDA matrices separately in the two sweeps. It
+therefore folds `phi_i(U^n)` distributed with `beta^n`, but distributes both
+`phi(U*)/2` and the F1 temporal target using `beta*`. Since beta is
+solution-dependent,
+
+```
+beta* - beta^n = O(dt)
+```
+
+for a smooth unsteady solution. If the RK-RD construction assumes one frozen
+Petrov distribution/mass matrix over a full RK step, this mixture can leave an
+`O(h)` effective residual when `dt ~ h`, matching the observed
+`A h^2 + B h` behaviour and its absence in the stationary test.
+
+Morton's `triangle2D.h` computes beta from the initial state and reuses it for
+the second-stage spatial residual and F1 mass term. This is a concrete code
+difference, but **not validation**: Morton's Yee tests were stationary, no
+Yee+boost convergence ladder exists for that code, and other parts of its LDA
+corrector cannot be adopted uncritically. Conversely, the primary formulas
+examined so far write `m_ij^K` without an unambiguous RK-stage superscript.
+Therefore frozen `beta^n`, recomputed `beta*`, or a consistently derived stage
+choice remain hypotheses until the literature derivation and experiment agree.
+
+Other generic possibilities remain: a Galilean/nonlinear spatial truncation
+term on irregular triangles, or a temporal-stage defect elsewhere. The present
+evidence excludes the following as causes of this campaign's 1.3--1.5 order:
+
+- F1 lumped fallback: `f1_lumped=0` in every step of all six runs;
+- numerical rank loss or SVD: no SVD path was used and minimum pivot ratios
+  were about 0.034--0.039;
+- timestep scaling, initial sampling, the error norm, or Voronoi/median-dual
+  mismatch.
+
+### 6. Separate F1 fallback defect
+
+The fallback decision currently tests `used_svd`, which answers "did the LU
+proxy choose DGELSD?", not "did DGELSD find rank < 4?" A small LU pivot ratio
+can route a full-rank matrix through SVD; the current corrector would then use
+the lumped mass even though beta is numerically defined. The solve interface
+should eventually return the actual DGELSD rank (with rank 4 for a successful
+LU path), and the policy should branch on that rank.
+
+This is a real code/policy defect but is unrelated to the measured Yee result,
+because those runs never used SVD or the lumped fallback. The mathematical
+choice at genuine rank deficiency also remains provisional and is especially
+important for a future approximately Lagrangian mesh, where relative
+stagnation will be common.
+
+### 7. Next work proposed for Claude review
+
+Do not begin with the Kimi gamma/Galerkin patch. The shortest discriminating
+sequence is:
+
+1. **Close the stage-beta specification.** Re-read the primary 2010 RK-RD and
+   2015 ALE-RD derivations specifically for whether `beta`/`m_ij` is frozen at
+   `U^n`, evaluated at each stage, or otherwise combined. Record the derivation,
+   not only the absence of a superscript.
+2. **Design a one-step controlled comparison on an identical mesh and IC.** At
+   minimum compare the current recomputed-`beta*` path with a frozen-`beta^n`
+   path. If useful, separate the beta used by the spatial `phi(U*)` distribution
+   from that used by the F1 temporal term. Do not treat Morton's whole
+   corrector as the reference implementation.
+3. **Separate time from space.** On one fixed mesh run a `dt`, `dt/2`, `dt/4`
+   ladder or, preferably first, a smooth manufactured/local-truncation step.
+   This determines whether the defect is in RK stage coupling or in the
+   spatial semi-discretisation.
+4. **Only then extend the convergence evidence.** Add unjittered and jittered
+   `n=256`, plus several jitter seeds or a nested mesh family. Regenerate the
+   analysis JSON from the authoritative snapshots.
+5. **Audit the rank API independently.** Return actual numerical rank from the
+   solve and construct a targeted full-rank-but-SVD-routed test plus a genuinely
+   rank-deficient F1 target test before changing the fallback policy.
+
+Claude should first review the algebra in sections 1, 3, 5, and the experiment
+ordering above. No source modification or Slurm submission should be made until
+that review is received and Zhenyu chooses the branch to test.
+
+### 8. Longer-term implementation plan
+
+**Phase A -- static mesh, global timestep (current scientific baseline).**
+Resolve the boosted-order defect, make the rank/fallback contract explicit,
+verify LDA and N with temporal and spatial ladders, and restore a broad
+MPI-rank regression matrix. Add B only after deriving its blended mass matrix
+and total-residual limiter; do not infer it from the LDA implementation.
+
+**Phase B -- hierarchical timesteps on a static mesh.** Refactor the monolithic
+two-stage wrapper into explicit predictor and corrector operations with a
+stored step context: step interval, participating vertices/elements, element
+timestep, `U^n`, `dU`, and ownership. Decide mathematically how an element that
+couples different timebins is advanced and how inactive neighbours receive or
+defer conservative increments. Then map the two operations onto AREPO's
+integration flow. Zhenyu's preference to distribute the work across the two
+hydro-update locations is the leading design direction, but it must be driven
+by this fixed stage/active-set contract; simply enabling the current
+`set.active` filter or changing ownership to minimum-active-ID is insufficient.
+
+**Phase C -- moving mesh/ALE.** After Phase B is stable, implement the Arpaia
+ALE residual including mesh velocity, stage geometry and the geometric
+conservation law. Specify whether the Delaunay mesh is frozen over a step or
+rebuilt at an intermediate stage, and ensure both stages refer to compatible
+elements/control volumes. Re-audit `VelVertex` exchange and rank-deficient F1
+behaviour in the near-Lagrangian limit. Only after the 2-D ALE path passes
+uniform-flow/GCL, Yee+boost and MPI/domain-decomposition tests should the design
+be generalised to 3-D tetrahedra and the development AREPO physics stack.
