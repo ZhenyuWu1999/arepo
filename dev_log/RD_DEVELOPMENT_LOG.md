@@ -4919,3 +4919,115 @@ at compile time pending the blended mass matrix derivation, which is correct.
 
 Recommended order: three-way stage-beta experiment -> Phase B mathematical
 specification -> implementation.
+
+## 2026-08-01: three-way stage-beta experiment — coherence does not restore temporal order
+
+- Author: `Codex (GPT-5)`
+- This is the experiment required by Kimi's Phase-B entry review. No beta,
+  gamma, Galerkin-mass, hierarchical-timestep, or rank-API production change
+  was made. The two coherent paths are compile-time experimental variants.
+
+### 1. The three corrector conventions tested
+
+All three use the same two-stage driver and F1 mass matrix.
+
+- `mixed` is the existing implementation: the old spatial half is distributed
+  with `beta^n` through the assembled local `+dU/2` identity, while the new
+  spatial half and F1 target use `beta*`.
+- `coherent beta^n` saves the complete element distribution matrices at the
+  predictor and uses them for the new spatial half and F1 target as well. The
+  local `+dU/2` remains valid because it is the already assembled
+  `beta^n Phi(U^n)` distribution.
+- `coherent beta*` suppresses the local `+dU/2`, saves each element's
+  `Phi(U^n)`, and explicitly redistributes that old residual with `beta*` in
+  the corrector. It therefore does **not** use the forbidden shortcut.
+
+The experiment requires full-rank `S^-`, so either coherent binary terminates
+rather than silently defining beta on a rank-deficient element. The Yee mesh
+never enters that branch (`svd_fallback = exact_singular = f1_lumped = 0`).
+
+### 2. Build and run provenance
+
+Source base: `f7a72d8271b143b1ed9f200666725bc588187138`; experiment-patch SHA256:
+`60d8b72a5a5a0d0eb5ceadaabdd8f1eb76bc8658336f9e774cf4218f90a7b564`.
+All artifacts were built on compute nodes against MKL 2025.1 and verified by
+the managed-artifact checksum before every run.
+
+| convention | immutable binary SHA256 | build job |
+| --- | --- | ---: |
+| mixed | `54107a4b2c4c2cbf26eb10a53ed28c9e28586139fd8aacccd266da01e4835d5f` | 10357828 |
+| coherent `beta^n` | `651416a6933b520825e9583d8af00d265d5942d06fb2c54343e3c3e20a789504` | 10357829 |
+| coherent `beta*` | `a17af7482523475433d0480a395249d1be43a65c3ed1b13fae1c32a85ba406fb` | 10357830 |
+
+The setup is fixed Yee `n=64`, deterministic jittered mesh, `boost=1`,
+`TimeMax=1`, one MPI rank, and the same IC for all runs (SHA256
+`74b3822dfe94bb1c8f1279062403d327d28399f0e2b57ed9b5207270e85a2b9e`).
+The timestep ladder is `1/256`, `1/512`, `1/1024`, `1/2048`. Before launching
+the finer rungs, the new mixed `dt=1/256` snapshot was matched to the previous
+control by `ParticleIDs`: `Density`, `Velocities`, `InternalEnergy`, `Masses`,
+`Coordinates`, and `CenterOfMass` were all **bitwise identical**.
+
+All twelve run jobs (10357831--10357842) completed with exit code `0:0`.
+Each took exactly 256, 512, 1024, or 2048 steps; the effective timestep was
+exactly the requested reciprocal. In every case `f1_lumped=0`, predictor
+`rho_min >= 0.48795`, predictor `p_min >= 0.36667`, mass and energy changes
+were at most `2.9e-16` relative, and the largest per-element conservation
+defect was `4.86e-17` absolute.
+
+### 3. Analytic errors
+
+Final-time analytic L1 errors are shown because they verify that every rung is
+the intended advected-Yee solution; they are not used to infer temporal order.
+
+| convention | dt | density L1 | velocity L1 |
+| --- | ---: | ---: | ---: |
+| mixed | 1/256 | `6.486073e-4` | `1.893326e-3` |
+| mixed | 1/512 | `6.511972e-4` | `1.912381e-3` |
+| mixed | 1/1024 | `6.525516e-4` | `1.922048e-3` |
+| mixed | 1/2048 | `6.532416e-4` | `1.926917e-3` |
+| coherent `beta^n` | 1/256 | `6.477352e-4` | `1.893029e-3` |
+| coherent `beta^n` | 1/512 | `6.507621e-4` | `1.912240e-3` |
+| coherent `beta^n` | 1/1024 | `6.523427e-4` | `1.921980e-3` |
+| coherent `beta^n` | 1/2048 | `6.531387e-4` | `1.926883e-3` |
+| coherent `beta*` | 1/256 | `6.478240e-4` | `1.892998e-3` |
+| coherent `beta*` | 1/512 | `6.508133e-4` | `1.912226e-3` |
+| coherent `beta*` | 1/1024 | `6.523685e-4` | `1.921973e-3` |
+| coherent `beta*` | 1/2048 | `6.531514e-4` | `1.926879e-3` |
+
+### 4. Adjacent-solution Richardson result
+
+Solutions are sorted and matched by `ParticleIDs`. The compared state is
+`U=(rho,rho vx,rho vy,rho E)` and all differences use the same fixed-mesh
+`DualArea` weights. Thus `D0=||U_1/256-U_1/512||`,
+`D1=||U_1/512-U_1/1024||`, `D2=||U_1/1024-U_1/2048||`, and
+`p_k=log2(Dk/Dk+1)`.
+
+| convention | norm | D0 | D1 | p0 | D2 | p1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| mixed | L1 | `4.343772e-5` | `2.181704e-5` | **0.993493** | `1.093377e-5` | **0.996665** |
+| mixed | L2 | `9.342066e-5` | `4.693702e-5` | **0.993015** | `2.352699e-5` | **0.996409** |
+| coherent `beta^n` | L1 | `4.223196e-5` | `2.121442e-5` | **0.993290** | `1.063251e-5` | **0.996564** |
+| coherent `beta^n` | L2 | `9.008337e-5` | `4.526256e-5` | **0.992942** | `2.268846e-5` | **0.996360** |
+| coherent `beta*` | L1 | `4.173648e-5` | `2.096049e-5` | **0.993637** | `1.050401e-5` | **0.996732** |
+| coherent `beta*` | L2 | `8.857207e-5` | `4.448631e-5` | **0.993490** | `2.229526e-5` | **0.996624** |
+
+Every conserved component separately gives the same result: its two L2 orders
+lie between 0.9896 and 0.9974. The coherent paths reduce the difference norm by
+only a few per cent; they do not change its scaling.
+
+### 5. Judgment
+
+**Neither coherent convention restores second-order time convergence.** The
+narrow hypothesis that mixing `beta^n` and `beta*` in the corrector causes the
+observed `O(dt)` term is falsified. Claude's N+RK2/LDA+RK2 control still locates
+the defect in the F1 mass-matrix path, but it is broader than the stage-beta
+choice tested here. No beta convention should be promoted to production from
+this experiment, and Phase-B implementation should not silently adopt either
+one as a cure. The next diagnostic must derive or isolate the complete F1
+time-dependent mass contribution; beta/gamma/Galerkin-mass/rank-API changes
+remain out of scope until that is understood.
+
+Campaign and machine-readable analysis:
+`/home/zwu/Hydro_data_analysis/Data_arepo_RD/yee_boost/stage_beta_experiment/`.
+The aggregate result is `richardson_analysis.json` (SHA256
+`d2955c2189a2d2ec971d06c1542081fd126e91bc40541b518946d0832f95eb6d`).
