@@ -4551,3 +4551,91 @@ campaign directory should be removed or annotated. The triangular-lattice
 timestep ladder gives temporal orders 0.947 and 0.970 with a 2.5 per cent share,
 confirming that the temporal defect is mesh-independent and subdominant on both
 families.
+
+## 2026-08-01 (addendum): the glass does not hold 1.7, and the size of the stage-beta defect
+
+- Author: `Claude Code Opus5`
+- Two follow-ups to the entry above, plus one source comment. Still no change to
+  the numerics: the only edit to `residual_distribution_solver.c` is a comment.
+
+### 1. The glass ladder extended to n = 384
+
+The glass family is `swift48_tiled`, so its rungs are tile factors 1, 2, 4, 8 --
+48, 96, 192, **384** -- not 256.
+
+| n | density L1 | p | rho_min | p_min |
+| ---: | ---: | ---: | ---: | ---: |
+| 48 | `6.43016e-04` | -- | 0.4951 | 0.3754 |
+| 96 | `1.74817e-04` | 1.879 | 0.4934 | 0.3721 |
+| 192 | `5.24571e-05` | 1.737 | 0.4939 | 0.3725 |
+| 384 | `1.87909e-05` | **1.481** | 0.4939 | 0.3725 |
+
+The order keeps falling. Fitting `E = A/n^2 + B/n`:
+
+```
+   over n >= 48 :  A = 1.338,  B = 0.00297,  crossover n = A/B = 450
+   over n >= 96 :  A = 1.264,  B = 0.00361,  crossover n = 350
+```
+
+`n = 384` is just past the crossover, which is exactly where the measured order
+falls below 1.5. **The glass does not escape the asymptotic first order; it
+delays it by roughly a factor of eight in n relative to the jittered family.**
+For the resolutions used so far (`n <= 200`, under 40k cells in 2-D) the
+effective order is 1.7-1.9 and the scheme is usable as it stands. Beyond that it
+is not, and the 2-D crossover count of about 150k cells is not a comfortable
+margin for 3-D or for ALE.
+
+Updating the proportionality of the previous entry with the four-point glass
+fit: `B / (|g|/h)` is `0.174` (glass, `n >= 48`), `0.212` (glass, `n >= 96`) and
+`0.142` (jittered). The constant is reproduced to about +/- 20 per cent rather
+than the +/- 18 per cent quoted from the three-point fit; the relation holds,
+somewhat more loosely than first stated.
+
+### 2. How large is the stage-beta defect
+
+Measured as the solution difference `2 ||U(dt) - U(dt/2)||` at the production dt,
+matched by `ParticleIDs` and weighted by `DualArea` (the same construction Codex
+used for the Richardson orders):
+
+| family | n | production dt | temporal error (rho) | share of the total error |
+| --- | ---: | ---: | ---: | ---: |
+| jittered | 32 | 1/128 | `5.207e-05` | 2.7 % |
+| jittered | 64 | 1/256 | `1.457e-05` | 2.2 % |
+| jittered | 128 | 1/512 | `4.541e-06` | 1.7 % |
+| triangular | 64 | 1/256 | `1.283e-05` | 4.3 % |
+
+The decisive number is not the share but the scaling. Across the jittered ladder
+the temporal error falls as
+
+```
+   n = 32 -> 64 :  order 1.838
+   n = 64 -> 128:  order 1.682
+```
+
+so with `dt` tied to `h` the stage-beta term behaves like `h^1.75`, not `h`. Both
+statements are true and not in conflict: at fixed `h` the scheme is cleanly first
+order in `dt` (`p = 0.99`), but the coefficient itself shrinks, `C(h) ~ h^0.75`.
+The direct confirmation is that the triangular lattice, where nothing else is
+first order, still measures 2.011 at `n = 256`.
+
+Consequences:
+
+- Fixing the stage-beta mixture would remove 2-4 per cent of the error at the
+  present resolutions and would **not** change any measured order. On the glass
+  at `n = 192` the mesh term is about seven times the temporal term and, unlike
+  it, is genuinely first order.
+- It becomes important in two situations. If `dt` is ever decoupled from `h` --
+  hierarchical timebins, or a fixed `dt` -- the `h^0.75` coefficient no longer
+  helps and the defect is plainly first order. Under ALE the wave speeds depend
+  directly on `VelVertex`, so `d_t beta` grows and the coefficient grows with it.
+- Priority: below the mass-matrix work, above nothing. Codex's specification for
+  the three-way comparison stands and should be kept for when it is done.
+
+### 3. Source comment added
+
+`residual_distribution_solver.c`, at the F1 branch of the corrector: records that
+Global Lumping is the first Neumann truncation of the mass-matrix inverse, that
+the error is `X^2 v` governed by the median-dual patch asymmetry, the three
+measured convergence results, and the documented alternatives (Selective
+Lumping, `F2`, or one further Neumann iteration) with an explicit note that they
+are not a current priority. Comment only; no numerics changed.

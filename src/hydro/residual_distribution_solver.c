@@ -1464,6 +1464,29 @@ void compute_residuals(tessellation *T)
                 (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / triangle_dt;
 
 #ifdef LDA_SCHEME
+          /* Global Lumping is the first Neumann truncation of the mass-matrix
+           * inverse: with M = S(I + X) and v the lumped rate, lumping gives
+           * u_dot = v, this scheme gives u_dot = (I - X) v, and the consistent
+           * mass matrix would give (I + X)^{-1} v. The leading part of X is the
+           * patch-weighted offset sum_j m_ij (x_j - x_i) = beta_i |T| (x_c - x_i),
+           * which is O(h) because beta is upwind biased. The lumped error is
+           * therefore X v = O(h) whenever d_t u != 0; the error here is X^2 v,
+           * which is O(h^2) only where that offset field varies smoothly over
+           * the mesh.
+           *
+           * Measured on the advected Yee vortex (2026-08-01 development-log
+           * entry): second order to n = 256 on a regular triangular lattice,
+           * order 0.990 at n = 256 on a jittered Cartesian mesh, and 1.74 at
+           * n = 192 on a SWIFT glass. The first-order coefficient is
+           * proportional to the median-dual patch asymmetry with the same
+           * constant across mesh families. A glass is good enough for now.
+           *
+           * If that ceases to be good enough -- most likely under ALE, where the
+           * mesh deforms continuously -- the documented alternatives are
+           * Selective Lumping (Arpaia & Ricchiuto 2015 eq. 52), which keeps the
+           * Galerkin mass matrix on the new-value term instead of truncating,
+           * the F2 mass matrix (eq. 28), or one further Neumann iteration at the
+           * cost of an extra residual sweep. Not currently a priority. */
           if(!used_svd)
             {
               /* F1 mass matrix through the third right-hand side:
