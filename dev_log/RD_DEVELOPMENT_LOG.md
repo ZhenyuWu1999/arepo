@@ -4823,3 +4823,99 @@ Still open, and both now well-posed rather than exploratory:
 The stage-`beta` fix should be done before or with Phase B. Its coefficient is
 harmless today only because `dt` is tied to `h`; hierarchical timebins decouple
 them, which is exactly the regime where an `O(dt)` term stops being cheap.
+
+## 2026-08-01: Kimi review of the Phase-A closeout — accepted, and Phase B entry conditions
+
+- Author: `Kimi K3`
+- Scope: entries `1d3a1ee` through `8f6b266` (Codex audit, Claude review, the
+  dt ladder, the mesh-family result, the rank fix `5f6480e`, the closeout),
+  including the diffs of `5f6480e` and `5db9f6d`.
+
+### Verdict
+
+No blocking issues. Phase A can be closed and Phase B entered, with one
+precondition strengthened below. The three disputes were each closed by a
+decisive controlled experiment rather than by argument, which is exactly how
+this project should run.
+
+### The gamma dispute — I accept the resolution
+
+Claude's point stands: `sum_T T_i - |S_i| dU_i/dt` is *the entire* correction
+GL+F1 makes to Heun, so demanding `gamma_i = 1` demands the lumped scheme
+back, and my proposed Galerkin substitution is correctly rejected. The lumped
+control on the triangular lattice (0.947/0.970 on the same mesh where GL+F1
+is 2.03/2.01/2.01) is the decisive control — it rules out symmetry
+superconvergence as the explanation.
+
+For the record: the experimental prediction of my suspect 2 (a regular mesh
+restores second order) was confirmed; the mechanism was then characterised
+far better than my framing — `B proportional to |g|/h` with `g` the purely
+geometric median-dual patch offset, beta-independent, one constant across two
+unrelated mesh families. The degenerate-Cartesian finding (coverage audit
+fails, `sum(DualArea) = 99.902`) also shows the `rk2_unjit_v1` campaign I had
+prepared could never have run; its directory should be removed or annotated
+as proposed.
+
+### The temporal defect chain — methodologically clean
+
+Codex's Richardson ladder (p ~ 0.99 at fixed mesh) established first-order
+time convergence; Claude's N+RK2 = 2.009 vs LDA+RK2 = 1.011 comparison (same
+driver, mesh, timesteps; only the mass matrix differs) isolates the defect in
+the F1 stage-beta convention. The incidental discovery that the non-RK2
+baseline is itself first order in time, together with the 0.05%-coefficient
+confusion check on the lumped triangular control, was necessary and is
+reassuring.
+
+### The rank fix (`5f6480e`) — verified in the diff
+
+Branching F1 on `solve_rank == 4` is exact at the top end (full rank makes
+`S^- z = T_target` consistent trivially) and safely conservative below. The
+verification is thorough: bitwise identity where DGELSD is never called,
+`f1_lumped` 83 -> 0 on the constructed below-trigger full-rank case, and the
+1/4/16-rank invariance (4.9e-15) on an IC carrying structurally
+rank-deficient elements covers the two-stage path. The genuinely
+rank-deficient beta policy remains open and is correctly flagged as
+ALE-relevant.
+
+### Minor points
+
+- The `B` proportionality constant drifts about +/-20 per cent between the
+  three- and four-point glass fits (0.142--0.212); treat the `B` law as
+  semi-quantitative.
+- The open genuinely-rank-deficient policy interacts with ALE stagnation and
+  should be settled before or during Phase C, not rediscovered there.
+
+### Phase B entry conditions
+
+Phase A is closed well enough to enter Phase B, with the following ordering.
+
+1. **Run Codex's three-way stage-beta experiment first — "before", not
+   "before or with".** Hierarchical timebins decouple `dt` from `h`, which is
+   precisely the regime where the stage-beta term degrades from `h^1.75`
+   (a 2--4 per cent share today) to a bare first-order `O(dt)` term. Worse,
+   the question "which state defines beta for an element coupling different
+   timebins" reappears on day one of the Phase B derivation, in amplified
+   form. Designing a multi-rate scheme on top of a known first-order stage
+   convention builds the defect into the foundation. The experiment is cheap
+   and fully specified (mixed / coherent-beta^n / coherent-beta*, the last
+   one requiring stored or recomputed `phi(U^n)` rather than the `+dU/2`
+   shortcut), and its outcome fixes the stage convention Phase B will assume.
+2. **Mathematics before code.** Codex's Phase B sketch (explicit predictor
+   and corrector operations plus a stored step context: interval,
+   participating vertices/elements, element dt, `U^n`, `dU`, ownership) is
+   the right direction and stays compatible with the constraint of reusing
+   AREPO's two-call-site structure. The hard question is the advance
+   semantics of a cross-bin element: advance the whole element at its minimum
+   bin, or fuse conservative increments across bins? That choice drives the
+   ownership rule and the active-set filter design, so it needs a paper
+   answer first. The minimum-ID rule is a static-global-step solution, not a
+   hierarchical one.
+
+Parallel, non-blocking: the glass crossover (n ~ 350--450 in 2-D, earlier in
+3-D/ALE) makes the mass-matrix ceiling a real production concern; Selective
+Lumping or one further Neumann iteration now have falsifiable predictions
+from the `B` law and suit an independent workstream. B + RK2 stays excluded
+at compile time pending the blended mass matrix derivation, which is correct.
+
+Recommended order: three-way stage-beta experiment -> Phase B mathematical
+specification -> implementation.
