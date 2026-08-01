@@ -4705,3 +4705,121 @@ the conservative choice and is unchanged; what changed is only which elements
 reach it. Deciding what `beta` should be at true rank deficiency remains open and
 matters for ALE, where relative stagnation will be common.
 
+## 2026-08-01: baseline closeout — decomposition invariance on the RK2 path, and F1 isolated as the temporal defect
+
+- Author: `Claude Code Opus5`
+- Closes the two Phase-A gaps left open by the Kimi recommendation list: the
+  N-scheme RK2 check and the MPI regression on the RK2 path. Lightweight runs
+  only, against binaries built from the working tree with the rank fix.
+- One earlier claim of mine is corrected, and the stage-beta diagnosis is
+  narrowed from "somewhere in the RK2 path" to "the F1 mass matrix".
+
+### 1. Decomposition invariance, RK2 path
+
+Gresho `v0_random48`, LDA + RK2, `TimeMax = 0.01`, 1 / 4 / 16 MPI ranks. This IC
+is deliberately the hard one: it carries structurally rank-deficient elements, so
+the SVD path and the F1 lumped fallback are both exercised.
+
+```
+   1 vs 4 ranks    worst relative field difference   4.9e-15
+   1 vs 16 ranks   worst relative field difference   4.5e-15
+```
+
+Density, velocity, internal energy and mass, matched by `ParticleIDs`. The
+previous 1/3/4/16 checks covered the element-set and ownership layer; this covers
+the two-stage corrector.
+
+### 2. The N-scheme check: the stated criterion was wrong
+
+The 2026-07-29 plan proposed a "free regression test": with
+`m_ij = (|T|/3) delta_ij` the total-residual machinery collapses to Heun, so the
+N scheme with the switch on **must reproduce the switch-off result to
+round-off**. Kimi corrected this in the review table of
+`RK2_timestep_movingmesh_analysis.md:1124` -- the baseline uses AREPO's Taylor
+predictor while the new path uses the RD predictor, so the difference is
+truncation-level, not round-off. That correction never reached the plan, and the
+test was carried forward in its wrong form.
+
+Measured: the difference is `2.55e-04`, and it is **first order in dt**:
+
+| dt | max relative difference | order |
+| ---: | ---: | ---: |
+| `1.5625e-4` | `2.5546e-04` | -- |
+| `7.8125e-5` | `1.2809e-04` | 0.996 |
+| `3.90625e-5` | `6.4130e-05` | 0.998 |
+| `1.953125e-5` | `3.2087e-05` | 0.999 |
+
+A first-order difference means one of the two paths is first order in time, but
+the comparison cannot say which. (A methodological note: the first attempt at
+this ladder produced an *exactly constant* difference, because `MaxSizeTimestep`
+was above the Courant-limited `dt = 1.5625e-4` and all three runs took identical
+steps. Refining a timestep parameter that is not the binding constraint is a
+silent no-op; the ladder must start below the Courant limit.)
+
+### 3. Self-convergence answers it, and isolates F1
+
+Richardson self-convergence on the same three timesteps, same IC, same mesh:
+
+| path | mass matrix | temporal order |
+| --- | --- | ---: |
+| N + RK2 (switch on) | `(\|T\|/3) delta_ij` | **2.009** |
+| LDA + RK2 (switch on) | F1, `(\|T\|/3) beta_i` | **1.011** |
+| N lumped (switch off) | -- | **1.001** |
+
+Three conclusions, in order of importance.
+
+1. **The two-stage driver is second order in time.** With a lumped mass matrix it
+   delivers exactly what it was designed to deliver. That is the validation the
+   N-scheme test was supposed to provide, and it does provide it -- under the
+   corrected criterion.
+2. **The temporal defect is in F1.** Rows one and two differ only in the mass
+   matrix: same problem, same mesh, same timesteps, same driver, same predictor.
+   Codex's stage-`beta` hypothesis is no longer the best-fitting candidate among
+   several; it is isolated by a controlled comparison. The three-way experiment
+   Codex specified now has a much smaller search space.
+3. **The pre-existing non-RK2 baseline is first order in time.** This had not been
+   measured. It retrospectively justifies the RK2 work, and it means every lumped
+   baseline campaign carried a first-order temporal term.
+
+### 4. Consequence checked: the lumped attribution is not confounded
+
+Point 3 raises a real worry. The control in `mass_matrix_order_analysis.md` --
+"the lumped scheme stays first order even on the regular triangular lattice",
+0.947/0.970 -- was run with that same baseline binary. If its first-order
+h-behaviour were the first-order *time* integration rather than the lumped mass
+matrix, the control would collapse and with it the argument that the triangular
+lattice does not cancel errors generically.
+
+Timestep ladders were run on the lumped triangular-lattice cases and extrapolated
+to `dt -> 0`:
+
+| n | production | `dt -> 0` limit | temporal share |
+| ---: | ---: | ---: | ---: |
+| 64 | `2.037404e-03` | `2.039429e-03` | `-0.05 %` |
+| 128 | `1.039852e-03` | `1.040412e-03` | -- |
+
+```
+        production order   0.970
+        semi-discrete      0.971
+```
+
+The baseline is first order in time but with a very small coefficient: it
+contributes 0.05 per cent at the production timestep, and removing it entirely
+changes the order by 0.001. **The control stands and every conclusion in
+`mass_matrix_order_analysis.md` is unaffected.**
+
+### 5. Phase A status
+
+Closed: rank/fallback contract, decomposition invariance on the RK2 path, the
+N-scheme validation, the LDA spatial and temporal ladders, the `rcond` policy.
+
+Still open, and both now well-posed rather than exploratory:
+
+- the F1 stage-`beta` convention (Codex's three-way experiment, now with the
+  cause isolated);
+- `B` + RK2, which is a compile error pending the blended mass matrix and a
+  total-residual `Theta`.
+
+The stage-`beta` fix should be done before or with Phase B. Its coefficient is
+harmless today only because `dt` is tied to `h`; hierarchical timebins decouple
+them, which is exactly the regime where an `O(dt)` term stops being cheap.
