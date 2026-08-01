@@ -4338,3 +4338,216 @@ implementation is included in this entry.
 Reproducible analysis artifacts are `analyze_fixed_mesh_ladder.py`,
 `richardson_analysis.json`, `timestep_summary.csv`, and the control comparison
 `dt_0256/mpi_control_compare.json` under the campaign directory.
+
+## 2026-08-01: the boosted order loss is a property of the mesh family, not of GL+F1
+
+- Author: `Claude Code Opus5`
+- Scope: eleven new campaigns run against the unchanged immutable binary
+  `build_artifacts/yee-rk2-velvfix/586eb0abd296-5102e6f64eb6acd3/Arepo`
+  (SHA256 `a1c9617053...cece77`). **No solver source was modified.** The only
+  code written was analysis and IC tooling under
+  `Hydro_data_analysis/Analysis/yee_boost/`:
+  `prepare_dt_ladder.py`, `analyze_semidiscrete_order.py`, and a new
+  `triangular` mesh family in `yee_boost_common.py`.
+- Conclusion: **GL+F1 reaches clean second order on the advected vortex.** The
+  1.55/1.31 result was a property of the jittered-Cartesian mesh family, which
+  is not a valid family for measuring unsteady RD accuracy. The temporal defect
+  Codex measured is real but contributes about one per cent.
+
+### 1. The temporal defect is real and is not the cause
+
+Timestep ladders were completed at `n = 32` and `n = 128` to match Codex's
+`n = 64`, all on the production ICs with the production dt as the coarsest rung.
+
+| n | production dt | temporal order (analytic-error differences) | dt -> 0 limit | temporal share at production dt |
+| --- | --- | --- | ---: | ---: |
+| 32 | 1/128 | 0.989, 0.995 | `1.927527e-03` | `-1.41 %` |
+| 64 | 1/256 | 0.935, 0.973 | `6.539316e-04` | `-0.82 %` |
+| 128 | 1/512 | 0.983, 0.993 | `2.627818e-04` | `-0.61 %` |
+
+Removing the temporal error entirely does not move the h-ladder:
+
+```
+        production order   1.551   1.312
+        semi-discrete      1.560   1.315
+```
+
+The first-order temporal error is a genuine defect, but at the production dt it
+is under two per cent of the error and cannot produce a `B/n` term worth 60 per
+cent of it. The judgment in the preceding entry should be read as "the time
+discretisation is first order", not as "the time discretisation explains the
+h-ladder".
+
+### 2. Jitter amplitude does not matter, and the reason is the diagnostic
+
+The h-ladder was repeated at jitter fractions 0.10, 0.05 and 0.025 against the
+production 0.20:
+
+| jitter | n=32 | n=64 | p | n=128 | p |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.200 | `1.901e-3` | `6.486e-4` | 1.551 | `2.612e-4` | 1.312 |
+| 0.100 | `1.891e-3` | `6.044e-4` | 1.645 | `2.336e-4` | 1.371 |
+| 0.050 | `1.914e-3` | `5.994e-4` | 1.675 | `2.290e-4` | 1.388 |
+| 0.025 | `1.972e-3` | `5.930e-4` | 1.733 | `2.280e-4` | 1.379 |
+
+An eightfold reduction in the perturbation changes the `n = 128` error by 15 per
+cent and the order by 0.07. **The mesh perturbation amplitude is not the
+driver**, which is why the "unjittered" experiment as originally conceived could
+never have worked.
+
+The reason is that a near-Cartesian point set does not become more regular in
+the sense the scheme cares about. In every grid quad the two candidate Delaunay
+diagonals become ever more nearly degenerate as the jitter shrinks, and the
+in-circle test picks between them by a coin flip at every amplitude:
+
+| jitter | `|d1-d2|/(d1+d2)` mean | fraction choosing one diagonal |
+| ---: | ---: | ---: |
+| 0.200 | 0.0674 | 0.4983 |
+| 0.100 | 0.0337 | 0.5000 |
+| 0.050 | 0.0169 | 0.4995 |
+| 0.025 | 0.0084 | 0.4993 |
+
+The point positions converge to a lattice; the *triangulation orientation
+pattern* stays a maximally random field. An exactly Cartesian set is worse
+still: it is degenerate, and AREPO's triangle union then misses exactly one
+cell's area (`sum(DualArea) = 99.902` against `box = 100` at `n = 32`), which
+terminates on the RD coverage audit. That is why the prepared `rk2_unjit_v1`
+campaign cannot run at all.
+
+### 3. A regular triangular lattice restores second order
+
+A new mesh family was added: a periodic row-offset triangular lattice with an
+even row count (an odd count leaves the two rows meeting at the seam both
+unoffset, creating a defect line). Every node carries six congruent triangles,
+the Delaunay is non-degenerate, and the family is exactly self-similar.
+
+Advected Yee, `boost = 1`, LDA, density L1, `dt = 0.25/n`:
+
+| family | n=32 | n=64 | p | n=128 | p | n=256 | p |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| GL+F1, jittered 0.20 | `1.901e-3` | `6.486e-4` | 1.551 | `2.612e-4` | 1.312 | `1.315e-4` | **0.990** |
+| GL+F1, triangular | `1.227e-3` | `3.008e-4` | 2.029 | `7.465e-5` | 2.011 | `1.853e-5` | **2.011** |
+| lumped ML, triangular | `3.928e-3` | `2.037e-3` | 0.947 | `1.040e-3` | 0.970 | | |
+| GL+F1, glass (48 tiled) | | `6.430e-4` (n=48) | | `1.748e-4` (n=96) | 1.879 | `5.246e-5` (n=192) | 1.737 |
+
+Three things follow.
+
+- On the triangular lattice GL+F1 is **clean second order sustained to
+  `n = 256`**. The implementation is correct.
+- On the jittered family the order reaches **0.990 at `n = 256`**: 1.55 and 1.31
+  were pre-asymptotic, and that family is asymptotically first order.
+- **The lumped scheme stays first order on the same lattice** (0.947, 0.970).
+  This is the control that matters: the regular mesh does not cancel errors
+  generically, it specifically repairs GL+F1. Without this line the triangular
+  result could have been dismissed as symmetry superconvergence.
+
+The stationary control is second order on both families (2.01/2.07 jittered,
+2.08/2.04 triangular), as it must be.
+
+### 4. Mechanism
+
+GL is the **first Neumann truncation of the mass-matrix inverse**, and lumping
+is the zeroth. Writing `M_ij = sum_T m_ij`, `S = diag|S_i|`, `M = S(I + X)`, and
+`v` for the lumped rate `v_i = -(1/|S_i|) sum_T phi_i`, the Δt -> 0 limit of the
+implemented corrector is
+
+```
+   lumped              u_dot = v                     error vs consistent mass = X v
+   GL + F1             u_dot = (I - X) v             error vs consistent mass = -X^2 v
+   consistent mass     u_dot = (I + X)^{-1} v
+```
+
+The `|S_i| v_i` terms cancel identically, which is what makes GL an explicit
+scheme at all. The leading part of `X` is a patch-weighted geometric offset:
+
+```
+   (X v)_i  ~=  grad(v) . d_i ,
+   d_i = (1/|S_i|) sum_{T in i} sum_j m_ij (x_j - x_i)
+       = (1/|S_i|) sum_{T in i} beta_i^T |T| (x_c^T - x_i)
+```
+
+so `d_i = O(h)` unless the patch-weighted offsets cancel. For a centred
+distribution on a symmetric patch they cancel exactly, which is why lumping a
+Galerkin mass matrix in FEM costs only `O(h^2)`; LDA's upwind-biased `beta` does
+not have that symmetry.
+
+- Lumped: the error **is** `X v = O(h)|grad v|`, so it is first order whenever
+  `d_t u != 0`, on any mesh. Measured on both families.
+- GL+F1: the error is `X^2 v`. Applying `X` to a *smooth* `O(h)` field costs
+  another power of `h`; applying it to a mesh-scale-*rough* field does not. The
+  order therefore depends on whether `d_i` varies smoothly across the mesh.
+- `boost = 0`: `v ~= 0`, so `X v` and `X^2 v` both vanish and every combination
+  is second order. This is exactly why the defect was invisible for so long.
+
+### 5. The mechanism is quantitative
+
+The purely geometric surrogate of `d_i`, obtained by setting `beta = I/3`,
+
+```
+   g_i = (1/|S_i|) sum_{T in i} (|T|/3) (x_c^T - x_i)
+```
+
+was measured directly on each point set with a periodic Delaunay (two
+independent triangulations agree to 0.2 per cent; both reproduce the box area to
+`1e-10`). Fitting `E = A/n^2 + B/n` to each family's ladder:
+
+| family | `|g|/h` mean | `A` | `B` | `B / (|g|/h)` |
+| --- | ---: | ---: | ---: | ---: |
+| triangular | `0.00000` | 1.275 | `-0.0006` | -- |
+| glass (48 tiled) | `0.01704` | 1.344 | `0.00286` | 0.168 |
+| jittered 0.20 | `0.16685` | 1.184 | `0.02375` | 0.142 |
+
+`A` is the same for all three families to within seven per cent, `B` vanishes on
+the lattice, and **`B` is proportional to the median-dual patch asymmetry with
+the same constant across two unrelated mesh families**, over a tenfold range.
+The jittered family measures `|g|/h = 0.1505` at jitter 0.025 and `0.1669` at
+0.20 -- flat, as section 2 requires.
+
+The Voronoi centroid offset `|CoM - x|/h` from the snapshots is **not** a usable
+predictor: it falls by a factor of eight between jitter 0.20 and 0.025
+(`0.0726` to `0.0092`) while the order does not move. The quantity that controls
+unsteady RD accuracy lives on the Delaunay connectivity, not on the Voronoi
+cells. This is a direct, and somewhat unexpected, answer to open question 1 of
+`context.md`.
+
+### 6. Consequences
+
+1. `553a61e` must be restated. GL+F1 does reach second order; the earlier
+   measurement was limited by the mesh family. The mass-matrix diagnosis it
+   confirmed still stands -- lumped really is first order for unsteady flow, now
+   verified on a regular mesh as well.
+2. **The jittered-Cartesian family must be retired for order measurements.**
+   Its near-degenerate Delaunay makes it a worst case that no amount of
+   refinement or de-jittering escapes. Future ladders should use the triangular
+   lattice as the regular control and a glass as the realistic case.
+3. The glass result is the one that matters for AREPO. A glass is ten times
+   better than the jittered family but not clean: `B = 0.0029` still overtakes
+   `A/n^2` near `n = 200`, which is why the glass order is already drifting
+   (1.879 -> 1.737). **On the meshes AREPO actually uses, GL+F1 alone is
+   asymptotically first order for unsteady flow.** Under ALE, where the mesh
+   deforms continuously, there is no reason to expect better.
+4. That makes the documented alternatives worth implementing and measuring
+   rather than deferring: Selective Lumping (Arpaia & Ricchiuto eq. 52), which
+   approximates the mass-matrix solve better instead of truncating it; or one
+   further Neumann iteration, which costs one extra residual sweep and should
+   reduce `B` by roughly `|g|/h` again without changing the order. The `B` law
+   above predicts what each should achieve, so either is now a falsifiable
+   experiment rather than an open-ended variant hunt.
+5. The stage-beta work Codex specified remains worth doing for its own sake --
+   the time discretisation is first order and that is wrong -- but it should not
+   be expected to change the h-ladder.
+
+### 7. Campaigns
+
+Under `/home/zwu/Hydro_data_analysis/Data_arepo_RD/yee_boost/`:
+`rk2_dt_ladder_n32`, `rk2_dt_ladder_n128` (timestep ladders);
+`jitsweep_j100`, `jitsweep_j050`, `jitsweep_j025` (jitter sweep);
+`tri_v1`, `tri_n256`, `tri_lumped_v1`, `tri_dt_ladder_n64` (triangular lattice);
+`rk2_jit256` (jittered n=256); `glass_rk2_v1` (glass ladder).
+All reached `TimeMax` with exit status 0, positive density and pressure,
+machine-precision initial error, and conservation at round-off; `f1_lumped` and
+the SVD fallback were zero throughout. `rk2_unjit_v1` cannot run and its
+campaign directory should be removed or annotated. The triangular-lattice
+timestep ladder gives temporal orders 0.947 and 0.970 with a 2.5 per cent share,
+confirming that the temporal defect is mesh-independent and subdominant on both
+families.
