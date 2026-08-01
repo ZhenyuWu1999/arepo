@@ -4639,3 +4639,69 @@ the error is `X^2 v` governed by the median-dual patch asymmetry, the three
 measured convergence results, and the documented alternatives (Selective
 Lumping, `F2`, or one further Neumann iteration) with an explicit note that they
 are not a current priority. Comment only; no numerics changed.
+
+## 2026-08-01: the F1 fallback now branches on numerical rank, not on the LU trigger
+
+- Author: `Claude Code Opus5`
+- Fixes the defect Codex identified in section 6 of the audit entry above.
+- The mass-matrix order analysis has been moved out of this log into
+  `dev_log/mass_matrix_order_analysis.md`; it is a standing property of the
+  scheme rather than a dated step, and it was crowding the log.
+
+### Change
+
+`rd_solve_upwind_system()` now returns the numerical rank of `S^-` instead of a
+flag saying which solver ran:
+
+```
+   rank = 4                  LU path: the pivot-ratio trigger did not fire
+   rank = DGELSD's rank      SVD path
+   rank = -1                 the solve failed
+```
+
+The corrector's F1 branch tests `solve_rank == 4`. Previously it tested
+`!used_svd`, which answers "did the cheap LU proxy hand this element to DGELSD?"
+-- a question with no bearing on whether `beta_i` is defined. A small LU pivot
+ratio routes numerically full-rank matrices through DGELSD as well, and those
+elements were silently given the lumped mass matrix, i.e. the unsteady
+first-order formulation that GL+F1 exists to replace.
+
+The comment on the rank-deficient branch now also records that rank is a safe
+approximation from below of the real criterion, which is consistency of
+`S^- z = T_target`; that third right-hand side is not protected by the null-space
+lemma the way the first two are.
+
+### Verification
+
+All four scheme/switch combinations build against system LAPACKE and MKL:
+`LDA+RK2`, `N+RK2`, `LDA` lumped, `B` lumped. Only pre-existing warnings.
+
+**The defect, demonstrated.** Gresho `random48` with `vx += 1e-11`, the case
+Codex's `rcond` study built to sit below the LU trigger while staying full rank.
+LDA + RK2, 4 ranks, `TimeMax = 0.01`:
+
+| | SVD calls | returning rank 3 | rank 4 | `f1_lumped` |
+| --- | ---: | ---: | ---: | ---: |
+| before | 192 | 0 | 192 | **83** |
+| after | 192 | 0 | 192 | **0** |
+
+Every one of those elements is full rank; 83 corrector solves were being degraded
+to the lumped mass and now are not.
+
+On Gresho `v0_random48`, where genuine rank-3 elements are present, `f1_lumped`
+falls from 4991 to 3721 over the same interval and the trajectory changes, as it
+must once those elements stop being degraded.
+
+**No change where there should be none.** The advected-Yee `n = 64, boost = 1`
+case never calls DGELSD (`svd_fallback = 0` over all 256 steps). Old and new
+binaries give **bitwise identical** `Density`, `Velocities`, `InternalEnergy`,
+`Masses` and `Coordinates` at `t = 1`, so the LU path is untouched and every
+convergence result recorded today still stands.
+
+### Not done
+
+The genuinely rank-deficient branch still falls back to the lumped mass. That is
+the conservative choice and is unchanged; what changed is only which elements
+reach it. Deciding what `beta` should be at true rank deficiency remains open and
+matters for ALE, where relative stagnation will be common.
+

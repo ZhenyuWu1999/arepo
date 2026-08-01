@@ -170,14 +170,28 @@ static void rd_record_dt_extrapolation(double dt_extrapolation)
  *  \param[in] S Row-major 4x4 matrix S^-; left unmodified.
  *  \param[in,out] rhs Row-major 4 x nrhs right-hand sides, overwritten by X.
  *  \param[in] nrhs Number of right-hand sides.
+ *  \param[out] rank Numerical rank of S^-: 4 on the LU path, because the
+ *         pivot-ratio trigger did not fire and no direction is numerically
+ *         unresolvable; the rank DGELSD reports on the SVD path; and -1 if the
+ *         solve failed, so a caller that ignores `info` still cannot mistake a
+ *         failure for a full-rank result.
+ *
+ *         A caller whose formulation needs beta_i to be defined must branch on
+ *         this and not on whether the SVD path was taken.  The pivot ratio is
+ *         only a solver-selection trigger: it routes numerically full-rank
+ *         matrices through DGELSD as well, and DGELSD then reports rank 4 for
+ *         them.  Treating "used the SVD" as "rank deficient" silently degrades
+ *         those elements.
  *
  *  \return LAPACK info of the step that produced the returned solution.
  */
-static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapack_int nrhs, int *used_svd)
+static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapack_int nrhs, lapack_int *rank)
 {
   double A[16];
   lapack_int ipiv[4];
   int use_pseudo_inverse = 0;
+
+  *rank = -1;
 
   memcpy(A, &S[0][0], sizeof(A));
 
@@ -224,27 +238,34 @@ static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapa
     }
 #endif /* #ifdef RD_ALWAYS_PSEUDOINVERSE */
 
-  *used_svd = use_pseudo_inverse;
-
   if(!use_pseudo_inverse)
-    return LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', 4, nrhs, A, 4, ipiv, rhs, nrhs);
+    {
+      lapack_int trs_info = LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', 4, nrhs, A, 4, ipiv, rhs, nrhs);
+
+      if(trs_info == 0)
+        *rank = 4;
+
+      return trs_info;
+    }
 
   /* Minimum-norm least-squares solution.  RD_SVD_RCOND=-1 asks DGELSD to use
    * its machine-precision cut-off.  The LU threshold above selects the solver;
    * it must not also discard a resolvable singular direction. */
   double singular_values[4];
-  lapack_int rank;
+  lapack_int svd_rank;
 
   memcpy(A, &S[0][0], sizeof(A));
-  info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 4, 4, nrhs, A, 4, rhs, nrhs, singular_values, RD_SVD_RCOND, &rank);
+  info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 4, 4, nrhs, A, 4, rhs, nrhs, singular_values, RD_SVD_RCOND, &svd_rank);
 
   RD_stat_pinv_fallback++;
   if(info == 0)
     {
-      if(rank < RD_stat_min_svd_rank)
-        RD_stat_min_svd_rank = rank;
-      if(rank >= 0 && rank <= 4)
-        RD_stat_svd_rank_count[rank]++;
+      *rank = svd_rank;
+
+      if(svd_rank < RD_stat_min_svd_rank)
+        RD_stat_min_svd_rank = svd_rank;
+      if(svd_rank >= 0 && svd_rank <= 4)
+        RD_stat_svd_rank_count[svd_rank]++;
     }
 
   return info;
@@ -1282,9 +1303,9 @@ void compute_residuals(tessellation *T)
           printf("RD-TRACE-VV stage=%d velvtx=%.17g %.17g\n", rd_stage, Velvertex_avg[0], Velvertex_avg[1]);
         }
 #endif
-      int used_svd          = 0;
-      lapack_int solve_info = rd_solve_upwind_system(Sminus, &rhs[0][0], 3, &used_svd);
-      (void)used_svd;
+      lapack_int solve_rank = -1;
+      lapack_int solve_info = rd_solve_upwind_system(Sminus, &rhs[0][0], 3, &solve_rank);
+      (void)solve_rank;
 
       if(solve_info != 0)
         {
@@ -1465,29 +1486,21 @@ void compute_residuals(tessellation *T)
 
 #ifdef LDA_SCHEME
           /* Global Lumping is the first Neumann truncation of the mass-matrix
-           * inverse: with M = S(I + X) and v the lumped rate, lumping gives
-           * u_dot = v, this scheme gives u_dot = (I - X) v, and the consistent
-           * mass matrix would give (I + X)^{-1} v. The leading part of X is the
-           * patch-weighted offset sum_j m_ij (x_j - x_i) = beta_i |T| (x_c - x_i),
-           * which is O(h) because beta is upwind biased. The lumped error is
-           * therefore X v = O(h) whenever d_t u != 0; the error here is X^2 v,
-           * which is O(h^2) only where that offset field varies smoothly over
-           * the mesh.
+           * inverse: with M = S(I + X), lumping gives u_dot = v, this scheme
+           * gives u_dot = (I - X) v, and the consistent mass matrix would give
+           * (I + X)^{-1} v. The truncated term X^2 v is O(h) rather than O(h^2)
+           * wherever the median-dual patch asymmetry varies on the mesh scale,
+           * which makes the scheme asymptotically first order for unsteady flow
+           * on an irregular mesh. Measured: second order to n = 256 on a regular
+           * triangular lattice, 1.48 at n = 384 on a glass, 0.99 at n = 256 on a
+           * jittered Cartesian mesh.
            *
-           * Measured on the advected Yee vortex (2026-08-01 development-log
-           * entry): second order to n = 256 on a regular triangular lattice,
-           * order 0.990 at n = 256 on a jittered Cartesian mesh, and 1.74 at
-           * n = 192 on a SWIFT glass. The first-order coefficient is
-           * proportional to the median-dual patch asymmetry with the same
-           * constant across mesh families. A glass is good enough for now.
-           *
-           * If that ceases to be good enough -- most likely under ALE, where the
-           * mesh deforms continuously -- the documented alternatives are
-           * Selective Lumping (Arpaia & Ricchiuto 2015 eq. 52), which keeps the
-           * Galerkin mass matrix on the new-value term instead of truncating,
-           * the F2 mass matrix (eq. 28), or one further Neumann iteration at the
-           * cost of an extra residual sweep. Not currently a priority. */
-          if(!used_svd)
+           * A glass is good enough at the resolutions currently in use. The
+           * derivation, the measurements, the alternatives (iterating the
+           * Neumann series to a tolerance; Selective Lumping; F2) and what does
+           * *not* work are in dev_log/mass_matrix_order_analysis.md. Not a
+           * current priority. */
+          if(solve_rank == 4)
             {
               /* F1 mass matrix through the third right-hand side:
                * T_i = -K_i^+ z with S^- z = T_target. Conservation is the
@@ -1508,12 +1521,17 @@ void compute_residuals(tessellation *T)
             }
           else
             {
-              /* Rank-deficient element: beta_i is undefined there (the F1
-               * temporal target is an arbitrary vector, unprotected by
-               * Lemma 1), and no generalized inverse can restore
-               * sum_i beta_i = I on a singular S^-. The lumped mass is the
-               * unique conservative element-local choice, so fall back to it
-               * and count the event. */
+              /* Genuinely rank-deficient element (DGELSD resolved fewer than
+               * four directions): beta_i is undefined there. The F1 temporal
+               * target is an arbitrary vector, unprotected by Lemma 1, so
+               * S^- z = T_target need not even be consistent, and no
+               * generalized inverse can restore sum_i beta_i = I on a singular
+               * S^-. The lumped mass is the unique conservative element-local
+               * choice, so fall back to it and count the event.
+               *
+               * Rank, not "the SVD path was taken", is the criterion. Consistency
+               * of S^- z = T_target is what is actually required and is stricter
+               * still; rank < 4 approximates it from the safe side. */
               RD_stat_f1_lumped++;
 
               for(k = 0; k < 4; k++)
