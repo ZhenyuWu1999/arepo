@@ -4207,3 +4207,134 @@ inspection: the update is in integrated form and divides by no volume,
 the scheme or the error norm on the RD path. The unjittered run remains worth
 doing, but as a test of triangle quality and mesh family, not of dual-cell
 choice.
+
+## 2026-08-01: decision — fixed-mesh timestep ladder and coherent stage-2 residuals
+
+- Author: `Codex (GPT-5)`
+- Decision: accept Claude Code Opus5 review `a0a5231` and run the proposed
+  fixed-mesh timestep ladder before making solver changes.
+- The temporal-convergence analysis must use Richardson differences between
+  adjacent-timestep solutions on the identical mesh and IC:
+  `D0 = ||U_dt - U_dt/2||`, `D1 = ||U_dt/2 - U_dt/4||`, and
+  `D2 = ||U_dt/4 - U_dt/8||`, with observed orders
+  `p_k = log2(Dk / Dk+1)`.
+- If the ladder shows first-order temporal convergence, the follow-up must
+  compare three stage-2 residuals: current mixed, coherent `beta^n`, and
+  coherent `beta*`.
+- Coherent `beta*` must not use the existing `+dU/2` shortcut. It must save or
+  recompute `phi^T(U^n)` and redistribute that residual using `beta*`, so both
+  spatial halves and the temporal term use the intended coherent stage-2
+  distribution.
+- Do not implement beta, gamma, Galerkin-mass, or rank-API changes before the
+  timestep-ladder results and judgment are recorded.
+
+## 2026-08-01: fixed-mesh timestep ladder result — the boosted RK2 path is first order in time
+
+- Author: `Codex (GPT-5)`
+- Scope: execution of the decision immediately above. No solver source was
+  modified or rebuilt, and no beta, gamma, Galerkin-mass, or rank-API change
+  was made.
+
+### Configuration and provenance
+
+- Campaign:
+  `/home/zwu/Hydro_data_analysis/Data_arepo_RD/yee_boost/rk2_dt_ladder_n64`
+- Immutable binary:
+  `build_artifacts/yee-rk2-velvfix/586eb0abd296-5102e6f64eb6acd3/Arepo`
+- Binary SHA256:
+  `a1c96170532384644181a0842e97939e9a516482136c791489f8cc2ec9cece77`
+- Fixed case: Yee `n=64`, deterministic jitter seed `20260729`, jitter
+  fraction `0.2`, boost `1`, `TimeMax=1`, LDA GL+F1 RK2, one MPI rank.
+- All four runs use the exact existing `rk2_nodal_v1` IC, SHA256
+  `74b3822dfe94bb1c8f1279062403d327d28399f0e2b57ed9b5207270e85a2b9e`.
+- Each timestep has a separate case and output directory. `run_case.sh`
+  verified the managed artifact and copied the build manifest, Config,
+  generated header, source status/patch, parameter file, linkage, runner Git
+  state, run manifest, and exit status into its timestamped provenance
+  directory.
+- Slurm controller and compute launch were healthy. Jobs `10357779`,
+  `10357780`, `10357781`, and `10357782` completed with `0:0` on
+  `worker095`, `worker095`, `worker088`, and `worker088`, respectively.
+
+### Single-rank MPI control
+
+The one-rank `dt=1/256` snapshots were matched to the existing four-rank
+`rk2_nodal_v1` snapshots by `ParticleIDs`, not by HDF5 row order. Both the
+initial and final snapshots contain the identical set of 4096 IDs and the
+coordinates are bitwise identical. Across `CenterOfMass`, density, velocity,
+internal energy, and mass, the largest absolute difference divided by that
+field's four-rank maximum is `7.44e-15` (acceptance threshold `1e-11`). The
+control therefore passes; the former four-rank result is rank-invariant to
+round-off for this test.
+
+### Runtime, positivity, conservation, and analytic error
+
+The RD-RK2 diagnostic line count equals the timestep denominator in every
+case; the first logged step and final time divided by the line count give the
+exact configured uniform timestep. (Adjacent differences of later printed
+timestamps jitter only in the final printed decimal digit.)
+
+| dt | steps | exit | f1_lumped sum | min predictor rho | min predictor p | max per-step conservation defect | analytic density L1 | analytic velocity L1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1/256 | 256 | 0 | 0 | 0.4880236 | 0.3667340 | 4.510e-17 | 6.486073e-4 | 1.893326e-3 |
+| 1/512 | 512 | 0 | 0 | 0.4879837 | 0.3666992 | 3.816e-17 | 6.511972e-4 | 1.912381e-3 |
+| 1/1024 | 1024 | 0 | 0 | 0.4879620 | 0.3666798 | 4.163e-17 | 6.525516e-4 | 1.922048e-3 |
+| 1/2048 | 2048 | 0 | 0 | 0.4879507 | 0.3666697 | 4.250e-17 | 6.532416e-4 | 1.926917e-3 |
+
+All standard per-case analyses are valid and reach snapshot time exactly 1.
+Final density and pressure are positive. Global mass relative changes are zero
+or at most `1.45e-16`; energy relative changes are zero or at most `1.92e-16`;
+momentum relative L2 changes are at most `3.47e-15`. Thus neither the F1 lumped
+fallback, predictor positivity, failed completion, nor conservation contaminates
+the temporal-order measurement. The analytic error approaches a fixed-mesh
+spatial plateau and is not used to estimate temporal order.
+
+### Adjacent-solution Richardson difference
+
+Final solutions were sorted by identical `ParticleIDs`. The compared conserved
+nodal state is
+
+```
+U = (rho, rho v_x, rho v_y, rho [u + |v|^2/2]).
+```
+
+The norm uses one common `DualArea = Mass/Density` weight on the fixed mesh.
+For completeness both the volume-weighted vector L1 and L2 norms were
+computed:
+
+| difference | L1 | L2 |
+| --- | ---: | ---: |
+| `D0 = ||U_1/256 - U_1/512||` | 4.343772e-5 | 9.342066e-5 |
+| `D1 = ||U_1/512 - U_1/1024||` | 2.181704e-5 | 4.693702e-5 |
+| `D2 = ||U_1/1024 - U_1/2048||` | 1.093377e-5 | 2.352699e-5 |
+
+The adjacent orders `p_k = log2(Dk/Dk+1)` are
+
+```
+L1:  p0 = 0.993493, p1 = 0.996665
+L2:  p0 = 0.993015, p1 = 0.996409
+Linf: p0 = 1.015649, p1 = 1.007651
+```
+
+Every individual conserved component gives the same result: all L1/L2 orders
+lie between `0.9891` and `0.9978`. This is clean asymptotic **first-order
+temporal convergence**, not second order approaching a spatial plateau.
+
+### Judgment and next discriminator
+
+The fixed-mesh Richardson experiment implicates the time/stage coupling in the
+boosted RK2 path. It does not by itself prove that stage beta is the unique
+cause, but it makes the three-way stage-2 residual experiment the next sharp
+discriminator. That experiment must compare:
+
+1. current mixed (`beta^n` folded first half, `beta*` second half/F1),
+2. coherent `beta^n`, and
+3. coherent `beta*`.
+
+The coherent `beta*` branch must not use `+dU/2`; it must save or recompute
+`phi^T(U^n)` and redistribute that first spatial half with `beta*`. No such
+implementation is included in this entry.
+
+Reproducible analysis artifacts are `analyze_fixed_mesh_ladder.py`,
+`richardson_analysis.json`, `timestep_summary.csv`, and the control comparison
+`dt_0256/mpi_control_compare.json` under the campaign directory.
