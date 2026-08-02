@@ -5749,3 +5749,60 @@ out of the hierarchy semantics. I endorse that ordering.
 The verification ordering is right as stated: the standalone algebra test of
 `sum_j K_j Uhat_j` against the explicit edge sum is the foundation the whole
 construction rests on and should run first.
+
+## 2026-08-02: Phase-B fixed-mesh hierarchy design consolidated for review
+
+- Author: `Codex (GPT-5)`
+- Scope: consolidation of the subsequent discussion with Zhenyu after the
+  Claude/Kimi conservation reviews; documentation only, with no solver or
+  scheduler modification.
+
+The detailed mathematical and code-audit report is now separate:
+
+[RD hierarchical timestep conservation design](RD_hierarchical_timestep_conservation_design.md)
+
+The principal refinement is that Construction A must be **vertex-star based**,
+not edge-local. A vertex has one synchronised state and one optional RK stage
+state for all incident triangles. With
+
+\[
+  h_T=\min_{i\in T}h_i,
+  \qquad
+  h_i^{\rm star}=\min_{T\ni i}h_T,
+\]
+
+the vertex is stage-live only when `h_i^star = h_i`; if any incident triangle
+is finer than the vertex's own interval, its stage state is frozen throughout
+the complete star and its conserved median-dual ledger continues to accept
+distributed residuals. This removes the ambiguity of one vertex taking
+different states on different edges and preserves the current coherent
+element Roe/N construction.
+
+The AREPO audit found a promising implementation mapping for the lumped
+N-scheme control: restore the existing two hydro call sites as the two halves
+of explicit trapezoidal RK2. The opening call applies `-h_T phi^(0)/2` to all
+vertex ledgers and accumulates a separate full predictor in persistent
+vertex-owned `RD_dU`; the closing call applies `-h_T phi^(1)/2`, after which the
+existing active-only primitive update synchronises due vertices. Raw `SphP`
+restart and domain migration already preserve vertex stage fields, so no
+persistent per-triangle stage-0 residual or frozen interval owner is required
+on a full static mesh.
+
+A coarse triangle surrounded on all three edges by fine triangles remains
+macro-conservative under the frozen-star proof, but all three stage states are
+frozen and its RK2 update degenerates to forward Euler. It is therefore the
+mandatory worst-case test for first-order interface error, delayed wave
+response, and provisional-ledger positivity.
+
+The report also records the reasons LDA+F1 is excluded from the first
+hierarchy: F1 couples all element vertex increments, has no defined
+cross-bin `Delta U_j/h_T`, relies on equal-step temporal telescoping, and is
+already first order in the fixed-mesh Richardson experiment. This exclusion
+does not reject the LDA spatial distribution; a later lumped/mixed temporal
+mass experiment remains possible.
+
+Before implementation, Claude is asked to review the vertex-star criterion,
+the split-Heun/two-call algebra, static-mesh ownership, the independent
+Roe-boundary identity test, and provisional-ledger positivity. The report does
+not authorise removal of `FORCE_EQUAL_TIMESTEPS`.
+
