@@ -20,7 +20,7 @@ hybrid:
 - conserved variables remain the persistent ledger, while primitive variables
   are recovered only for vertices active at their own interval endpoint.
 
-The controlled tests establish four distinct facts.
+The controlled tests establish five distinct facts.
 
 1. With all bins equal, the two-call implementation reproduces the concentrated
    `N + RK2` implementation to round-off and retains second-order temporal
@@ -33,6 +33,10 @@ The controlled tests establish four distinct facts.
    a reduction over every local ghost triangle is decomposition independent.
 4. The present frozen-star Construction A is first order in time at fixed
    spatial mesh. This is an interface-semantic error, not an RK2 or beta error.
+5. `CREATE_FULL_MESH` is not required on the fixed geometry. Rebuilding a
+   genuinely active-only static tessellation at every partial synchronization
+   reproduces the full-mesh result to round-off on one and four ranks, including
+   after real particle migration during domain decomposition.
 
 The implementation is therefore a valid conservation and scheduling prototype,
 but the fixed-mesh Richardson result prevents calling it a globally
@@ -44,17 +48,25 @@ The new compile-time switch is `RD_HIERARCHICAL_TIMESTEPS`. The prototype
 requires:
 
 - `VORONOI_STATIC_MESH`;
-- `CREATE_FULL_MESH`;
 - `N_SCHEME`;
 - `RD_RK2_TOTAL_RESIDUAL`;
-- no `VORONOI_STATIC_MESH_DO_DOMAIN_DECOMPOSITION`.
+
+It has now been tested in two fixed-geometry mesh modes:
+
+- a persistent complete mesh, with or without `CREATE_FULL_MESH` (removing the
+  macro alone does not make a mesh built at the all-active initial point
+  partial); and
+- a genuine active-only mesh, without `CREATE_FULL_MESH` and with
+  `VORONOI_STATIC_MESH_DO_DOMAIN_DECOMPOSITION`, which rebuilds the
+  tessellation around active primaries at partial synchronization points.
 
 The controlled two-level test uses `RD_HIERARCHICAL_TEST_PATTERN`, which makes
 the vertices with `x < BoxSize/2` one timebin finer than the fresh CFL candidate.
 This flag is testing apparatus, not a proposed production bin criterion.
 
 The prototype deliberately does not enable LDA/F1, beta variants, gamma,
-Galerkin mass, moving mesh, runtime domain decomposition, or a new rank API.
+Galerkin mass, moving mesh, or a new rank API. Static domain decomposition is
+now covered; vertex coordinates remain fixed throughout.
 
 ## 3. Discrete update
 
@@ -108,12 +120,13 @@ exactly to the existing concentrated explicit-trapezoidal/Heun RD step.
 | Area | Prototype change |
 | --- | --- |
 | `src/main/run.c` | opening and closing calls select predictor/corrector RD stages |
-| `src/hydro/residual_distribution_solver.c` | due-triangle classification, vertex-star reduction, half-ledger updates, full predictor assembly, stage-state selection, assertions and diagnostics |
+| `src/hydro/residual_distribution_solver.c` | due-triangle classification, full/active-only ownership, persistent static dual areas, vertex-star reduction, half-ledger updates, full predictor assembly, stage-state selection, assertions and diagnostics |
 | `src/main/allvars.h`, `src/mesh/mesh.h` | persistent/local and exchanged `RD_StarTimeBin`, `RD_PredictorEnd` |
 | `src/mesh/voronoi/voronoi_exchange.c` | exchange star bin, predictor endpoint, and existing `RD_dU` |
 | `src/time_integration/timestep.c` | optional controlled 2:1 test pattern derived from the fresh CFL candidate |
 | `defines_extra`, `Template-Config.sh` | legal and documented switches |
-| `examples/yee_2d/Config_RD_RK2_N_{INTERNAL,HIER_EQUAL,HIER_2LEVEL}.sh` | reference, equal-bin, and two-level test configurations |
+| `examples/yee_2d/Config_RD_RK2_N_{INTERNAL,HIER_EQUAL,HIER_2LEVEL}.sh` | reference, equal-bin, and full-mesh two-level test configurations |
+| `examples/yee_2d/Config_RD_RK2_N_HIER_{NOFULL_PERSISTENT,ACTIVE_STATIC}.sh` | no-macro persistent-mesh control and true active-only static rebuild configuration |
 
 The predictor endpoint is stored as an integer timeline value and asserted at
 the closing stage. This prevents a stale `RD_dU` from a different vertex
@@ -142,6 +155,22 @@ Using only globally owned triangles gives 3968 stage-live and 128 frozen
 vertices on both one and four ranks. This is also the mathematically correct
 definition: the star clock is derived from exactly the triangles whose
 residuals enter the ledger.
+
+The ownership key needs one precise adaptation for a genuinely active-only
+mesh. A persistent/full mesh can use the minimum `(ParticleID, task)` over all
+three vertices. On a partial rebuild, that minimum vertex might be inactive and
+its primary star absent. The owner is therefore the minimum key among vertices
+in the triangle's finest bin `b_T`. At least one such vertex is active whenever
+the triangle is due, all ranks see the same live timebins, and exactly one
+primary instance claims the triangle. The same owned set defines the residual
+ledger and the vertex-star reduction.
+
+`DualArea` follows different semantics: it is initialized once from the
+all-active static tessellation, then persists and migrates as part of `SphP`.
+Recomputing it from a fine-only mesh would replace a complete median-dual cell
+by an incomplete active-star fragment. Debug builds check both local positivity
+and the invariant global coverage `sum_i DualArea_i = BoxSize_X BoxSize_Y`
+after active-only domain decompositions.
 
 The controlled test scheduler initially had a separate ratchet error: it
 subtracted one bin after AREPO's old-bin synchronization check, so a fine
@@ -173,6 +202,32 @@ bins 27/26 and `max_ratio=2` throughout.
   `0:0`.
 - hierarchy ladder jobs: `10357915`, `10357914`, `10357916`, `10357917`, all
   `COMPLETED`, exit `0:0`.
+
+### Active-only static-mesh extension
+
+- no-`CREATE_FULL_MESH`, persistent-mesh control binary:
+  `build_artifacts/phaseb-n-nofull-persistent/45abb3a5d266-f30ade81f1a0d6ae/Arepo`
+- SHA256:
+  `95e573691b228c004e7bd21bf1a86d5f42dd85363edf53784a6df41ad4f1575d`
+- true active-only static-rebuild binary:
+  `build_artifacts/phaseb-n-active-static/45abb3a5d266-714851c5abfbfb2a/Arepo`
+- SHA256:
+  `9f83eee8772603fa501505ff074984a345514311874e03ecd8efcbfb39304a0f`
+- no-macro persistent one/four-rank jobs: `10357925`, `10357924`;
+- active-only short one/four-rank jobs: `10357926`, `10357927`;
+- active-only `TimeMax=1` one/four-rank jobs: `10357928`, `10357929`.
+
+All eight builds/runs listed in this subsection completed with exit `0:0`.
+
+After adding the persistent-area coverage assertion, the final audit artifact
+is
+`build_artifacts/phaseb-n-active-static-audit/45abb3a5d266-b86d353b5bdba274/Arepo`
+with SHA256
+`13f3f340cd56db4548c62a9e0deba5c4188a2d847b4b358ccc0042e3e8298494`.
+Build job `10357930` and short one/four-rank jobs `10357931`, `10357932` all
+completed with exit `0:0`; the assertion remains satisfied on every rebuild.
+The audit one-rank snapshot is bitwise identical to the pre-assertion result,
+and its one/four-rank differences reproduce the table in Section 7.6.
 
 The campaign root is
 `/home/zwu/Hydro_data_analysis/Data_arepo_RD/yee_boost/phaseb_hierarchy_v1`.
@@ -286,6 +341,48 @@ example, hierarchy density L1 changes from `0.00332602` to `0.00332541` over
 the ladder, which is why temporal order is correctly measured from adjacent
 numerical solutions rather than from analytic errors.
 
+### 7.6 Genuine active-only static mesh
+
+Removing `CREATE_FULL_MESH` while retaining the initial static tessellation is
+an important negative control, not an active-only implementation. At `t=0` all
+particles are active, so that mesh remains complete. This control agrees with
+the original full-mesh result to at most `1.8e-15` in the primitive fields.
+
+The true active-only configuration additionally enables static domain
+decomposition and reconstructs the mesh at every synchronization point because
+`ActivePartFracForNewDomainDecomp=0.01`. At fine-only points the one-rank mesh
+contains about 2242 local/periodic points, versus about 4354 at full
+synchronization. Nevertheless the globally owned due triangle counts remain
+exactly 4224/8192, and stage-live/frozen counts remain 3968/128.
+
+For the short `TimeMax=1/64` test, active-only one-rank versus four-rank maximum
+field differences are:
+
+| Field | maximum absolute difference |
+| --- | ---: |
+| density | `7.77e-16` |
+| velocity | `1.11e-15` |
+| internal energy | `2.66e-15` |
+| mass | `2.08e-17` |
+| pressure | `1.11e-15` |
+
+The one-rank active-only result versus the original full-mesh result differs by
+at most `1.8e-15` in primitive fields. Over the long `TimeMax=1` run (512 sync
+points and 514 mesh constructions), active-only one/four-rank differences stay
+at accumulated round-off: density `3.11e-15`, velocity `4.00e-15`, internal
+energy `7.99e-15`, mass `9.71e-17`, and pressure `3.89e-15`. The active-only
+one-rank result versus the full-mesh hierarchy reference is similarly within
+`8.44e-15` in every primitive field.
+
+This test genuinely exercises migration. The four-rank log records 1792
+particles exchanged at the first fine-only domain decomposition and about 2176
+at later decompositions. Thus persistent `DualArea`, `RD_dU`, star-bin, and
+predictor-endpoint fields crossed task boundaries rather than merely surviving
+an empty rebuild. Both long runs finish with `f1_lumped=0`, minimum predictor
+density/pressure `0.4978825/0.3767499`, maximum distribution conservation
+defect below `1.82e-15`, and globally conserved quantities changing only at
+floating-point reduction round-off.
+
 ## 8. Interpretation
 
 The conservation concern is resolved for this construction: an inactive
@@ -293,6 +390,14 @@ vertex can safely accept residuals in its conserved ledger, exactly as an
 inactive FV cell accepts flux, provided each globally owned triangle is
 evaluated once when due and primitive recovery waits for the vertex endpoint.
 There is no need to reinterpret RD as pairwise face-flux exchange.
+
+The active-only experiment strengthens this conclusion. A complete
+tessellation need not remain resident between synchronization points. It is
+sufficient that every due triangle is discoverable from at least one active
+finest-bin primary, ownership is defined within that active subset, and
+geometry-dependent control volumes persist independently of the partial mesh.
+This is the fixed-geometry RD analogue of AREPO's conserved-variable flux
+ledger, without invoking moving-mesh geometry.
 
 The accuracy concern is not resolved. A coarse-side vertex touching a fine
 triangle is frozen for its entire star. Triangles using that vertex therefore
@@ -325,9 +430,9 @@ provide the missing time state at frozen vertices.
    vertex-time interpolant/composite quadrature or a persistent subcycled
    predictor ledger. Either replacement must still provide one state per
    vertex per absolute time for the complete star.
-5. Only after the time-state issue is resolved, extend beyond N/lumped and test
-   restarts, arbitrary multi-level ratios, runtime domain decomposition, and
-   moving meshes.
+5. Test restarts and arbitrary multi-level ratios on the now-validated static
+   active-only path. Only after the time-state issue is resolved should the
+   method extend beyond N/lumped or address moving meshes.
 
 The present prototype should be retained as the conservative baseline and as a
 diagnostic control for any higher-order interface construction.

@@ -5996,3 +5996,72 @@ second order would instead require a shared vertex-time interpolant/composite
 quadrature or persistent subcycled predictor construction. Beta-family work
 remains paused because it cannot manufacture the missing frozen-vertex stage
 state.
+
+## 2026-08-02: Phase-B active-only static-mesh extension
+
+- Author: `Codex (GPT-5)`
+- Scope: determine whether the fixed-mesh hierarchy really requires
+  `CREATE_FULL_MESH`; enable and validate active-only reconstruction without
+  changing vertex positions or touching moving-mesh logic.
+
+The detailed implementation, ownership argument, immutable artifacts, and
+measurements have been added to:
+
+[Phase-B fixed-mesh hierarchical timestep prototype](RD_hierarchical_timestep_phaseb_prototype.md)
+
+The initial hierarchy did use `CREATE_FULL_MESH`. Merely removing that macro is
+not a genuine active-only test: because all particles are active at `t=0`, the
+static tessellation is initially complete and remains resident. This
+no-macro/persistent control reproduces the full-mesh result to round-off.
+
+A true active-only fixed-geometry mode is now enabled by combining no
+`CREATE_FULL_MESH` with `VORONOI_STATIC_MESH_DO_DOMAIN_DECOMPOSITION`. With
+`ActivePartFracForNewDomainDecomp=0.01`, the tessellation is rebuilt around the
+current active primaries at partial synchronization points; particle positions
+do not move.
+
+Two semantic changes are required.
+
+1. A partial mesh cannot assign a due triangle to the minimum-ID vertex over
+   all three vertices, because that primary may be inactive and absent. It
+   assigns ownership to the minimum `(ParticleID, task)` among vertices in the
+   triangle's finest timebin `b_T`. At least one such primary is active whenever
+   the triangle is due, so the rule remains unique and rank independent. The
+   vertex-star reduction uses exactly the same owned triangle set.
+2. `DualArea` must not be recomputed from the partial active star. It is
+   initialized once from the all-active static mesh and thereafter persists and
+   migrates in `SphP`. Debug assertions verify positive local values and global
+   coverage `sum_i DualArea_i = BoxSize_X BoxSize_Y` after reconstruction.
+
+The controlled Yee `n=64`, jittered, boost-one, 2:1 tests pass. Short
+`TimeMax=1/64` active-only one/four-rank snapshots agree in density, velocity,
+internal energy, mass, and pressure at `7.77e-16`, `1.11e-15`, `2.66e-15`,
+`2.08e-17`, and `1.11e-15` maximum absolute difference. They also agree with
+the prior full-mesh result at round-off. Due triangle counts remain 4224/8192,
+with 3968 stage-live and 128 frozen vertices on both decompositions.
+
+The `TimeMax=1` one/four-rank jobs also complete normally after 512 sync points
+and 514 mesh constructions. Their final primitive fields differ by at most
+`7.99e-15`; comparison with the full-mesh hierarchy is of the same scale. The
+four-rank logs record real exchanges of 1792 particles at the first fine-only
+domain decomposition and about 2176 later, so migration of `DualArea`,
+`RD_dU`, star-bin, and predictor-endpoint state was exercised. Both runs have
+`f1_lumped=0`, predictor minima `rho=0.4978825`, `p=0.3767499`, conservation
+defects below `1.82e-15`, zero exit status, and only reduction-order drift in
+global conserved sums.
+
+The final build with the post-migration global `DualArea` assertion is artifact
+`phaseb-n-active-static-audit/45abb3a5d266-b86d353b5bdba274`, SHA256
+`13f3f340cd56db4548c62a9e0deba5c4188a2d847b4b358ccc0042e3e8298494`.
+Build job `10357930` and short one/four-rank jobs `10357931`, `10357932` all
+completed with exit `0:0`. The assertion passed on every reconstruction; the
+one-rank result is bitwise identical to the earlier active-only result, and the
+one/four-rank field differences remain those reported above.
+
+Conclusion: `CREATE_FULL_MESH` is not structurally necessary for this
+fixed-geometry RD hierarchy. Active-only mesh reconstruction is feasible and
+conservative when triangle ownership is active-discoverable and the static
+median-dual geometry is persistent. This result does not cure the already
+measured first-order frozen-interface time error, and it does not validate
+moving meshes, LDA/F1, beta, gamma, Galerkin mass, arbitrary levels, or
+restarts.

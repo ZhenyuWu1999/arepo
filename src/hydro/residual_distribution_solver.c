@@ -67,12 +67,6 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(N_SCHEME)
 #error "RD_HIERARCHICAL_TIMESTEPS currently requires N_SCHEME + RD_RK2_TOTAL_RESIDUAL."
 #endif
-#if !defined(CREATE_FULL_MESH)
-#error "RD_HIERARCHICAL_TIMESTEPS requires CREATE_FULL_MESH so fixed simplex ownership sees the complete mesh."
-#endif
-#if defined(VORONOI_STATIC_MESH_DO_DOMAIN_DECOMPOSITION)
-#error "The first RD hierarchy prototype forbids runtime static-mesh domain decomposition."
-#endif
 #define RD_RK2_STAGE_BETA_LABEL "two-call-N-lumped"
 #endif
 
@@ -156,7 +150,7 @@ static int rd_triangle_is_physical(tessellation *T, int triangle_index)
   return 1;
 }
 
-static int rd_simplex_claimed(tessellation *T, int i);
+static int rd_simplex_claimed(tessellation *T, int i, int use_min_bin_owner);
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
 /*! \brief Map a local primary/periodic Delaunay point to its primary gas index. */
@@ -200,6 +194,22 @@ static integertime rd_point_predictor_end(const point *dp)
 
 static int rd_point_stage_live(const point *dp) { return rd_point_star_timebin(dp) == rd_point_timebin(dp); }
 
+/*! \brief Whether this build can reconstruct a genuinely partial static mesh.
+ *
+ * Without CREATE_FULL_MESH, a static-mesh domain decomposition rebuilds the
+ * tessellation around the current active set.  A persistent static mesh built
+ * at the all-active initial time remains complete even without that flag and
+ * can retain activity-independent ownership.
+ */
+static int rd_use_min_bin_owner(void)
+{
+#if !defined(CREATE_FULL_MESH) && defined(VORONOI_STATIC_MESH_DO_DOMAIN_DECOMPOSITION)
+  return 1;
+#else
+  return 0;
+#endif
+}
+
 struct rd_starbin_export
 {
   int task;
@@ -239,7 +249,7 @@ static void rd_prepare_vertex_star_context(tessellation *T)
     SphP[i].RD_StarTimeBin = P[i].TimeBinHydro;
 
   for(int triangle = 0; triangle < T->Ndt; triangle++)
-    if(rd_triangle_is_physical(T, triangle) && rd_simplex_claimed(T, triangle))
+    if(rd_triangle_is_physical(T, triangle) && rd_simplex_claimed(T, triangle, rd_use_min_bin_owner()))
       for(int vertex = 0; vertex < DIMS + 1; vertex++)
         if(DP[DT[triangle].p[vertex]].task != ThisTask)
           nexport++;
@@ -250,7 +260,7 @@ static void rd_prepare_vertex_star_context(tessellation *T)
 
   for(int triangle = 0; triangle < T->Ndt; triangle++)
     {
-      if(!rd_triangle_is_physical(T, triangle) || !rd_simplex_claimed(T, triangle))
+      if(!rd_triangle_is_physical(T, triangle) || !rd_simplex_claimed(T, triangle, rd_use_min_bin_owner()))
         continue;
 
       int triangle_bin = rd_point_timebin(&DP[DT[triangle].p[0]]);
@@ -617,11 +627,11 @@ static void rd_assert_K_sum_vanishes(double Kmatrix[4][4][3][3], int kfull, int 
  *
  *  Two notions are deliberately kept distinct here.
  *
- *  1. The **complete physical owned set**, `element[0 .. n-1]`. This defines
- *     the median dual area and the element geometry. It must not depend on
- *     which elements happen to be active in a time-integration stage;
- *     building `DualArea` from the active subset alone was the defect fixed
- *     in `ebe1be2`.
+ *  1. The **physical owned set available in this mesh**,
+ *     `element[0 .. n-1]`. With a persistent/full mesh this is complete. With
+ *     an active-only rebuild it contains the due simplices around active
+ *     primaries. The static median DualArea is initialized separately from an
+ *     all-active mesh and must never be rebuilt from this partial set.
  *  2. The **active subset**, marked by `active[]`, whose residuals are
  *     advanced on the current step.
  *
@@ -662,27 +672,45 @@ struct rd_element_set
  *  ID of their source), and the loop is over `DIMS + 1` vertices, so the same
  *  code covers triangles and tetrahedra.
  *
- *  The fixed-mesh hierarchy deliberately retains this activity-independent
- *  owner. CREATE_FULL_MESH guarantees that the winning primary's task holds
- *  the simplex even when that vertex is inactive. Remote activity comes from
- *  live PrimExch timebins, never DP[].timebin, which is only a construction
- *  stamp and is especially meaningless after the full-mesh temporary bin 0.
+ *  A persistent/full mesh uses the activity-independent minimum over all
+ *  vertices. A genuinely active-only static rebuild instead takes the minimum
+ *  only over vertices in the triangle's finest bin. Those vertices are active
+ *  whenever the triangle is due, so the winning primary owns a constructed
+ *  star. Remote bins come from live PrimExch data, never DP[].timebin, which is
+ *  only a construction stamp and is especially meaningless after the
+ *  CREATE_FULL_MESH temporary bin 0.
  */
-static int rd_simplex_claimed(tessellation *T, int i)
+static int rd_simplex_claimed(tessellation *T, int i, int use_min_bin_owner)
 {
   point *DP = T->DP;
   tetra *DT = T->DT;
 
-  MyIDType min_id = DP[DT[i].p[0]].ID;
-  int min_task    = DP[DT[i].p[0]].task;
+  MyIDType min_id = 0;
+  int min_task = -1, triangle_bin = TIMEBINS;
   int j;
 
-  for(j = 1; j < DIMS + 1; j++)
+  if(use_min_bin_owner)
     {
-      MyIDType id = DP[DT[i].p[j]].ID;
-      int task    = DP[DT[i].p[j]].task;
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+      triangle_bin = rd_point_timebin(&DP[DT[i].p[0]]);
+      for(j = 1; j < DIMS + 1; j++)
+        triangle_bin = imin(triangle_bin, rd_point_timebin(&DP[DT[i].p[j]]));
+#else
+      terminate_program("minimum-bin simplex ownership requires the RD hierarchy");
+#endif
+    }
 
-      if(id < min_id || (id == min_id && task < min_task))
+  for(j = 0; j < DIMS + 1; j++)
+    {
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+      if(use_min_bin_owner && rd_point_timebin(&DP[DT[i].p[j]]) != triangle_bin)
+        continue;
+#endif
+
+      MyIDType id = DP[DT[i].p[j]].ID;
+      int task = DP[DT[i].p[j]].task;
+
+      if(min_task < 0 || id < min_id || (id == min_id && task < min_task))
         {
           min_id   = id;
           min_task = task;
@@ -719,10 +747,15 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
   tetra *DT = T->DT;
   int Ndt   = T->Ndt;
   int i, j;
+  int use_min_bin_owner = 0;
+
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  use_min_bin_owner = classify_activity && rd_use_min_bin_owner();
+#endif
 
   int n = 0;
   for(i = 0; i < Ndt; i++)
-    if(rd_triangle_is_physical(T, i) && rd_simplex_claimed(T, i))
+    if(rd_triangle_is_physical(T, i) && rd_simplex_claimed(T, i, use_min_bin_owner))
       n += 1;
 
   set->n       = n;
@@ -730,7 +763,7 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
   set->active  = (char *)mymalloc_movable(&set->active, "RD_element_active", set->n * sizeof(char));
 
   for(i = 0, n = 0; i < Ndt; i++)
-    if(rd_triangle_is_physical(T, i) && rd_simplex_claimed(T, i))
+    if(rd_triangle_is_physical(T, i) && rd_simplex_claimed(T, i, use_min_bin_owner))
       set->element[n++] = i;
 
   set->normals =
@@ -1018,7 +1051,35 @@ void compute_residuals(tessellation *T)
    * stays a property of the tessellation. */
   struct rd_element_set set;
   rd_build_element_set(T, &set, 1);
+#ifndef RD_HIERARCHICAL_TIMESTEPS
   rd_accumulate_dual_area(T, &set);
+#else
+  /* Static RD control areas are initialized once from the all-active mesh and
+   * migrate with SphP. Recomputing them from a fine-only tessellation would
+   * replace the median dual cell by an incomplete active-star fragment. */
+  for(int area_index = 0; area_index < NumGas; area_index++)
+    if(!isfinite(SphP[area_index].DualArea) || SphP[area_index].DualArea <= 0.0)
+      terminate_program("RD hierarchy lost its persistent static DualArea");
+
+#ifdef RD_DEBUG_ASSERTS
+  /* Domain decomposition migrates the complete SphP record, including the
+   * persistent static DualArea. Check that repeated active-only rebuilds have
+   * neither lost nor duplicated any part of the median-dual partition. */
+  {
+    double local_area = 0.0, global_area;
+
+    for(int area_index = 0; area_index < NumGas; area_index++)
+      local_area += SphP[area_index].DualArea;
+
+    MPI_Allreduce(&local_area, &global_area, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    double box_area = boxSize_X * boxSize_Y;
+
+    if(fabs(global_area - box_area) > 1.0e-10 * box_area)
+      terminate_program("RD hierarchy persistent DualArea coverage changed after domain decomposition");
+  }
+#endif /* #ifdef RD_DEBUG_ASSERTS */
+#endif
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
   if(rd_stage == RD_RK_STAGE_PREDICTOR)
