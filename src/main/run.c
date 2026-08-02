@@ -226,7 +226,9 @@ void run(void)
 
         /* compute intercell flux with Riemann solver and update the cells with the fluxes */
 #ifdef RESIDUAL_DISTRIBUTION
-#ifndef RD_RK2_TOTAL_RESIDUAL
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+          compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR);
+#elif !defined(RD_RK2_TOTAL_RESIDUAL)
           compute_residuals(&Mesh);
 #else
           /* Under RD_RK2_TOTAL_RESIDUAL the complete two-stage step runs at
@@ -329,7 +331,11 @@ void run(void)
       exchange_primitive_variables_and_gradients();
 
 #ifdef RESIDUAL_DISTRIBUTION
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+      compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR);
+#else
       compute_residuals(&Mesh);
+#endif
 #else
       compute_interface_fluxes(&Mesh);
 #endif /*#ifdef RESIDUAL_DISTRIBUTION*/

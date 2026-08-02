@@ -294,6 +294,10 @@ void exchange_primitive_variables(void)
 #ifdef RD_RK2_TOTAL_RESIDUAL
               for(int rd_k = 0; rd_k < 4; rd_k++)
                 tmpPrimExch[off].RD_dU[rd_k] = SphP[place].RD_dU[rd_k];
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+              tmpPrimExch[off].RD_StarTimeBin  = SphP[place].RD_StarTimeBin;
+              tmpPrimExch[off].RD_PredictorEnd = SphP[place].RD_PredictorEnd;
+#endif
 #endif
             }
           listp = ListExports[listp].nextexport;
@@ -409,6 +413,10 @@ void exchange_primitive_variables_and_gradients(void)
 #ifdef RD_RK2_TOTAL_RESIDUAL
               for(int rd_k = 0; rd_k < 4; rd_k++)
                 tmpPrimExch[off].RD_dU[rd_k] = SphP[place].RD_dU[rd_k];
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+              tmpPrimExch[off].RD_StarTimeBin  = SphP[place].RD_StarTimeBin;
+              tmpPrimExch[off].RD_PredictorEnd = SphP[place].RD_PredictorEnd;
+#endif
 #endif
             }
           listp = ListExports[listp].nextexport;

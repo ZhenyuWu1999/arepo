@@ -5943,3 +5943,56 @@ it: the Roe identity test, then the equal-bin two-call regression of section 1,
 then the hierarchy semantics. The first two are cheap and they protect against
 the two ways this work could silently go wrong -- a broken foundation, and a
 quiet return to the first-order predictor.
+
+## 2026-08-02: Phase-B fixed-mesh hierarchy prototype implemented and tested
+
+- Author: `Codex (GPT-5)`
+- Scope: experimental `N_SCHEME + RD_RK2_TOTAL_RESIDUAL` implementation on a
+  full static mesh; controlled equal-bin and 2:1 Yee tests; no beta, F1/LDA,
+  gamma, Galerkin mass, moving-mesh, domain-decomposition, or rank-API work.
+
+The detailed implementation and test report is separate:
+
+[Phase-B fixed-mesh hierarchical timestep prototype](RD_hierarchical_timestep_phaseb_prototype.md)
+
+The implementation has the anticipated hybrid structure: AREPO's original two
+hydro call sites supply the two RK stages, while the stage state comes from the
+validated full RD predictor rather than primitive-gradient/Taylor
+extrapolation. Conserved variables remain a persistent ledger; inactive
+vertices do not recover primitives.
+
+The equal-bin acceptance tests pass. The two-call final snapshot matches the
+concentrated `N + RK2` path to round-off, and the `dt=1/256..1/2048`,
+`TimeMax=1` Richardson ladder gives L1 orders `1.99960, 2.00305` and L2 orders
+`2.00011, 2.00375`. Thus the hybrid itself is a genuine second-order RK2 path.
+
+The final 2:1 implementation forms `b_i^star` from the same globally unique
+minimum-ID-owned triangles used by the residual ledger, then reduces triangle
+bin candidates to remote primary vertices. This detail is mandatory: assuming
+a primary task holds a complete star, or reducing all local ghost triangles,
+both produced rank-dependent frozen sets. The owned set gives 3968 stage-live
+and 128 frozen vertices on both one and four ranks; final fields agree at
+`1e-15` scale.
+
+Scheduling, conservation, and positivity pass: bins remain at a fixed ratio
+two; due triangle counts alternate 4224/8192; all jobs exit zero;
+`f1_lumped=0`; assembled predictor density/pressure remain above
+`0.4976801/0.3764782`; element distribution defects stay below `1.84e-15`; and
+total mass, momentum, and energy change only by floating-point reduction
+round-off.
+
+The accuracy verdict is negative for Construction A at fixed mesh. The 2:1
+Richardson ladder gives L1 orders `0.98677, 0.99271`, L2 orders
+`0.99641, 0.99803`, and Linf orders `1.00059, 1.00031`. The hierarchy-minus-
+equal solution difference is itself almost exactly first order. The frozen
+coarse-side star layer therefore supplies the leading first-order temporal
+term; this is not a beta, F1, MPI ownership, or base-RK2 defect.
+
+This result does not by itself rule out second-order L1 convergence under joint
+`dx,dt` refinement, because the frozen layer is codimension one and its vertex
+fraction should shrink like `dx`. That hypothesis now requires a coupled
+spatial/CFL ladder and an error-localisation measurement. Fixed-mesh temporal
+second order would instead require a shared vertex-time interpolant/composite
+quadrature or persistent subcycled predictor construction. Beta-family work
+remains paused because it cannot manufacture the missing frozen-vertex stage
+state.

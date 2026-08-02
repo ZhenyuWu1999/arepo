@@ -1349,6 +1349,10 @@ extern struct sph_particle_data
    * from snapshot/restart IO. */
   double RD_Ustage0[4]; /* nodal U at t^n, saved before the predictor sweep */
   double RD_dU[4];      /* U* - U^n after the predictor stage */
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  signed char RD_StarTimeBin;       /* minimum triangle timebin over the complete vertex star */
+  integertime RD_PredictorEnd;      /* integer endpoint at which RD_dU is consumed */
+#endif
 #endif
 #endif
 

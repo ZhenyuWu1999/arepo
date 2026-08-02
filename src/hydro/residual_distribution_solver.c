@@ -59,8 +59,29 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "The current residual-distribution baseline requires VORONOI_STATIC_MESH."
 #endif
 
-#if !defined(FORCE_EQUAL_TIMESTEPS)
+#if !defined(FORCE_EQUAL_TIMESTEPS) && !defined(RD_HIERARCHICAL_TIMESTEPS)
 #error "The current residual-distribution baseline requires FORCE_EQUAL_TIMESTEPS."
+#endif
+
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+#if !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(N_SCHEME)
+#error "RD_HIERARCHICAL_TIMESTEPS currently requires N_SCHEME + RD_RK2_TOTAL_RESIDUAL."
+#endif
+#if !defined(CREATE_FULL_MESH)
+#error "RD_HIERARCHICAL_TIMESTEPS requires CREATE_FULL_MESH so fixed simplex ownership sees the complete mesh."
+#endif
+#if defined(VORONOI_STATIC_MESH_DO_DOMAIN_DECOMPOSITION)
+#error "The first RD hierarchy prototype forbids runtime static-mesh domain decomposition."
+#endif
+#define RD_RK2_STAGE_BETA_LABEL "two-call-N-lumped"
+#endif
+
+#if defined(RD_HIERARCHICAL_TEST_PATTERN) && !defined(RD_HIERARCHICAL_TIMESTEPS)
+#error "RD_HIERARCHICAL_TEST_PATTERN is only valid for the experimental RD hierarchy."
+#endif
+
+#if defined(RD_RK2_TOTAL_RESIDUAL) && !defined(RD_HIERARCHICAL_TIMESTEPS)
+#define RD_RK2_INTERNAL_LOOP
 #endif
 
 #if(defined(LDA_SCHEME) + defined(N_SCHEME) + defined(B_SCHEME)) != 1
@@ -80,7 +101,9 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "The coherent stage-beta experiments require LDA_SCHEME and RD_RK2_TOTAL_RESIDUAL."
 #endif
 
-#if defined(RD_RK2_COHERENT_BETA_N)
+#if defined(RD_HIERARCHICAL_TIMESTEPS)
+#define RD_UPWIND_NRHS 3
+#elif defined(RD_RK2_COHERENT_BETA_N)
 #define RD_RK2_STAGE_BETA_LABEL "coherent-beta-n"
 #define RD_UPWIND_NRHS 7 /* Phi, N inflow, F1 target, and four identity columns for beta^n */
 #elif defined(RD_RK2_COHERENT_BETA_STAR)
@@ -97,6 +120,9 @@ static struct FluxRD_list_data
   double dMass_Dual;
   double dMomentum_Dual[3];
   double dEnergy_Dual;
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  double dPredictor[4]; /* full-weight integrated predictor; zero in the corrector call */
+#endif
 
 } *FluxRD_list;
 
@@ -129,6 +155,205 @@ static int rd_triangle_is_physical(tessellation *T, int triangle_index)
 
   return 1;
 }
+
+static int rd_simplex_claimed(tessellation *T, int i);
+
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+/*! \brief Map a local primary/periodic Delaunay point to its primary gas index. */
+static int rd_local_point_index(const point *dp)
+{
+  int index = dp->index;
+
+  if(index >= NumGas)
+    index -= NumGas;
+
+  if(index < 0 || index >= NumGas)
+    terminate_program("RD hierarchy found an invalid local Delaunay-point index");
+
+  return index;
+}
+
+/*! \brief Read live vertex scheduling data, never the construction-time DP.timebin. */
+static int rd_point_timebin(const point *dp)
+{
+  if(dp->task == ThisTask)
+    return P[rd_local_point_index(dp)].TimeBinHydro;
+
+  return PrimExch[dp->index].TimeBinHydro;
+}
+
+static int rd_point_star_timebin(const point *dp)
+{
+  if(dp->task == ThisTask)
+    return SphP[rd_local_point_index(dp)].RD_StarTimeBin;
+
+  return PrimExch[dp->index].RD_StarTimeBin;
+}
+
+static integertime rd_point_predictor_end(const point *dp)
+{
+  if(dp->task == ThisTask)
+    return SphP[rd_local_point_index(dp)].RD_PredictorEnd;
+
+  return PrimExch[dp->index].RD_PredictorEnd;
+}
+
+static int rd_point_stage_live(const point *dp) { return rd_point_star_timebin(dp) == rd_point_timebin(dp); }
+
+struct rd_starbin_export
+{
+  int task;
+  int index;
+  int bin;
+};
+
+static int rd_starbin_export_compare(const void *a, const void *b)
+{
+  const struct rd_starbin_export *ea = a;
+  const struct rd_starbin_export *eb = b;
+
+  if(ea->task < eb->task)
+    return -1;
+  if(ea->task > eb->task)
+    return 1;
+  return 0;
+}
+
+/*! \brief Construct the complete vertex-star timestep minimum on each primary.
+ *
+ * CREATE_FULL_MESH makes every cell participate in mesh construction, but a
+ * task's local tessellation also contains ghost-boundary simplices which need
+ * not be members of the globally selected triangulation.  The star therefore
+ * uses exactly the same minimum-ID, globally unique owned simplex set as the
+ * residual ledger. Each owner sends remote-vertex candidates back to their
+ * primary owners, where a minimum is taken. The completed owner value is then
+ * exchanged through PrimExch for the residual sweep.
+ */
+static void rd_prepare_vertex_star_context(tessellation *T)
+{
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+  int nexport = 0;
+
+  for(int i = 0; i < NumGas; i++)
+    SphP[i].RD_StarTimeBin = P[i].TimeBinHydro;
+
+  for(int triangle = 0; triangle < T->Ndt; triangle++)
+    if(rd_triangle_is_physical(T, triangle) && rd_simplex_claimed(T, triangle))
+      for(int vertex = 0; vertex < DIMS + 1; vertex++)
+        if(DP[DT[triangle].p[vertex]].task != ThisTask)
+          nexport++;
+
+  struct rd_starbin_export *exports =
+      (struct rd_starbin_export *)mymalloc("RDStarBinExport", nexport * sizeof(struct rd_starbin_export));
+  int nexport_filled = 0;
+
+  for(int triangle = 0; triangle < T->Ndt; triangle++)
+    {
+      if(!rd_triangle_is_physical(T, triangle) || !rd_simplex_claimed(T, triangle))
+        continue;
+
+      int triangle_bin = rd_point_timebin(&DP[DT[triangle].p[0]]);
+      for(int vertex = 1; vertex < DIMS + 1; vertex++)
+        triangle_bin = imin(triangle_bin, rd_point_timebin(&DP[DT[triangle].p[vertex]]));
+
+      for(int vertex = 0; vertex < DIMS + 1; vertex++)
+        {
+          point *dp = &DP[DT[triangle].p[vertex]];
+          if(dp->task == ThisTask)
+            {
+              int index = rd_local_point_index(dp);
+              SphP[index].RD_StarTimeBin = imin(SphP[index].RD_StarTimeBin, triangle_bin);
+            }
+          else
+            {
+              exports[nexport_filled].task  = dp->task;
+              exports[nexport_filled].index = dp->originalindex;
+              exports[nexport_filled].bin   = triangle_bin;
+              nexport_filled++;
+            }
+        }
+    }
+
+  if(nexport_filled != nexport)
+    terminate_program("RD hierarchy star-bin export count mismatch");
+
+  mysort(exports, nexport, sizeof(struct rd_starbin_export), rd_starbin_export_compare);
+
+  for(int task = 0; task < NTask; task++)
+    Send_count[task] = 0;
+  for(int i = 0; i < nexport; i++)
+    Send_count[exports[i].task]++;
+
+  if(Send_count[ThisTask] != 0)
+    terminate_program("RD hierarchy attempted a local star-bin export");
+
+  MPI_Alltoall(Send_count, 1, MPI_INT, Recv_count, 1, MPI_INT, MPI_COMM_WORLD);
+
+  int nimport = 0;
+  Recv_offset[0] = Send_offset[0] = 0;
+  for(int task = 0; task < NTask; task++)
+    {
+      nimport += Recv_count[task];
+      if(task > 0)
+        {
+          Send_offset[task] = Send_offset[task - 1] + Send_count[task - 1];
+          Recv_offset[task] = Recv_offset[task - 1] + Recv_count[task - 1];
+        }
+    }
+
+  struct rd_starbin_export *imports =
+      (struct rd_starbin_export *)mymalloc("RDStarBinImport", nimport * sizeof(struct rd_starbin_export));
+
+  for(int ngrp = 0; ngrp < (1 << PTask); ngrp++)
+    {
+      int recvTask = ThisTask ^ ngrp;
+      if(recvTask < NTask && (Send_count[recvTask] > 0 || Recv_count[recvTask] > 0))
+        MPI_Sendrecv(&exports[Send_offset[recvTask]], Send_count[recvTask] * sizeof(struct rd_starbin_export), MPI_BYTE,
+                     recvTask, TAG_DENS_A, &imports[Recv_offset[recvTask]],
+                     Recv_count[recvTask] * sizeof(struct rd_starbin_export), MPI_BYTE, recvTask, TAG_DENS_A, MPI_COMM_WORLD,
+                     MPI_STATUS_IGNORE);
+    }
+
+  for(int i = 0; i < nimport; i++)
+    {
+      int index = imports[i].index;
+      if(index < 0 || index >= NumGas)
+        terminate_program("RD hierarchy received an invalid star-bin primary index");
+      SphP[index].RD_StarTimeBin = imin(SphP[index].RD_StarTimeBin, imports[i].bin);
+    }
+
+  myfree(imports);
+  myfree(exports);
+
+  for(int i = 0; i < NumGas; i++)
+    if(SphP[i].RD_StarTimeBin > P[i].TimeBinHydro)
+      terminate_program("RD hierarchy vertex-star bin is coarser than its vertex bin");
+
+  /* Triangle owners need the star result even when the vertex is remote. */
+  exchange_primitive_variables();
+}
+
+/*! \brief Reset only predictors whose vertex interval opens at this event. */
+static void rd_open_vertex_predictors(void)
+{
+  for(int i = 0; i < NumGas; i++)
+    {
+      if(SphP[i].RD_StarTimeBin < P[i].TimeBinHydro)
+        {
+          for(int k = 0; k < 4; k++)
+            SphP[i].RD_dU[k] = 0.0;
+          SphP[i].RD_PredictorEnd = -1;
+        }
+      else if(TimeBinSynchronized[P[i].TimeBinHydro])
+        {
+          for(int k = 0; k < 4; k++)
+            SphP[i].RD_dU[k] = 0.0;
+          SphP[i].RD_PredictorEnd = All.Ti_Current + (((integertime)1) << P[i].TimeBinHydro);
+        }
+    }
+}
+#endif
 
 /* Per-call diagnostics for the upwind system solve (item A4 of the report). */
 static long long RD_stat_elements;         /* elements whose residual was evaluated */
@@ -437,13 +662,11 @@ struct rd_element_set
  *  ID of their source), and the loop is over `DIMS + 1` vertices, so the same
  *  code covers triangles and tetrahedra.
  *
- *  Hierarchical-timebin extension (documented, NOT implemented): ownership
- *  must then be restricted to the *active* vertices, so that the owner is
- *  guaranteed to have constructed the simplex when the mesh is built around
- *  active cells only. Under the enforced `FORCE_EQUAL_TIMESTEPS` every vertex
- *  is active and the two rules coincide. The activity of remote vertices must
- *  come from live `PrimExch` timebins, not from `DP[].timebin`, which is
- *  stamped at mesh construction and goes stale on a static mesh.
+ *  The fixed-mesh hierarchy deliberately retains this activity-independent
+ *  owner. CREATE_FULL_MESH guarantees that the winning primary's task holds
+ *  the simplex even when that vertex is inactive. Remote activity comes from
+ *  live PrimExch timebins, never DP[].timebin, which is only a construction
+ *  stamp and is especially meaningless after the full-mesh temporary bin 0.
  */
 static int rd_simplex_claimed(tessellation *T, int i)
 {
@@ -490,7 +713,7 @@ static int rd_simplex_claimed(tessellation *T, int i)
  *  that used to filter the classification is recorded in `active[]` rather
  *  than removing elements from the set.
  */
-static void rd_build_element_set(tessellation *T, struct rd_element_set *set)
+static void rd_build_element_set(tessellation *T, struct rd_element_set *set, int classify_activity)
 {
   point *DP = T->DP;
   tetra *DT = T->DT;
@@ -521,10 +744,23 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set)
       triangle_get_normals_area(T, set->element[i], &set->normals[i]);
 #endif
 
-      /* An element is advanced when at least one of its vertices that is a
-       * local original point is synchronized on this step. */
       char is_active = 0;
 
+      if(!classify_activity)
+        {
+          set->active[i] = 0;
+          continue;
+        }
+
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+      /* The triangle clock is the finest of all three live vertex clocks.
+       * The fixed owner need not own (or itself be) the active driver. */
+      int triangle_bin = rd_point_timebin(&DP[DT[set->element[i]].p[0]]);
+      for(j = 1; j < DIMS + 1; j++)
+        triangle_bin = imin(triangle_bin, rd_point_timebin(&DP[DT[set->element[i]].p[j]]));
+      is_active = TimeBinSynchronized[triangle_bin];
+#else
+      /* Equal-step baseline: a synchronized local original marks the element. */
       for(j = 0; j < DIMS + 1; j++)
         {
           int pt = DT[set->element[i]].p[j];
@@ -536,6 +772,7 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set)
               break;
             }
         }
+#endif
 
       set->active[i] = is_active;
       set->n_active += is_active;
@@ -635,12 +872,12 @@ void reset_dualarea(tessellation *T)
 {
   struct rd_element_set set;
 
-  rd_build_element_set(T, &set);
+  rd_build_element_set(T, &set, 0);
   rd_accumulate_dual_area(T, &set);
   rd_free_element_set(&set);
 }
 
-#ifdef RD_RK2_TOTAL_RESIDUAL
+#ifdef RD_RK2_INTERNAL_LOOP
 /*! \brief Snapshot the intensive nodal state U^n before the predictor sweep. */
 static void rd_rk2_save_stage0(void)
 {
@@ -751,9 +988,13 @@ static void rd_rk2_prepare_corrector(void)
 #endif
     }
 }
-#endif /* #ifdef RD_RK2_TOTAL_RESIDUAL */
+#endif /* #ifdef RD_RK2_INTERNAL_LOOP */
 
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+void compute_residuals(tessellation *T, int rd_stage)
+#else
 void compute_residuals(tessellation *T)
+#endif
 {
 #ifdef NOHYDRO
   return;
@@ -761,6 +1002,11 @@ void compute_residuals(tessellation *T)
   TIMER_START(CPU_RESIDUAL_DISTRIBUTION);
 
   rd_reset_solver_statistics();
+
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  if(rd_stage != RD_RK_STAGE_PREDICTOR && rd_stage != RD_RK_STAGE_CORRECTOR)
+    terminate_program("invalid RD hierarchical RK stage");
+#endif
 
   point *DP = T->DP;
   tetra *DT = T->DT;
@@ -771,8 +1017,20 @@ void compute_residuals(tessellation *T)
    * active subset is marked rather than filtered out, so that the control area
    * stays a property of the tessellation. */
   struct rd_element_set set;
-  rd_build_element_set(T, &set);
+  rd_build_element_set(T, &set, 1);
   rd_accumulate_dual_area(T, &set);
+
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  if(rd_stage == RD_RK_STAGE_PREDICTOR)
+    {
+      rd_prepare_vertex_star_context(T);
+      rd_open_vertex_predictors();
+    }
+
+  /* Hierarchical stages use synchronized or assembled predictor states, not
+   * the legacy primitive-variable Taylor extrapolation. */
+  rd_record_dt_extrapolation(0.0);
+#endif
 
   int Ndt_thistask        = set.n;
   int *thistask_triangles = set.element;
@@ -796,7 +1054,7 @@ void compute_residuals(tessellation *T)
       if(DP[DT[thistask_triangles[i]].p[j]].task != ThisTask)
         Max_N_FluxRD_export++;
 
-#ifdef RD_RK2_TOTAL_RESIDUAL
+#ifdef RD_RK2_INTERNAL_LOOP
   /* Two-stage GL+F1 total-residual step (analysis document sections 1, 9,
    * 10): stage 0 is the RD predictor U* = U^n - (dt/|S_i|) sum phi_i(U^n),
    * stage 1 the corrector distributing the total residual. Both stages use
@@ -811,7 +1069,7 @@ void compute_residuals(tessellation *T)
         {
 #ifdef RD_DIAG_PREDICTOR_ONLY /* diagnostic only: stop after the predictor stage */
           break;
-#endif
+#endif /* RD_DIAG_PREDICTOR_ONLY */
 #ifndef RD_DIAG_SKIP_PREPARE /* diagnostic only: run stage 1 on the stage-0 inputs */
           rd_rk2_prepare_corrector();
           exchange_primitive_variables(); /* ghosts receive W* and RD_dU */
@@ -880,9 +1138,10 @@ void compute_residuals(tessellation *T)
         if(timebin_vertices[j] < timebin_this_triangle)
           timebin_this_triangle = timebin_vertices[j];
 
-      double triangle_dt = (((integertime)1) << timebin_this_triangle) * All.Timebase_interval;
+      double full_triangle_dt = (((integertime)1) << timebin_this_triangle) * All.Timebase_interval;
+      double triangle_dt      = full_triangle_dt;
 
-#ifndef RD_RK2_TOTAL_RESIDUAL
+#ifndef RD_RK2_INTERNAL_LOOP
       triangle_dt *= 0.5; /* the baseline applies two half-weight Heun calls per step */
 #endif
 
@@ -1047,6 +1306,43 @@ void compute_residuals(tessellation *T)
                   terminate_program("primexch energy <= 0 error.");
                 }
             }
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+          if(rd_stage == RD_RK_STAGE_CORRECTOR)
+            {
+              point *stage_point = &DP[DT[thistask_triangles[i]].p[j]];
+
+              if(rd_point_stage_live(stage_point))
+                {
+                  if(rd_point_predictor_end(stage_point) != All.Ti_Current)
+                    {
+                      printf("RD predictor endpoint mismatch: task=%d triangle=%d ID=%llu expected=%lld got=%lld\n", ThisTask,
+                             thistask_triangles[i], (unsigned long long)stage_point->ID, (long long)All.Ti_Current,
+                             (long long)rd_point_predictor_end(stage_point));
+                      terminate_program("RD hierarchy consumed a stale or missing predictor");
+                    }
+
+                  for(k = 0; k < 4; k++)
+                    U_fluid[j][k] += dU_vertex[j][k];
+                }
+
+              double stage_rho = U_fluid[j][0];
+              double stage_mom2 = U_fluid[j][1] * U_fluid[j][1] + U_fluid[j][2] * U_fluid[j][2];
+              double stage_press = GAMMA_MINUS1 * (U_fluid[j][3] - 0.5 * stage_mom2 / stage_rho);
+
+              if(!isfinite(stage_rho) || !isfinite(stage_press) || stage_rho <= 0.0 || stage_press <= 0.0)
+                {
+                  printf("RD hierarchy predictor invalid: task=%d triangle=%d ID=%llu rho=%.17g press=%.17g live=%d\n", ThisTask,
+                         thistask_triangles[i], (unsigned long long)stage_point->ID, stage_rho, stage_press,
+                         rd_point_stage_live(stage_point));
+                  terminate_program("RD hierarchy produced a non-physical stage state");
+                }
+
+              Pressure[j] = stage_press;
+              C_sound[j]  = sqrt(GAMMA * stage_press / stage_rho);
+              RD_stat_min_stage_rho   = dmin(RD_stat_min_stage_rho, stage_rho);
+              RD_stat_min_stage_press = dmin(RD_stat_min_stage_press, stage_press);
+            }
+#endif
         }  // for(j = 0; j < DIMS + 1; j++) get fluid state for each vertex of this triangle
 
       Velvertex_avg[0] /= (DIMS + 1);
@@ -1543,7 +1839,7 @@ void compute_residuals(tessellation *T)
 
 #endif  // B scheme
 
-#ifdef RD_RK2_TOTAL_RESIDUAL
+#ifdef RD_RK2_INTERNAL_LOOP
       if(rd_stage == 1)
         {
           /* Corrector: replace the spatial distribution by the total nodal
@@ -1702,7 +1998,7 @@ void compute_residuals(tessellation *T)
 
           rd_check_conservation(Flux_RD, total_target, rk2_scale + 0.5 * phi_scale, thistask_triangles[i], "RK2-total");
         }
-#endif /* #ifdef RD_RK2_TOTAL_RESIDUAL */
+#endif /* #ifdef RD_RK2_INTERNAL_LOOP */
 
 #ifdef RD_DIAG_TRACE_ELEMENT
       if(rd_trace)
@@ -1728,11 +2024,19 @@ void compute_residuals(tessellation *T)
               SphP[SphP_index].Momentum[0] += (-1.0) * triangle_dt * Flux_RD[1][j];
               SphP[SphP_index].Momentum[1] += (-1.0) * triangle_dt * Flux_RD[2][j];
               SphP[SphP_index].Energy += (-1.0) * triangle_dt * Flux_RD[3][j];
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+              if(rd_stage == RD_RK_STAGE_PREDICTOR &&
+                 rd_point_stage_live(&DP[DT[thistask_triangles[i]].p[j]]))
+                {
+                  SphP[SphP_index].RD_dU[0] += (-1.0) * full_triangle_dt * Flux_RD[0][j];
+                  SphP[SphP_index].RD_dU[1] += (-1.0) * full_triangle_dt * Flux_RD[1][j];
+                  SphP[SphP_index].RD_dU[2] += (-1.0) * full_triangle_dt * Flux_RD[2][j];
+                  SphP[SphP_index].RD_dU[3] += (-1.0) * full_triangle_dt * Flux_RD[3][j];
+                }
+#endif
             }
           else
             {
-              int PrimExch_index = DP[DT[thistask_triangles[i]].p[j]].index;
-
               if(N_FluxRD_export >= Max_N_FluxRD_export)
                 terminate_program("FluxRD_list capacity exceeded");
 
@@ -1744,6 +2048,19 @@ void compute_residuals(tessellation *T)
               FluxRD_list[N_FluxRD_export].dMomentum_Dual[1] = (-1.0) * triangle_dt * Flux_RD[2][j];
               FluxRD_list[N_FluxRD_export].dMomentum_Dual[2] = 0.0;
               FluxRD_list[N_FluxRD_export].dEnergy_Dual      = (-1.0) * triangle_dt * Flux_RD[3][j];
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+              for(k = 0; k < 4; k++)
+                FluxRD_list[N_FluxRD_export].dPredictor[k] = 0.0;
+
+              if(rd_stage == RD_RK_STAGE_PREDICTOR &&
+                 rd_point_stage_live(&DP[DT[thistask_triangles[i]].p[j]]))
+                {
+                  FluxRD_list[N_FluxRD_export].dPredictor[0] = (-1.0) * full_triangle_dt * Flux_RD[0][j];
+                  FluxRD_list[N_FluxRD_export].dPredictor[1] = (-1.0) * full_triangle_dt * Flux_RD[1][j];
+                  FluxRD_list[N_FluxRD_export].dPredictor[2] = (-1.0) * full_triangle_dt * Flux_RD[2][j];
+                  FluxRD_list[N_FluxRD_export].dPredictor[3] = (-1.0) * full_triangle_dt * Flux_RD[3][j];
+                }
+#endif
 
               N_FluxRD_export += 1;
             }
@@ -1753,12 +2070,64 @@ void compute_residuals(tessellation *T)
 
   apply_FluxRD_list();
 
-#ifdef RD_RK2_TOTAL_RESIDUAL
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  if(rd_stage == RD_RK_STAGE_PREDICTOR)
+    {
+      long long local_counts[2] = {0, 0}, global_counts[2];
+      int local_max_ratio = 1, global_max_ratio;
+
+      for(i = 0; i < NumGas; i++)
+        {
+          if(SphP[i].RD_StarTimeBin == P[i].TimeBinHydro)
+            {
+              local_counts[0]++;
+              if(TimeBinSynchronized[P[i].TimeBinHydro])
+                {
+                  for(k = 0; k < 4; k++)
+                    SphP[i].RD_dU[k] /= SphP[i].DualArea;
+
+                  double u0 = SphP[i].Density + SphP[i].RD_dU[0];
+                  double u1 = SphP[i].Density * P[i].Vel[0] + SphP[i].RD_dU[1];
+                  double u2 = SphP[i].Density * P[i].Vel[1] + SphP[i].RD_dU[2];
+                  double u3 = SphP[i].Pressure / GAMMA_MINUS1 +
+                              0.5 * SphP[i].Density *
+                                  (P[i].Vel[0] * P[i].Vel[0] + P[i].Vel[1] * P[i].Vel[1]) +
+                              SphP[i].RD_dU[3];
+                  double predictor_press = GAMMA_MINUS1 * (u3 - 0.5 * (u1 * u1 + u2 * u2) / u0);
+
+                  if(!isfinite(u0) || !isfinite(predictor_press) || u0 <= 0.0 || predictor_press <= 0.0)
+                    {
+                      printf("RD hierarchy predictor invalid after assembly: task=%d i=%d ID=%llu rho=%.17g press=%.17g\n",
+                             ThisTask, i, (unsigned long long)P[i].ID, u0, predictor_press);
+                      terminate_program("RD hierarchy produced a non-physical assembled predictor");
+                    }
+
+                  RD_stat_min_stage_rho   = dmin(RD_stat_min_stage_rho, u0);
+                  RD_stat_min_stage_press = dmin(RD_stat_min_stage_press, predictor_press);
+                }
+            }
+          else
+            {
+              local_counts[1]++;
+              int ratio = 1 << (P[i].TimeBinHydro - SphP[i].RD_StarTimeBin);
+              local_max_ratio = imax(local_max_ratio, ratio);
+            }
+        }
+
+      MPI_Reduce(local_counts, global_counts, 2, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(&local_max_ratio, &global_max_ratio, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+      if(ThisTask == 0)
+        printf("RD-HIER time=%.8g stage=open live_vertices=%lld frozen_vertices=%lld max_ratio=%d\n", All.Time,
+               global_counts[0], global_counts[1], global_max_ratio);
+    }
+#endif
+
+#ifdef RD_RK2_INTERNAL_LOOP
       myfree_movable(FluxRD_list);
     } /* stage loop */
 
   FluxRD_list = NULL; /* freed inside the stage loop */
-#endif
+#endif /* RD_RK2_INTERNAL_LOOP */
 
 #ifdef RD_DEBUG_ASSERTS
   /* Item A4: instrumentation, not an assertion.  Reports how often the
@@ -1804,7 +2173,7 @@ void compute_residuals(tessellation *T)
   }
 #endif /* #ifdef RD_DEBUG_ASSERTS */
 
-#ifndef RD_RK2_TOTAL_RESIDUAL
+#ifndef RD_RK2_INTERNAL_LOOP
   myfree_movable(FluxRD_list);
 #endif
 #ifdef RD_RK2_COHERENT_BETA_N
@@ -1922,6 +2291,10 @@ void apply_FluxRD_list(void)
       SphP[p].Momentum[1] += FluxListGet[i].dMomentum_Dual[1];
       SphP[p].Momentum[2] += FluxListGet[i].dMomentum_Dual[2];
       SphP[p].Energy += FluxListGet[i].dEnergy_Dual;
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+      for(int component = 0; component < 4; component++)
+        SphP[p].RD_dU[component] += FluxListGet[i].dPredictor[component];
+#endif
     }
   myfree(FluxListGet);
 }

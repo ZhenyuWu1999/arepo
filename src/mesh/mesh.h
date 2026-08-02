@@ -125,6 +125,10 @@ extern struct primexch
   MyFloat Energy;
 #ifdef RD_RK2_TOTAL_RESIDUAL
   MyFloat RD_dU[4]; /* intensive nodal U* - U^n, for the corrector mass-matrix term */
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  signed char RD_StarTimeBin;
+  integertime RD_PredictorEnd;
+#endif
 #endif
 #endif
 

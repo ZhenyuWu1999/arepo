@@ -37,6 +37,8 @@
 
 #--------------------------------------- Residual Distribution hydrodynamics
 #RESIDUAL_DISTRIBUTION         # Enable the residual distribution hydrodynamics solver
+#RD_HIERARCHICAL_TIMESTEPS     # Experimental fixed-mesh N/lumped two-call RK2 hierarchy
+#RD_HIERARCHICAL_TEST_PATTERN  # Test only: refine the x < BoxSize/2 vertex bins by one level
 #LDA_SCHEME                    # Low Diffusion A scheme for residual distribution
 #N_SCHEME                      # N scheme for residual distribution
 #B_SCHEME                      # Blended scheme for residual distribution

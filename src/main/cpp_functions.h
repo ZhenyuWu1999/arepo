@@ -12,7 +12,13 @@ extern "C"{
 #ifdef RESIDUAL_DISTRIBUTION
 // functions defined in residual_distribution_solver.c, which may be used in other C files
 void reset_dualarea(tessellation *T);
-void compute_residuals(tessellation*);
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+#define RD_RK_STAGE_PREDICTOR 0
+#define RD_RK_STAGE_CORRECTOR 1
+void compute_residuals(tessellation *, int);
+#else
+void compute_residuals(tessellation *);
+#endif
 void triangle_vertex_do_time_extrapolation(struct state_primitive *delta, struct state_primitive *st,struct grad_data *grad, double dt_Extrapolation);
 void triangle_vertex_add_extrapolation(struct state_primitive *delta, struct state_primitive *st);
 void apply_FluxRD_list(void);

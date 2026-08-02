@@ -198,6 +198,25 @@ void find_timesteps_without_gravity(void)
 
       binold = P[i].TimeBinHydro;
 
+#ifdef RD_HIERARCHICAL_TEST_PATTERN
+      /* Controlled Phase-B test only. MaxSizeTimestep is chosen below the
+       * physical CFL limit, so the unmodified result is one common coarse
+       * bin. Construct the requested one-level refinement from the fresh CFL
+       * candidate, before the old-bin synchronization check.  Refining `bin`
+       * after that check would subtract one level from an already retained
+       * fine bin on every activation and make the test pattern ratchet toward
+       * ever smaller timesteps. */
+      if(P[i].Pos[0] < 0.5 * boxSize_X)
+        {
+          integertime coarse_step = TIMEBASE;
+          while(coarse_step > ti_step)
+            coarse_step >>= 1;
+
+          if(coarse_step > 2)
+            ti_step = coarse_step >> 1;
+        }
+#endif
+
       timebins_get_bin_and_do_validity_checks(ti_step, &bin, binold);
 
       timebin_move_particle(&TimeBinsHydro, i, binold, bin);
