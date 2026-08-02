@@ -229,6 +229,14 @@ completed with exit `0:0`; the assertion remains satisfied on every rebuild.
 The audit one-rank snapshot is bitwise identical to the pre-assertion result,
 and its one/four-rank differences reproduce the table in Section 7.6.
 
+The committed-source rebuild uses commit `7e6f12213bf8` and artifact
+`build_artifacts/phaseb-n-active-static-final/7e6f12213bf8-0fd030bf7b8c29f5/Arepo`,
+SHA256
+`0d7cbcaeb4b562a0c7187c91344ab2c57221b0388b9b589e8c1444165d8eaffa`.
+Build job `10357933` and short one/four-rank jobs `10357934`, `10357935` all
+completed with exit `0:0`. The committed binary again gives a bitwise-identical
+one-rank result and the same round-off MPI differences.
+
 The campaign root is
 `/home/zwu/Hydro_data_analysis/Data_arepo_RD/yee_boost/phaseb_hierarchy_v1`.
 Every output directory contains the parameter file, build manifest, binary

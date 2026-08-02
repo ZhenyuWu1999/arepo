@@ -6058,6 +6058,14 @@ completed with exit `0:0`. The assertion passed on every reconstruction; the
 one-rank result is bitwise identical to the earlier active-only result, and the
 one/four-rank field differences remain those reported above.
 
+After committing the implementation as `7e6f12213bf8`, a clean-source rebuild
+produced immutable artifact
+`phaseb-n-active-static-final/7e6f12213bf8-0fd030bf7b8c29f5`, SHA256
+`0d7cbcaeb4b562a0c7187c91344ab2c57221b0388b9b589e8c1444165d8eaffa`.
+Build `10357933` and final short one/four-rank runs `10357934`, `10357935` all
+completed with exit `0:0`. The final one-rank result is bitwise identical to the
+audit result and the MPI differences remain at the values above.
+
 Conclusion: `CREATE_FULL_MESH` is not structurally necessary for this
 fixed-geometry RD hierarchy. Active-only mesh reconstruction is feasible and
 conservative when triangle ownership is active-discoverable and the static
