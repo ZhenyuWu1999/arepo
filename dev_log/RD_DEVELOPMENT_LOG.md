@@ -5806,3 +5806,140 @@ the split-Heun/two-call algebra, static-mesh ownership, the independent
 Roe-boundary identity test, and provisional-ledger positivity. The report does
 not authorise removal of `FORCE_EQUAL_TIMESTEPS`.
 
+## 2026-08-02: review of the consolidated Phase-B design — vertex-star accepted, and the two-call form is the original skeleton with the right predictor
+
+- Author: `Claude Code Opus5`
+- Reviews the consolidated design entry above and
+  `dev_log/RD_hierarchical_timestep_conservation_design.md`, answering the five
+  items put to me. Review only; nothing is authorised for implementation.
+
+### 1. The two-call staging is the original design, and we now know what was wrong with it
+
+Zhenyu's observation: the proposed implementation mapping returns to the two
+hydro call sites, `run.c:230` and `run.c:332` with `find_next_sync_point()`
+between them. That is the structure this project started from, and the
+2026-07-29 audit already recorded that "the two half-weight calls are wired as a
+two-stage update".
+
+The distinction that matters is not the staging but the predictor:
+
+| | first call | second call | measured temporal order |
+| --- | --- | --- | ---: |
+| original, non-RK2 | `phi(U^n)/2` | `phi(Utilde)/2`, `Utilde` from AREPO's gradient/Taylor extrapolation | **1.001** |
+| `RD_RK2_TOTAL_RESIDUAL` | no-op | whole step in one call, RD predictor | **2.009** (N) |
+| proposed Phase B | `phi^(0)/2`, accumulate `RD_dU` | `phi^(1)/2` with `U^stage = U^sync + RD_dU` | to be measured |
+
+**The skeleton was always right; the predictor was wrong.** The closeout
+measurement is exactly the evidence for both halves of that sentence, so
+returning to two calls is not a regression to a rejected design -- it is the
+original design with the defect that drove us away from it removed.
+
+This makes one acceptance test mandatory and it is not in the current list: with
+all bins equal, the two-call form must reproduce the present internal-loop
+`N + RK2` to round-off **and** its fixed-mesh Richardson order must come back at
+2.009. If that is not checked, a regression to the first-order predictor would be
+hidden underneath the hierarchy semantics rather than showing up on its own.
+
+### 2. The vertex-star criterion is accepted; it closes a real hole in my rule
+
+My edge-local formulation missed a case: a coarse vertex whose **entire star** is
+finer. No edge at such a vertex is cross-bin, so my rule would have left it
+stage-live, yet its own interval is not due and `U*` is undefined for it.
+`h_i^star = min_{T in i} h_T` with stage-live iff `h_i^star = h_i` handles that,
+and it implies my rule -- for a cross-bin edge, `h_1 < h_2 <= h_i` gives
+`h_i^star < h_i`, so both shared vertices are frozen automatically.
+
+It is also better engineering: the element keeps one coherent vertex triple, so
+one P1 state, one Roe average, one `K_i` set and the existing distribution are
+untouched. My alternative would have required an explicit per-edge integral path
+for elements at an interface.
+
+**Quantification neither entry states.** Because timebins are quantised, the bin
+field is piecewise constant, so a vertex in the interior of a band has its whole
+one-ring at its own bin and is stage-live. **The frozen set is therefore exactly
+the coarse-side layer, one vertex deep, at each bin interface** -- codimension
+one. That is what supports the `O(h dt)` accuracy argument and bounds the damage.
+
+(I briefly believed the rule collapsed staging to one-ring minima of the timestep
+field, which would have made the scheme first order in time almost everywhere.
+That was wrong: it treats the bin field as continuous when it is quantised.)
+
+Recommended addition: a runtime diagnostic counting stage-live versus frozen
+vertices per step, and the maximum `h_i / h_i^star` ratio. It is far cheaper than
+inferring the frozen fraction after the fact, and it is the natural covariate for
+any accuracy loss that shows up.
+
+### 3. The split-Heun algebra checks out
+
+At equal bins, `h_T = h_i = dt` gives
+`Delta Q_i = -(dt/2) sum_T [phi^(0) + phi^(1)]` with
+`U* = U^sync + RD_dU = U^n - (dt/|S_i|) sum_T phi^(0)`, which is the RD predictor,
+so `Delta U_i` is Heun exactly. `RD_dU` is intensive, matching the existing
+`SphP[i].RD_dU`. The claim that a stage-live vertex's incident elements all open
+together follows directly from `h_T <= h_i` plus the stage-live definition.
+
+### 4. Static-mesh ownership needs no change
+
+`rd_simplex_claimed()` assigns the owner from the globally minimum `(ID, task)`
+vertex **independently of activity**, which is precisely what a hierarchy needs:
+a physical triangle must be evaluated exactly once whether or not its vertices
+are active. The old "minimum active ID" design note should be explicitly retired
+rather than left where it can be revived in Phase B.
+
+### 5. The Roe boundary identity, made specific
+
+The identity underpinning everything is
+`sum_j K_j Uhat_j = closed-integral over dT of F(Z_h).n`. It can be argued on
+paper first: `F` is quadratic in the parameter vector `Z`, `Z_h` is linear on the
+triangle, so `div F(Z_h)` is linear in `Z_h` and its integral over `T` equals
+`|T|` times its value at the centroid -- where `Z` is the **arithmetic mean** of
+the three vertex values, which is exactly `Z_avg` at
+`residual_distribution_solver.c:1078`. So the identity should hold exactly, and
+only for the arithmetic mean.
+
+The test is then: random positive states on a random triangle, compare the two
+sides to round-off. No mesh, no MPI, a few dozen lines. It should run first, as
+Kimi says.
+
+### 6. Positivity: the provisional ledger is not the risk
+
+A transiently negative provisional `Q` is harmless provided nothing recovers
+primitives or computes a timestep from it. That should be an assertion:
+primitive recovery happens only at a vertex's own interval endpoint.
+
+The real risk is elsewhere. `h_T` is set from the vertices' own CFL at their own
+times, but a cross-bin element evaluates with **stale** states whose wave speeds
+may be larger, so the CFL margin the N-scheme positivity proof needs can be
+eaten. This is a sharper concern than "three valid states remain three valid
+states": positivity requires not only valid states but a satisfied CFL condition
+on the states actually used. Mitigation is to derive `h_T` from the states that
+will actually be used, or to carry a safety factor in the interface layer.
+
+### 7. Kimi's three reservations
+
+All three accepted. The second deserves emphasis: the frozen context must
+include `RD_dU = 0` and the frozen `VelVertex`, not just the synchronised
+primitives. A stale `RD_dU` carried from a vertex's previous interval is the same
+class of defect as the uninitialised ghost `VelVertex` of `40a0bbb` -- one side
+reading a value belonging to someone else's interval, invisible on one rank.
+
+The shock tube with a bin interface perpendicular to the shock should be in the
+acceptance list, not deferred: Kelvin--Helmholtz is smooth, and freezing and
+positivity will fail first where the timestep criterion varies fastest.
+
+### 8. Construction B is not dead
+
+If the interface layer's accuracy cost is measured to matter, the shared
+interpolant plus shared composite quadrature remains the escape, and it is
+**compatible with the vertex-star architecture**: an interpolated value is still
+one value per vertex per time, so an element still receives one coherent triple
+and no per-edge state is needed. It should not be implemented now, and it should
+not be deleted from the design document either.
+
+### 9. Position
+
+The design is sound and I have no blocking objection. The ordering I would put on
+it: the Roe identity test, then the equal-bin two-call regression of section 1,
+then the hierarchy semantics. The first two are cheap and they protect against
+the two ways this work could silently go wrong -- a broken foundation, and a
+quiet return to the first-order predictor.
