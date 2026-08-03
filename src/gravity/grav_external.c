@@ -158,6 +158,16 @@ static void gravity_external_get_force(double pos[3], int type, MyIDType ID, dou
   *pot = -(EXTERNALGY)*pos[1];
 #endif /* #ifdef EXTERNALGY */
 
+#ifdef PERIODIC_RT_GRAVITY
+  /* Periodic prescribed potential for a symmetric two-interface RT test:
+   * phi=-g0/ky cos(ky y), hence gy=-dphi/dy=-g0 sin(ky y). */
+  {
+    const double ky = 2.0 * M_PI / boxSize_Y;
+    acc[1] += -(PERIODIC_RT_GRAVITY)*sin(ky * pos[1]);
+    *pot += -(PERIODIC_RT_GRAVITY) / ky * cos(ky * pos[1]);
+  }
+#endif /* #ifdef PERIODIC_RT_GRAVITY */
+
 #ifdef STATICISO
   {
     double r, m;

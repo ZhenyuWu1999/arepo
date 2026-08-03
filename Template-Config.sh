@@ -106,6 +106,7 @@
 #--------------------------------------- External gravity; default: no external potential
 #EXTERNALGRAVITY               # master switch for external potential
 #EXTERNALGY=0.0                # constant external gravity in y direction
+#PERIODIC_RT_GRAVITY=0.5       # periodic RT acceleration gy=-g0 sin(2 pi y/Ly)
 
 #--------------------------------------- Static NFW Potential
 #STATICNFW                     # static gravitational Navarro-Frenk-White (NFW) potential
