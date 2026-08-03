@@ -7190,3 +7190,102 @@ because changing beta could not repair that plumbing. The equal-bin LDA+F1
 time integrator now has a viable mathematical basis, but its four-sweep
 operator has not yet been derived for asynchronous triangles; hierarchy stays
 compile-disabled pending that separate derivation.
+
+## 2026-08-03: coherent total-B repair, smooth-time result, and rejected direct Heun construction
+
+- Author: `Codex GPT-5`
+- Source baseline: commit `927ee6f` (the LDA+F1 Heun commit immediately above).
+- Canonical-repair development artifact:
+  `build_artifacts/b-rk2-coherent-total-dev/927ee6fca099-b30170117dc65829/Arepo`,
+  SHA256 `ab0a2a2d4958b10b7ac674f9fee85744c0dfa0e8183ea98831b47ecbf6dcd86b`.
+
+### 1. Canonical B corrector repair
+
+The earlier B corrector used a new-stage total-residual theta while the old
+spatial half had already been assembled into the vertex-level `+dU/2` kick
+with the predictor's spatial theta. One theta therefore did not act on one
+complete total residual.
+
+The repaired equal-bin path now saves, per owned triangle at stage 0,
+`Phi(U^n)`, `Phi_i^N(U^n)`, and `Phi_i^LDA(U^n)`. It suppresses the local kick
+and forms, for every conserved component,
+
+```
+  R_i^N   = T_i^lumped + [Phi_i^N(U^n)   + Phi_i^N(U*)]   / 2,
+  R_i^LDA = T_i^F1     + [Phi_i^LDA(U^n) + Phi_i^LDA(U*)] / 2,
+  R       = T_target   + [Phi(U^n)       + Phi(U*)]       / 2,
+  theta   = min(1, |R| / sum_i |R_i^N|),
+  R_i^B   = theta R_i^N + (1-theta) R_i^LDA.
+```
+
+Both branches sum to `R`, so conservation holds for every theta. This is the
+specific missing-half repair identified in the preceding priority audit; it
+does not assume that the resulting nonlinear scheme must have smooth temporal
+order.
+
+### 2. Fixed-mesh result after the canonical repair
+
+Triangular `n=64` and glass `n=48` Yee ladders used the same ICs and
+`dt=1/256,1/512,1/1024,1/2048` as the earlier B audit. Jobs `10359661`--
+`10359668` all completed with exit zero, exact requested step counts,
+`f1_lumped=0`, positive predictors, roundoff global conservation, and the
+diagnostic label `coherent-total-B`.
+
+| mesh | norm | D0 | D1 | p0 | D2 | p1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| triangular | L1 | `1.50145e-4` | `1.10214e-4` | `0.446` | `3.27722e-5` | `1.750` |
+|  | L2 | `9.22422e-4` | `7.18122e-4` | `0.361` | `1.84995e-4` | `1.957` |
+|  | Linf | `1.97364e-2` | `1.42869e-2` | `0.466` | `4.12743e-3` | `1.791` |
+| glass | L1 | `7.65634e-5` | `4.79268e-5` | `0.676` | `4.15003e-5` | `0.208` |
+|  | L2 | `1.93545e-4` | `1.48836e-4` | `0.379` | `1.73123e-4` | `-0.218` |
+|  | Linf | `1.88552e-3` | `2.14673e-3` | `-0.187` | `2.20464e-3` | `-0.038` |
+
+Thus the algebraic repair substantially regularises the triangular tail, but
+it does not establish a common asymptotic temporal order, especially on the
+glass. The B switching nonlinearity, rather than conservation or F1 rank loss,
+still dominates the adjacent differences.
+
+### 3. Sod regression
+
+The repaired method completed triangular Sod at `n=64,128` (jobs `10359669,
+10359670`) with positive states and roundoff mass conservation.
+
+| n | density L1 | pressure L1 | vx L1 | rho min | p min | density over / under |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 64 | `2.3369e-2` | `2.0985e-2` | `5.2637e-2` | `0.12471` | `0.09965` | `1.15e-4 / 2.92e-4` |
+| 128 | `1.3456e-2` | `1.1321e-2` | `3.0900e-2` | `0.12467` | `0.09954` | `8.72e-5 / 3.31e-4` |
+
+Compared with the old B-RK2 results, all three L1 errors decrease by about
+25--34 per cent. The cost is a very small density excursion beyond the exact
+global range (below `3.4e-4`); pressure and density remain positive. This is an
+accuracy improvement, but the slight loss of strict monotonicity must remain a
+shock-regression metric.
+
+### 4. Direct rate-consistent B + Heun attempt was rejected
+
+A further dirty-source experiment paired a spatial B predictor-rate sweep with
+a complete total-B correction at the same state, and advanced that explicit
+mapping with Heun. Its exact patch is preserved in the provenance of artifact
+`build_artifacts/b-rate-heun-dev/927ee6fca099-5b0c6f2511ef982b/Arepo`, SHA256
+`b1e723b0f8d0dd3d8833a2082ec3dad801ce418fb313df24d2127f3740ea0a22`.
+Jobs `10359674`--`10359681` were conservative, positive, and completed, but
+failed the smooth-time gate:
+
+| mesh | norm | p0 | p1 |
+| --- | --- | ---: | ---: |
+| triangular | L1 / L2 / Linf | `0.295 / 0.121 / 0.372` | `0.258 / 0.307 / 0.214` |
+| glass | L1 / L2 / Linf | `0.034 / 0.018 / -0.001` | `5.815 / 5.979 / 5.723` |
+
+The abrupt glass change between the middle and fine pair is consistent with a
+dt-dependent theta switching pattern, not a smooth truncation series. This
+construction is therefore not retained in the source tree.
+
+### 5. Decision
+
+The canonical B missing-half bug is fixed and its Sod behaviour improves, but
+`B + RK2` still lacks a robust smooth-time order on the glass. B hierarchy
+remains compile-disabled. The next mathematical step is not another direct
+Heun wrapper: it must specify how the nonlinear limiter is frozen or evolved
+within an RK stage (and test switching-set stability), or use a proven
+SSP/RK-RD limited formulation. LDA+F1 Heun, by contrast, has passed its
+equal-bin temporal gate.

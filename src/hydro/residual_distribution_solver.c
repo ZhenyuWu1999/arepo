@@ -123,6 +123,9 @@ static lapack_int solve_system(int n, double *A, double *b);
 #elif defined(RD_RK2_COHERENT_BETA_STAR)
 #define RD_RK2_STAGE_BETA_LABEL "coherent-beta-star"
 #define RD_UPWIND_NRHS 4 /* Phi(U*), N inflow, F1 target, and saved Phi(U^n) */
+#elif defined(B_SCHEME)
+#define RD_RK2_STAGE_BETA_LABEL "coherent-total-B"
+#define RD_UPWIND_NRHS 3
 #else
 #define RD_RK2_STAGE_BETA_LABEL "mixed"
 #define RD_UPWIND_NRHS 3
@@ -1038,8 +1041,8 @@ static void rd_rate_consistent_prepare_pass(int pass)
 #endif /* RD_RK2_RATE_CONSISTENT_HEUN */
 
 /*! \brief Between the stages: form dU, recover the stage primitives, and,
- *         unless coherent beta* is selected, apply the corrector's local
- *         +1/2 (Q* - Q^n) contribution.
+ *         unless an explicit old-element residual is required, apply the
+ *         corrector's local +1/2 (Q* - Q^n) contribution.
  *
  *  This deliberately does NOT call update_primitive_variables(): that routine
  *  stamps OldMass and TimeLastPrimUpdate and, when the MinEgySpec floor
@@ -1055,9 +1058,10 @@ static void rd_rate_consistent_prepare_pass(int pass)
  *                  - (dt/|S_i|) sum_T [ sum_j m_ij dU_j/dt + 1/2 phi_i^T(U*) ]
  *  (analysis document section 4); the +1/2 dU term is purely local and is
  *  added here, before the corrector sweep contributes the element sums. The
- *  coherent-beta* experiment instead redistributes saved element Phi(U^n)
- *  with beta(U*) inside that sweep, so adding this shortcut would mix beta^n
- *  back into the supposedly coherent residual.
+ *  The coherent-beta* experiment instead redistributes saved element Phi(U^n)
+ *  with beta(U*) inside that sweep. B similarly needs the saved old N and LDA
+ *  pieces so one total-residual theta can blend both stages. In either case
+ *  the assembled shortcut has discarded information the corrector needs.
  */
 static void rd_rk2_prepare_corrector(void)
 {
@@ -1121,7 +1125,7 @@ static void rd_rk2_prepare_corrector(void)
       SphP[i].Csnd = sqrt(GAMMA * press / rho);
 #endif
 
-#if !defined(RD_DIAG_NO_KICK) && !defined(RD_RK2_COHERENT_BETA_STAR)
+#if !defined(RD_DIAG_NO_KICK) && !defined(RD_RK2_COHERENT_BETA_STAR) && !defined(B_SCHEME)
       /* the local +1/2 (Q* - Q^n) part of the corrector */
       P[i].Mass += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[0];
       SphP[i].Momentum[0] += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[1];
@@ -1216,6 +1220,16 @@ void compute_residuals(tessellation *T)
   /* beta(U*) must redistribute the old element residual explicitly; the
    * assembled +dU/2 shortcut irreversibly carries beta(U^n). */
   double(*rd_phi_stage0)[4] = (double(*)[4])mymalloc("RD_PhiStage0", Ndt_thistask * sizeof(*rd_phi_stage0));
+#endif
+#if defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+  /* A total-B corrector needs both spatial-stage distributions. The equal-bin
+   * static element set has the same persistent ordering in both sweeps. */
+  double(*rd_b_flux_n_stage0)[4][3] =
+      (double(*)[4][3])mymalloc("RD_BFluxNStage0", Ndt_thistask * sizeof(*rd_b_flux_n_stage0));
+  double(*rd_b_flux_lda_stage0)[4][3] =
+      (double(*)[4][3])mymalloc("RD_BFluxLDAStage0", Ndt_thistask * sizeof(*rd_b_flux_lda_stage0));
+  double(*rd_b_phi_stage0)[4] =
+      (double(*)[4])mymalloc("RD_BPhiStage0", Ndt_thistask * sizeof(*rd_b_phi_stage0));
 #endif
 
   Max_N_FluxRD_export = 0;
@@ -2048,6 +2062,18 @@ void compute_residuals(tessellation *T)
       B_roundoff_scale = dmax(B_roundoff_scale, dmax(LDA_roundoff_scale, N_roundoff_scale));
       rd_check_conservation(Flux_RD, Phi, B_roundoff_scale + phi_scale, thistask_triangles[i], "B");
 
+#ifdef RD_RK2_INTERNAL_LOOP
+      if(rd_stage == 0)
+        {
+          /* Preserve the undisguised N and LDA pieces. Once the predictor has
+           * been assembled, the nodal dU shortcut cannot reconstruct these
+           * element-local stage-0 distributions. */
+          memcpy(rd_b_flux_n_stage0[i], Flux_N, sizeof(rd_b_flux_n_stage0[i]));
+          memcpy(rd_b_flux_lda_stage0[i], Flux_LDA, sizeof(rd_b_flux_lda_stage0[i]));
+          memcpy(rd_b_phi_stage0[i], Phi, sizeof(rd_b_phi_stage0[i]));
+        }
+#endif
+
 #endif  // B scheme
 
 #ifdef RD_RK2_RATE_CONSISTENT_HEUN
@@ -2093,9 +2119,9 @@ void compute_residuals(tessellation *T)
       if(rd_stage == 1)
         {
           /* Corrector: replace the spatial distribution by the total nodal
-           * residual. Mixed and coherent-beta^n use the local +dU/2 shortcut
-           * for the old spatial half. Coherent-beta* suppresses that shortcut
-           * and adds beta(U*) Phi(U^n)/2 explicitly below. */
+           * residual. The LDA mixed and coherent-beta^n paths use the local
+           * +dU/2 shortcut for the old spatial half; coherent-beta* and B
+           * suppress it and add the old element residual explicitly. */
           double T_time[4][3];
           double T_target[4];
 #ifdef RD_RK2_COHERENT_BETA_STAR
@@ -2212,23 +2238,18 @@ void compute_residuals(tessellation *T)
            *
            *     m_ij^B = (1 - l) m_ij^{LDA} + l (|T|/3) delta_ij ,
            *
-           * with the blending parameter formed from the *total* residual rather
-           * than the spatial one, which is what the time-dependent case
-           * requires. Both halves are already computed on this path: the F1
-           * term is the LDA mass matrix and the lumped term is the N one, so
-           * the blended temporal contribution is a linear combination of
-           * quantities in hand.
+           * with one blending parameter formed from the complete RK2 total
+           * residual. The F1 term belongs to the LDA branch and the lumped
+           * term to the N branch. The old and new spatial N/LDA distributions
+           * are kept separately, so the same theta acts on every term.
            *
-           * Conservation is automatic for any Theta and needs no separate
-           * argument. The N total and the LDA total each sum over the element's
-           * three vertices to T_target + Phi/2, so any convex combination of
-           * them does too. That is what makes it safe to blend the total
-           * residual rather than only the spatial part.
+           * Each branch sums to
            *
-           * The spatial blend computed above used the spatial Theta; the
-           * corrector overwrites Flux_RD with the total-residual blend, so that
-           * value is only used by the predictor stage and by the "B"
-           * conservation check. */
+           *   T_target + [Phi(U^n) + Phi(U*)]/2,
+           *
+           * so their convex blend is conservative for every theta. The
+           * spatial-only B blend above remains the predictor distribution; it
+           * is intentionally overwritten here for the corrector. */
           double T_f1[4][3], T_lumped[4][3];
 
           for(k = 0; k < 4; k++)
@@ -2263,18 +2284,21 @@ void compute_residuals(tessellation *T)
 
           for(k = 0; k < 4; k++)
             {
-              double total_k   = T_target[k] + 0.5 * Phi[k];
+              double total_k = T_target[k] + 0.5 * (rd_b_phi_stage0[i][k] + Phi[k]);
               double sum_n_tot = 0.0;
 
               for(j = 0; j < 3; j++)
-                sum_n_tot += fabs(T_lumped[k][j] + 0.5 * Flux_N[k][j]);
+                sum_n_tot +=
+                    fabs(T_lumped[k][j] + 0.5 * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]));
 
               double theta = (sum_n_tot == 0.0) ? 0.0 : dmin(1.0, fabs(total_k) / sum_n_tot);
 
               for(j = 0; j < 3; j++)
                 {
                   T_time[k][j]  = theta * T_lumped[k][j] + (1.0 - theta) * T_f1[k][j];
-                  Flux_RD[k][j] = theta * Flux_N[k][j] + (1.0 - theta) * Flux_LDA[k][j];
+                  Flux_RD[k][j] =
+                      theta * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]) +
+                      (1.0 - theta) * (rd_b_flux_lda_stage0[i][k][j] + Flux_LDA[k][j]);
 
                   rk2_scale += fabs(T_time[k][j]) + 0.5 * fabs(Flux_RD[k][j]);
                 }
@@ -2299,6 +2323,9 @@ void compute_residuals(tessellation *T)
               total_target[k] = T_target[k] + 0.5 * Phi[k];
 #ifdef RD_RK2_COHERENT_BETA_STAR
               total_target[k] += 0.5 * rd_phi_stage0[i][k];
+#endif
+#ifdef B_SCHEME
+              total_target[k] += 0.5 * rd_b_phi_stage0[i][k];
 #endif
 
               rk2_scale += fabs(total_target[k]);
@@ -2567,6 +2594,11 @@ void compute_residuals(tessellation *T)
 #endif
 #ifdef RD_RK2_COHERENT_BETA_STAR
   myfree(rd_phi_stage0);
+#endif
+#if defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+  myfree(rd_b_phi_stage0);
+  myfree(rd_b_flux_lda_stage0);
+  myfree(rd_b_flux_n_stage0);
 #endif
   rd_free_element_set(&set);
 
