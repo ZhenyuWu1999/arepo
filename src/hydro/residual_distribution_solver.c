@@ -89,8 +89,8 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "Select exactly one residual-distribution scheme: LDA_SCHEME, N_SCHEME, or B_SCHEME."
 #endif
 
-#if defined(RD_RK2_TOTAL_RESIDUAL) && defined(B_SCHEME)
-#error "RD_RK2_TOTAL_RESIDUAL does not yet support B_SCHEME: the blend needs the blended mass matrix and a total-residual Theta (Arpaia & Ricchiuto eqs. 43-44)."
+#if defined(RD_RK2_TOTAL_RESIDUAL) && defined(B_SCHEME) && defined(RD_HIERARCHICAL_TIMESTEPS)
+#error "RD_RK2_TOTAL_RESIDUAL with B_SCHEME is an equal-bin experiment; the hierarchy has only been derived for the N and LDA temporal terms."
 #endif
 
 #if defined(RD_RK2_COHERENT_BETA_N) && defined(RD_RK2_COHERENT_BETA_STAR)
@@ -1677,7 +1677,7 @@ void compute_residuals(tessellation *T)
 #endif
         }
 
-#if defined(RD_RK2_TOTAL_RESIDUAL) && defined(LDA_SCHEME)
+#if defined(RD_RK2_TOTAL_RESIDUAL) && (defined(LDA_SCHEME) || defined(B_SCHEME))
       /* Third right-hand side: the F1 temporal target (|T|/3) sum_j dU_j/dt.
        * beta_i only ever multiplies a vector, so T_i = -K_i^+ z with
        * S^- z = target reuses the factorisation (one extra back-substitution,
@@ -2032,6 +2032,78 @@ void compute_residuals(tessellation *T)
                   T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
             }
 #endif /* !RD_RK2_COHERENT_BETA_N */
+#elif defined(B_SCHEME)
+          /* Blended mass matrix, Arpaia & Ricchiuto (2015) eqs. 43-44:
+           *
+           *     m_ij^B = (1 - l) m_ij^{LDA} + l (|T|/3) delta_ij ,
+           *
+           * with the blending parameter formed from the *total* residual rather
+           * than the spatial one, which is what the time-dependent case
+           * requires. Both halves are already computed on this path: the F1
+           * term is the LDA mass matrix and the lumped term is the N one, so
+           * the blended temporal contribution is a linear combination of
+           * quantities in hand.
+           *
+           * Conservation is automatic for any Theta and needs no separate
+           * argument. The N total and the LDA total each sum over the element's
+           * three vertices to T_target + Phi/2, so any convex combination of
+           * them does too. That is what makes it safe to blend the total
+           * residual rather than only the spatial part.
+           *
+           * The spatial blend computed above used the spatial Theta; the
+           * corrector overwrites Flux_RD with the total-residual blend, so that
+           * value is only used by the predictor stage and by the "B"
+           * conservation check. */
+          double T_f1[4][3], T_lumped[4][3];
+
+          for(k = 0; k < 4; k++)
+            for(j = 0; j < 3; j++)
+              T_lumped[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
+
+          if(solve_rank == 4)
+            {
+              double Z_f1[4];
+              for(k = 0; k < 4; k++)
+                Z_f1[k] = rhs[k][2];
+
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  {
+                    T_f1[k][j] = -1.0 * (Kmatrix[k][0][j][kplus] * Z_f1[0] + Kmatrix[k][1][j][kplus] * Z_f1[1] +
+                                         Kmatrix[k][2][j][kplus] * Z_f1[2] + Kmatrix[k][3][j][kplus] * Z_f1[3]);
+
+                    for(p = 0; p < 4; p++)
+                      rk2_scale += fabs(Kmatrix[k][p][j][kplus]) * fabs(Z_f1[p]);
+                  }
+            }
+          else
+            {
+              /* beta_i is undefined, so the LDA half of the blend falls back to
+               * the lumped mass -- the same conservative choice the LDA path
+               * makes, and it leaves the blend well defined rather than
+               * disabling it. */
+              RD_stat_f1_lumped++;
+              memcpy(T_f1, T_lumped, sizeof(T_f1));
+            }
+
+          for(k = 0; k < 4; k++)
+            {
+              double total_k   = T_target[k] + 0.5 * Phi[k];
+              double sum_n_tot = 0.0;
+
+              for(j = 0; j < 3; j++)
+                sum_n_tot += fabs(T_lumped[k][j] + 0.5 * Flux_N[k][j]);
+
+              double theta = (sum_n_tot == 0.0) ? 0.0 : dmin(1.0, fabs(total_k) / sum_n_tot);
+
+              for(j = 0; j < 3; j++)
+                {
+                  T_time[k][j]  = theta * T_lumped[k][j] + (1.0 - theta) * T_f1[k][j];
+                  Flux_RD[k][j] = theta * Flux_N[k][j] + (1.0 - theta) * Flux_LDA[k][j];
+
+                  rk2_scale += fabs(T_time[k][j]) + 0.5 * fabs(Flux_RD[k][j]);
+                }
+            }
 #else /* N_SCHEME: the lumped mass IS the thesis choice m^N = (|T|/3) delta_ij */
           for(k = 0; k < 4; k++)
             for(j = 0; j < 3; j++)
@@ -2067,6 +2139,8 @@ void compute_residuals(tessellation *T)
 
 #ifdef LDA_SCHEME
           rk2_scale += 0.5 * LDA_roundoff_scale;
+#elif defined(B_SCHEME)
+          rk2_scale += 0.5 * dmax(LDA_roundoff_scale, N_roundoff_scale);
 #else
           rk2_scale += 0.5 * N_roundoff_scale;
 #endif

@@ -6798,3 +6798,111 @@ higher resolution, or a shorter `TimeMax`.
   further non-smooth work (Noh, a stronger jump, an interface normal to a
   contact rather than a shock) is now a parameter change rather than a project.
 
+## 2026-08-03: B + RK2 implemented and first exercised, and the hierarchy Sod extended
+
+- Author: `Claude Code Opus5`
+- Follows the entry above. Three additions: the blended scheme with the
+  total-residual RK2 (the `#error` it has carried since the RK2 work began is
+  now lifted for equal bins), the hierarchy shock test at a second resolution
+  and on a glass, and its MPI decomposition invariance.
+- Source change: the `B_SCHEME` branch of the RK2 corrector in
+  `residual_distribution_solver.c`; the third right-hand side is now filled for
+  `B` as well as `LDA`.
+
+### 1. `B + RK2` is a smaller change than the `#error` suggested
+
+The blocking comment named two missing pieces: the blended mass matrix and a
+`Theta` formed from the total residual. Both turned out to be assemblies of
+quantities the corrector already computes.
+
+Arpaia & Ricchiuto eqs. 43-44 give
+`m_ij^B = (1 - l) m_ij^{LDA} + l (|T|/3) delta_ij`. On this path the F1 term
+**is** `m^{LDA}` and the lumped term **is** `m^N`, so the blended temporal
+contribution is a linear combination of `T_f1` and `T_lumped`. For `Theta` the
+spatial residual is replaced by the total, `Phi_total = T_target + Phi/2`, and
+the N distribution by the N total, `T_lumped + Flux_N/2`.
+
+**Conservation is automatic for any `Theta` and needs no separate argument.**
+The N total and the LDA total each sum over the element's three vertices to
+`Phi_total`, so any convex combination of them does too. That is precisely what
+makes it safe to blend the *total* residual rather than only the spatial part,
+and it is why the change is about seventy lines rather than a derivation.
+
+At a rank-deficient element `beta_i` is undefined, so the LDA half of the blend
+falls back to the lumped mass -- the same conservative choice the LDA path
+makes, which leaves the blend well defined instead of disabling it.
+
+The `#error` is retained, but narrowed to `B_SCHEME` **with the hierarchy**: the
+multirate temporal term has only been derived for the N and LDA cases.
+
+### 2. The blend works, and this is the first time it has been exercised
+
+2-D periodic Sod, triangular lattice, `t = 1`:
+
+| scheme | rho L1 `n=64` | `n=128` | order | rho_min | p_min | overshoot | undershoot | `\|dM/M\|` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| N + RK2 | `3.750e-02` | `2.567e-02` | 0.547 | 0.12504 | 0.10004 | 0 | 0 | `2.2e-16` |
+| LDA + RK2 | `2.626e-02` | `1.593e-02` | 0.721 | **0.05769** | **0.03105** | `2.30e-02` | `6.73e-02` | `5.6e-16` |
+| **B + RK2** | **`3.127e-02`** | **`2.096e-02`** | 0.577 | **0.12500** | **0.10000** | **0** | **0** | **0** |
+
+The oscillations are removed completely -- `rho_min` and `p_min` sit exactly on
+the exact solution's bounds, tighter than N's own 0.12504 and 0.10004 -- while
+the error is 18 per cent below N's, and mass is conserved to zero.
+
+**This is the solver's first path that is both second order in time and
+monotone on a shock.** The preceding entry showed that every previous B run was
+on the legacy first-order-in-time path, where LDA was not oscillating and the
+blend therefore had nothing to do; `B + RK2` is the configuration the blend was
+designed for.
+
+### 3. The hierarchy Sod across resolution and mesh family
+
+`N + RK2`, bin interface at `x = 8.5`, shock crossing at `t = 0.57`, contact at
+`t = 1.08`, `TimeMax = 1.2`; equal-bin control at each point.
+
+| case | cells | frozen | max `\|dM/M\|` | max `\|dE/E\|` | peak `\|hier-eq\|` | base error | share | min rho |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| triangular `n=64` | 4608 | 144 | `2.00e-15` | `6.66e-16` | `8.93e-06` | `4.148e-02` | 0.022 % | 0.12500 |
+| triangular `n=128` | 18432 | 288 | `3.77e-15` | `1.55e-15` | `3.19e-06` | `2.767e-02` | 0.012 % | 0.12500 |
+| glass `n=96` | 9216 | 194 | `2.00e-15` | `1.55e-15` | `3.24e-06` | `3.342e-02` | 0.010 % | 0.12500 |
+| glass `n=192` | 36864 | 392 | `5.11e-15` | `3.11e-15` | `1.43e-06` | `2.197e-02` | 0.007 % | 0.12500 |
+
+Every case keeps a clean 2:1 (`max_ratio = 2`). Three things hold uniformly:
+conservation at machine precision, positivity exactly at the analytic bound
+(`rho_min = 0.12500` everywhere), and a relative defect that **shrinks** with
+resolution, 0.022 to 0.007 per cent. **A glass behaves at least as well as the
+regular lattice**, which is the case that matters for production.
+
+### 4. MPI decomposition invariance under a shock
+
+Hierarchy Sod, triangular `n = 64`, at 1, 4 and 16 ranks, matched by
+`ParticleIDs` at `t = 1.2`:
+
+```
+   np=4   max abs diff   rho 4.55e-15   vx 3.11e-15   vy 8.47e-16   p 8.88e-16   mass 1.01e-16
+   np=16  max abs diff   rho 5.44e-15   vx 3.33e-15   vy 9.46e-16   p 9.99e-16   mass 1.18e-16
+```
+
+The frozen set is identical at every rank count (144 vertices), so the
+vertex-star reduction is decomposition independent on a discontinuous solution
+as well as a smooth one. This was the last MPI property that had only been
+checked in smooth flow.
+
+### 5. Status of the hierarchy after these tests
+
+Construction A now has, for the N scheme: exact conservation and preserved
+positivity through a shock crossing a bin interface, at two resolutions and on
+two mesh families; a defect of 0.007 to 0.022 per cent that falls with
+resolution; order about 1.8 under joint `(dx, dt)` refinement in smooth flow;
+and decomposition invariance at 1, 4 and 16 ranks in both regimes. I do not
+have a remaining objection to it as a production baseline for N.
+
+What is still untested: 4:1 and deeper ratios, a coarse triangle surrounded by
+fine ones, dynamic bin migration, restart, and an interface normal to a
+**contact** rather than a shock. The last of these is the one I would do next:
+a contact has no self-steepening mechanism, so a phase error introduced by the
+frozen treatment is not pushed back, and it is the case where the smooth-flow
+argument is least applicable.
+
+`B + RK2` is not yet available under the hierarchy, and the derivation of its
+multirate temporal term is the natural companion to that work.
