@@ -405,6 +405,25 @@ static double RD_stat_min_stage_press;     /* smallest predictor pressure seen t
 #endif
 static double RD_stat_min_dt_extrap;       /* smallest dt_Extrapolation seen this call */
 static double RD_stat_max_dt_extrap;       /* largest dt_Extrapolation seen this call */
+#ifdef RD_RT_FIXED_BOUNDARY
+static double RD_stat_boundary_absorbed[4];     /* signed dQ suppressed at fixed vertices */
+static double RD_stat_boundary_absorbed_abs[4]; /* absolute dQ suppressed at fixed vertices */
+
+static inline int rd_rt_fixed_boundary_vertex(int p)
+{
+  return P[p].Pos[1] < (RD_RT_FIXED_BOUNDARY) || P[p].Pos[1] >= boxSize_Y - (RD_RT_FIXED_BOUNDARY);
+}
+
+static inline void rd_rt_record_absorbed_update(double dm, double dpx, double dpy, double de)
+{
+  const double dq[4] = {dm, dpx, dpy, de};
+  for(int k = 0; k < 4; k++)
+    {
+      RD_stat_boundary_absorbed[k] += dq[k];
+      RD_stat_boundary_absorbed_abs[k] += fabs(dq[k]);
+    }
+}
+#endif
 
 #ifdef RD_DIAG_THETA
 /* Distribution of the B blending parameter. The classical expectation is that
@@ -452,6 +471,13 @@ static void rd_reset_solver_statistics(void)
 #endif
   RD_stat_min_dt_extrap   = MAX_DOUBLE_NUMBER;
   RD_stat_max_dt_extrap   = -MAX_DOUBLE_NUMBER;
+#ifdef RD_RT_FIXED_BOUNDARY
+  for(int k = 0; k < 4; k++)
+    {
+      RD_stat_boundary_absorbed[k] = 0.0;
+      RD_stat_boundary_absorbed_abs[k] = 0.0;
+    }
+#endif
 #ifdef RD_DIAG_THETA
   for(int which = 0; which < 2; which++)
     {
@@ -2494,6 +2520,16 @@ void compute_residuals(tessellation *T)
 
               int P_index = SphP_index;
 
+#ifdef RD_RT_FIXED_BOUNDARY
+              if(rd_rt_fixed_boundary_vertex(P_index))
+                {
+                  rd_rt_record_absorbed_update((-1.0) * triangle_dt * Flux_RD[0][j],
+                                               (-1.0) * triangle_dt * Flux_RD[1][j],
+                                               (-1.0) * triangle_dt * Flux_RD[2][j],
+                                               (-1.0) * triangle_dt * Flux_RD[3][j]);
+                  continue;
+                }
+#endif
               P[P_index].Mass += (-1.0) * triangle_dt * Flux_RD[0][j];
               SphP[SphP_index].Momentum[0] += (-1.0) * triangle_dt * Flux_RD[1][j];
               SphP[SphP_index].Momentum[1] += (-1.0) * triangle_dt * Flux_RD[2][j];
@@ -2602,6 +2638,21 @@ void compute_residuals(tessellation *T)
 
   FluxRD_list = NULL; /* freed inside the stage loop */
 #endif /* RD_RK2_INTERNAL_LOOP */
+
+#ifdef RD_RT_FIXED_BOUNDARY
+  {
+    double local[8], global[8];
+    for(int component = 0; component < 4; component++)
+      {
+        local[component] = RD_stat_boundary_absorbed[component];
+        local[4 + component] = RD_stat_boundary_absorbed_abs[component];
+      }
+    MPI_Reduce(local, global, 8, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if(ThisTask == 0)
+      printf("RD-RT-BOUNDARY time=%.8g absorbed=[%.6e,%.6e,%.6e,%.6e] abs=[%.6e,%.6e,%.6e,%.6e]\n",
+             All.Time, global[0], global[1], global[2], global[3], global[4], global[5], global[6], global[7]);
+  }
+#endif
 
 #ifdef RD_DEBUG_ASSERTS
   /* Item A4: instrumentation, not an assertion.  Reports how often the
@@ -2788,6 +2839,14 @@ void apply_FluxRD_list(void)
     {
       p = FluxListGet[i].index;
 
+#ifdef RD_RT_FIXED_BOUNDARY
+      if(rd_rt_fixed_boundary_vertex(p))
+        {
+          rd_rt_record_absorbed_update(FluxListGet[i].dMass_Dual, FluxListGet[i].dMomentum_Dual[0],
+                                       FluxListGet[i].dMomentum_Dual[1], FluxListGet[i].dEnergy_Dual);
+          continue;
+        }
+#endif
       P[p].Mass += FluxListGet[i].dMass_Dual;
       SphP[p].Momentum[0] += FluxListGet[i].dMomentum_Dual[0];
       SphP[p].Momentum[1] += FluxListGet[i].dMomentum_Dual[1];

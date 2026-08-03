@@ -153,6 +153,14 @@ static void gravity_external_get_force(double pos[3], int type, MyIDType ID, dou
 
   *pot = 0;
 
+#ifdef RD_RT_FIXED_BOUNDARY
+  /* Fixed RT reservoir vertices are Dirichlet boundary data, not dynamical
+   * fluid.  Their hydrodynamic increments are absorbed by the RD boundary
+   * hook, so suppress the matching gravity kick as well. */
+  if(pos[1] < (RD_RT_FIXED_BOUNDARY) || pos[1] >= boxSize_Y - (RD_RT_FIXED_BOUNDARY))
+    return;
+#endif
+
 #ifdef EXTERNALGY
   acc[1] += EXTERNALGY;
   *pot = -(EXTERNALGY)*pos[1];
