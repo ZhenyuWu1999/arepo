@@ -6674,3 +6674,127 @@ New `examples/yee_2d/Config_RD_RK2_N_HIER_2LEVEL_SPLIT025.sh`.
    interruption check. This is a correctness issue, not an accuracy one, and
    deserves a terminating assertion now rather than a verification later.
 
+## 2026-08-03: the first non-smooth test — a 2-D periodic Sod, and the hierarchy through a shock
+
+- Author: `Claude Code Opus5`
+- Closes a gap that has been open since 2026-07-28, when a shock problem was
+  first proposed and never run: **until now the RD solver had never been run on
+  a discontinuity at all.** Every validation so far has been smooth flow.
+- New: `examples/shocktube_2d/` (seven Configs) and
+  `Hydro_data_analysis/Analysis/shocktube_2d/` (IC generator, preparer,
+  analyser). Campaigns `Data_arepo_RD/shocktube_2d/{stage0_v1,stage1_hier}`.
+- **No solver-source change.**
+
+### 1. Why a periodic 2-D Sod, and not the 1-D example
+
+The RD solver requires `TWODIMS`, so AREPO's `examples/shocktube_1d` (`ONEDIMS`)
+cannot be used, and non-periodic boundaries are not available. Neither is
+needed: SWIFT's own `SodShock_2D` runs the problem in a **periodic** box, with
+one state occupying one region and the other the rest, so periodicity creates a
+second, mirror-image Riemann problem. The run stops before their waves meet.
+
+Setup: box 10, `gamma = 1.4`, classic Sod (`rho_L, p_L = 1, 1`;
+`rho_R, p_R = 0.125, 0.1`; `v = 0`), left state on `x in [2.5, 7.5)`, so the
+discontinuities are at `x = 2.5` and `x = 7.5`. The shocks travel outwards at
+about 1.75 and meet at the periodic seam at `t = 1.43`.
+
+The problem is uniform in `y`, which a genuinely 1-D setup could not give: any
+`y` structure in the answer is scheme or mesh noise, and is reported below as a
+free symmetry diagnostic.
+
+### 2. Stage 0: equal bins, all five scheme variants, triangular lattice, `t = 1`
+
+| scheme | rho L1 `n=64` | `n=128` | order | rho_min | p_min | overshoot | undershoot | y-noise |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| LDA | `3.6966e-02` | `2.5006e-02` | 0.564 | 0.12504 | 0.10004 | 0 | 0 | `5.0e-16` |
+| N | `3.7477e-02` | `2.5668e-02` | 0.546 | 0.12504 | 0.10004 | 0 | 0 | `6.1e-16` |
+| B | `3.6966e-02` | `2.5340e-02` | 0.545 | 0.12504 | 0.10004 | 0 | 0 | `5.5e-16` |
+| **LDA + RK2** | `2.6261e-02` | `1.5926e-02` | 0.721 | **0.05769** | **0.03105** | `2.30e-02` | `6.73e-02` | `1.4e-15` |
+| N + RK2 | `3.7500e-02` | `2.5665e-02` | 0.547 | 0.12504 | 0.10005 | 0 | 0 | `1.2e-15` |
+
+Exact solution range at `t = 1`: `rho` in `[0.125, 1]`, `p` in `[0.1, 1]`. Mass
+is conserved to `4.4e-16` or better in every run.
+
+1. **The solver survives a discontinuity.** All five variants complete, at both
+   resolutions, with machine-precision conservation. Nothing terminates: not the
+   `Cs_avg > 0` guard, not A2, not the predictor positivity check.
+2. **`LDA + RK2` oscillates, as classical theory says it must.** Its density
+   minimum is 54 per cent below the exact minimum and its pressure minimum 69
+   per cent below; it is not positivity preserving. It also has by far the
+   lowest L1 error, because it is the least diffusive. This is the textbook
+   trade-off and matches Morton's thesis figures 3.10 and 3.11.
+3. **The surprise: LDA *without* RK2 does not oscillate at all.** Its
+   overshoot and undershoot are exactly zero and its L1 error is
+   indistinguishable from N's. On the legacy first-order-in-time path the extra
+   dissipation completely masks LDA's oscillatory character, so LDA and N look
+   like the same scheme on a shock.
+
+   **Consequence: the B scheme has never actually been exercised.** Every B run
+   in this project has been on the non-RK2 path, where it has been blending
+   towards N a scheme that was not oscillating -- hence `B` and `LDA` agreeing
+   to five digits at `n = 64` above. The first real test of the blend is
+   `B + RK2`, which is currently a compile error pending the blended mass matrix
+   and a total-residual `Theta`. That should be re-prioritised: the blend is the
+   only mechanism the solver has for handling shocks with a second-order
+   scheme, and it is unvalidated.
+4. **Order about 0.55** for the three monotone variants. That is the classical
+   rate: a first-order scheme smears a contact over about `sqrt(N)` cells, which
+   gives an L1 error of `O(h^1/2)`. `LDA + RK2` reaches 0.72 by being less
+   diffusive. Nothing here is anomalous.
+5. **The `y` symmetry is preserved to machine precision** (`5e-16` to `1.4e-15`).
+   On a regular lattice the scheme generates no spurious transverse structure.
+   (An earlier version of this diagnostic reported `1e-2`; it was measuring the
+   `x` variation inside each slab, not `y` structure.)
+
+### 3. Stage 1: the hierarchy with a bin interface the shock crosses
+
+`N + RK2`, `RD_HIER_TEST_SPLIT_FRAC = 0.85`, so the fine region is `x < 8.5` and
+the right-going shock from `x = 7.5` crosses the interface at `t = 0.57` and the
+contact at `t = 1.08`. `MaxSizeTimestep = 1/512`, strictly below the run's
+minimum CFL step, so the pattern gives a clean 2:1 (4464 stage-live, 144 frozen,
+`max_ratio = 2`). `TimeMax = 1.2`. Control: identical run with
+`FORCE_EQUAL_TIMESTEPS`.
+
+| t | rho_min | p_min | `\|dM/M\|` | `\|dE/E\|` | `\|hier - equal\|` L1 | share at `x > 8` |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.00 | 0.12500 | 0.10000 | 0 | 0 | 0 | -- |
+| 0.30 | 0.12500 | 0.10000 | `1.1e-15` | `6.7e-16` | `4.31e-07` | 65 % |
+| 0.60 | 0.12500 | 0.10000 | `1.1e-15` | `2.2e-16` | `7.30e-06` | 98 % |
+| 0.90 | 0.12608 | 0.10121 | `2.0e-15` | 0 | `5.87e-06` | 96 % |
+| 1.20 | 0.18071 | 0.17112 | `1.8e-15` | `2.2e-16` | `8.93e-06` | 67 % |
+
+**The shock test passes on all three counts.**
+
+- **Conservation is exact through the crossing**: mass and energy hold to
+  `2e-15` at every snapshot, including `t = 0.6` when the shock is on the bin
+  interface. This is the first demonstration of the Construction A conservation
+  argument on a discontinuity.
+- **Positivity holds**: the density and pressure minima never fall below the
+  exact solution's, so the frozen-vertex treatment does not destroy the N
+  scheme's positivity. This was the risk I flagged as the one I was least sure
+  of, and the risk Kimi ranked first.
+- **The defect is small and localised**: `|hier - equal|` peaks at `9e-6`
+  against a base error of `4.1e-2`, so the hierarchy changes the answer by
+  0.02 per cent, and 96 to 98 per cent of it sits at `x > 8` while the shock is
+  crossing. Against the exact solution the two are indistinguishable
+  (`4.1477e-02` versus `4.1481e-02`).
+
+One caveat on the last row: at `t = 1.2` and `n = 64` the undisturbed band
+between the two smeared shocks is only about five cells wide, which is why
+`rho_min` rises to 0.18. Quantitative statements should use `t <= 0.9`, or a
+higher resolution, or a shorter `TimeMax`.
+
+### 4. What this changes
+
+- Kimi's reservation 1 and my own item 6 are answered favourably: **the smooth
+  verdict on Construction A survives contact with a shock.** Combined with the
+  joint `(dx, dt)` staircase, the case for Construction A being production-usable
+  is now reasonably complete for the N scheme.
+- **`B + RK2` moves up the list.** Section 2.3 shows the blend is unvalidated
+  and that the only second-order variant the solver has is not positivity
+  preserving on a shock. Any production use on non-smooth flow needs it.
+- The harness is reusable: `--mesh-family` accepts `triangular`, `swift48_tiled`
+  and `jittered`, and the analyser takes any of the five scheme variants, so
+  further non-smooth work (Noh, a stronger jump, an interface normal to a
+  contact rather than a shock) is now a parameter change rather than a project.
+
