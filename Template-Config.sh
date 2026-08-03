@@ -49,6 +49,7 @@
 #RD_RK2_TOTAL_RESIDUAL         # RD: two-stage GL+F1 total-residual RK2 (thesis ch.3 / Arpaia-Ricchiuto); whole step at the second call site
 #RD_RK2_COHERENT_BETA_N        # experiment: freeze beta(U^n) across every stage-2 spatial/F1 term
 #RD_RK2_COHERENT_BETA_STAR     # experiment: use beta(U*) for every stage-2 spatial/F1 term; explicitly redistribute Phi(U^n)
+#RD_RK2_RATE_CONSISTENT_HEUN    # experiment: equal-bin LDA+F1 semi-discrete operator advanced by Heun (four element sweeps)
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

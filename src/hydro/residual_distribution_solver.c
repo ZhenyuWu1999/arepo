@@ -97,12 +97,25 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "Select at most one coherent stage-beta experiment."
 #endif
 
+#if defined(RD_RK2_RATE_CONSISTENT_HEUN) && \
+    (!defined(RD_RK2_TOTAL_RESIDUAL) || !defined(LDA_SCHEME) || defined(RD_HIERARCHICAL_TIMESTEPS))
+#error "RD_RK2_RATE_CONSISTENT_HEUN is an equal-bin LDA+F1 experiment and requires RD_RK2_TOTAL_RESIDUAL."
+#endif
+
+#if defined(RD_RK2_RATE_CONSISTENT_HEUN) && \
+    (defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR))
+#error "The rate-consistent Heun experiment is distinct from the stage-beta experiments."
+#endif
+
 #if(defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR)) && \
     (!defined(RD_RK2_TOTAL_RESIDUAL) || !defined(LDA_SCHEME))
 #error "The coherent stage-beta experiments require LDA_SCHEME and RD_RK2_TOTAL_RESIDUAL."
 #endif
 
-#if defined(RD_HIERARCHICAL_TIMESTEPS)
+#if defined(RD_RK2_RATE_CONSISTENT_HEUN)
+#define RD_RK2_STAGE_BETA_LABEL "rate-consistent-LDA-F1-Heun"
+#define RD_UPWIND_NRHS 3
+#elif defined(RD_HIERARCHICAL_TIMESTEPS)
 #define RD_UPWIND_NRHS 3
 #elif defined(RD_RK2_COHERENT_BETA_N)
 #define RD_RK2_STAGE_BETA_LABEL "coherent-beta-n"
@@ -935,6 +948,95 @@ static void rd_rk2_save_stage0(void)
     }
 }
 
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+/*! \brief Prepare the nodal data between the four rate-consistent sweeps.
+ *
+ *  The semi-discrete LDA+F1 operator is
+ *
+ *      k(U) = 2 v(U) - S^-1 M(U) v(U),
+ *
+ *  where S is the diagonal median-dual area, v is the LDA spatial rate, and
+ *  M is the F1 mass matrix.  Each Heun stage is therefore one spatial sweep
+ *  followed by one mass-apply sweep.  Conserved Q is also the accumulator:
+ *
+ *    pass 0: Q = Qn + 2 dt S v0
+ *    pass 1: Q = Qn + dt S k0 = Q*
+ *    pass 2: Q = (Qn+Q*)/2 + dt S v*
+ *    pass 3: Q = Qn + dt (S k0 + S k*)/2.
+ *
+ *  RD_dU carries v0/v* into the mass sweeps. Between passes 1 and 2 it
+ *  temporarily carries U*-Un so the midpoint accumulator can be formed.
+ */
+static void rd_rate_consistent_prepare_pass(int pass)
+{
+  if(pass < 1 || pass > 3)
+    terminate_program("invalid rate-consistent RD pass transition");
+
+  for(int i = 0; i < NumGas; i++)
+    {
+      double area = SphP[i].DualArea;
+      double dt   = (((integertime)1) << P[i].TimeBinHydro) * All.Timebase_interval;
+      double u[4] = {P[i].Mass / area, SphP[i].Momentum[0] / area, SphP[i].Momentum[1] / area,
+                     SphP[i].Energy / area};
+
+      if(pass == 1)
+        {
+          /* The first spatial sweep used weight 2 dt. Recover v(U^n) while
+           * leaving both Q and the stage-n primitives untouched. */
+          for(int k = 0; k < 4; k++)
+            SphP[i].RD_dU[k] = (u[k] - SphP[i].RD_Ustage0[k]) / (2.0 * dt);
+        }
+      else if(pass == 2)
+        {
+          /* The first mass sweep closed k0, so Q now is the physical Heun
+           * predictor. Recover W*, retain U*-Un, and reset Q to the midpoint
+           * accumulator before evaluating v(U*). */
+          for(int k = 0; k < 4; k++)
+            SphP[i].RD_dU[k] = u[k] - SphP[i].RD_Ustage0[k];
+
+          double rho   = u[0];
+          double velx  = u[1] / rho;
+          double vely  = u[2] / rho;
+          double egy   = u[3] / rho - 0.5 * (velx * velx + vely * vely);
+          double press = GAMMA_MINUS1 * rho * egy;
+
+          if(!isfinite(rho) || !isfinite(press) || rho <= 0.0 || press <= 0.0)
+            {
+              printf("RD rate-consistent predictor invalid: task=%d i=%d ID=%llu rho=%.17g press=%.17g\n", ThisTask, i,
+                     (unsigned long long)P[i].ID, rho, press);
+              terminate_program("RD rate-consistent Heun produced a non-physical predictor");
+            }
+
+          RD_stat_min_stage_rho   = dmin(RD_stat_min_stage_rho, rho);
+          RD_stat_min_stage_press = dmin(RD_stat_min_stage_press, press);
+
+          SphP[i].Density  = rho;
+          P[i].Vel[0]      = velx;
+          P[i].Vel[1]      = vely;
+          SphP[i].Utherm   = egy;
+          SphP[i].Pressure = press;
+#ifdef TREE_BASED_TIMESTEPS
+          SphP[i].Csnd = sqrt(GAMMA * press / rho);
+#endif
+
+          P[i].Mass              = area * (SphP[i].RD_Ustage0[0] + 0.5 * SphP[i].RD_dU[0]);
+          SphP[i].Momentum[0]    = area * (SphP[i].RD_Ustage0[1] + 0.5 * SphP[i].RD_dU[1]);
+          SphP[i].Momentum[1]    = area * (SphP[i].RD_Ustage0[2] + 0.5 * SphP[i].RD_dU[2]);
+          SphP[i].Energy         = area * (SphP[i].RD_Ustage0[3] + 0.5 * SphP[i].RD_dU[3]);
+        }
+      else
+        {
+          /* Q is midpoint + dt v*. RD_dU still contains U*-Un here. */
+          for(int k = 0; k < 4; k++)
+            {
+              double midpoint = SphP[i].RD_Ustage0[k] + 0.5 * SphP[i].RD_dU[k];
+              SphP[i].RD_dU[k] = (u[k] - midpoint) / dt;
+            }
+        }
+    }
+}
+#endif /* RD_RK2_RATE_CONSISTENT_HEUN */
+
 /*! \brief Between the stages: form dU, recover the stage primitives, and,
  *         unless coherent beta* is selected, apply the corrector's local
  *         +1/2 (Q* - Q^n) contribution.
@@ -1129,12 +1231,23 @@ void compute_residuals(tessellation *T)
    * the FULL timestep; the half-step convention of the baseline pair is
    * unreachable on this path. */
   int rd_stage;
-  for(rd_stage = 0; rd_stage < 2; rd_stage++)
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+  const int rd_number_of_passes = 4;
+#else
+  const int rd_number_of_passes = 2;
+#endif
+  for(rd_stage = 0; rd_stage < rd_number_of_passes; rd_stage++)
     {
       if(rd_stage == 0)
         rd_rk2_save_stage0();
       else
         {
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+          rd_rate_consistent_prepare_pass(rd_stage);
+          /* Passes 1 and 3 need the nodal rate; pass 2 needs W*. Sending both
+           * fields at every transition keeps the ghost contract simple. */
+          exchange_primitive_variables();
+#else
 #ifdef RD_DIAG_PREDICTOR_ONLY /* diagnostic only: stop after the predictor stage */
           break;
 #endif /* RD_DIAG_PREDICTOR_ONLY */
@@ -1142,6 +1255,7 @@ void compute_residuals(tessellation *T)
           rd_rk2_prepare_corrector();
           exchange_primitive_variables(); /* ghosts receive W* and RD_dU */
 #endif
+#endif /* RD_RK2_RATE_CONSISTENT_HEUN */
         }
 
 #ifdef RD_DEBUG_ASSERTS
@@ -1209,7 +1323,11 @@ void compute_residuals(tessellation *T)
       double full_triangle_dt = (((integertime)1) << timebin_this_triangle) * All.Timebase_interval;
       double triangle_dt      = full_triangle_dt;
 
-#ifndef RD_RK2_INTERNAL_LOOP
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+      /* Spatial/mass weights for k=2v-S^-1Mv and the Heun average. */
+      const double rd_pass_weight[4] = {2.0, 1.0, 1.0, 0.5};
+      triangle_dt *= rd_pass_weight[rd_stage];
+#elif !defined(RD_RK2_INTERNAL_LOOP)
       triangle_dt *= 0.5; /* the baseline applies two half-weight Heun calls per step */
 #endif
 
@@ -1252,7 +1370,11 @@ void compute_residuals(tessellation *T)
                * recovered W* before the corrector. No Taylor extrapolation. */
               (void)grad;
               (void)delta_time;
-              if(rd_stage == 1)
+              if(rd_stage == 1
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+                 || rd_stage == 3
+#endif
+              )
                 for(k = 0; k < 4; k++)
                   dU_vertex[j][k] = SphP[SphP_index].RD_dU[k];
 #else
@@ -1326,7 +1448,11 @@ void compute_residuals(tessellation *T)
 #ifdef RD_RK2_TOTAL_RESIDUAL
               (void)grad;
               (void)delta_time;
-              if(rd_stage == 1)
+              if(rd_stage == 1
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+                 || rd_stage == 3
+#endif
+              )
                 for(k = 0; k < 4; k++)
                   dU_vertex[j][k] = PrimExch[PrimExch_index].RD_dU[k];
 #else
@@ -1682,8 +1808,18 @@ void compute_residuals(tessellation *T)
        * beta_i only ever multiplies a vector, so T_i = -K_i^+ z with
        * S^- z = target reuses the factorisation (one extra back-substitution,
        * no beta tensor) and inherits the rank policy (Kimi amendment 2). */
-      if(rd_stage == 1)
+      if(rd_stage == 1
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+         || rd_stage == 3
+#endif
+      )
         {
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+          /* RD_dU is already the nodal spatial rate v for a mass-apply pass. */
+          for(k = 0; k < 4; k++)
+            rhs[k][2] =
+                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]);
+#else
           double f1_interval = triangle_dt;
 #ifdef RD_HIERARCHICAL_TIMESTEPS
           /* The ledger call carries half weight, but dU is the predictor over
@@ -1693,7 +1829,7 @@ void compute_residuals(tessellation *T)
           for(k = 0; k < 4; k++)
             rhs[k][2] =
                 (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / f1_interval;
-
+#endif
         }
 #endif
 
@@ -1914,7 +2050,46 @@ void compute_residuals(tessellation *T)
 
 #endif  // B scheme
 
-#ifdef RD_RK2_INTERNAL_LOOP
+#ifdef RD_RK2_RATE_CONSISTENT_HEUN
+      if(rd_stage == 1 || rd_stage == 3)
+        {
+          /* Replace the spatial LDA distribution by M(U)v. The solved third
+           * column is (S^-)^-1 [(|T|/3) sum_j v_j], so -K_i^+ times it is the
+           * F1 mass-matrix action. A rank-deficient element uses the same
+           * conservative lumped fallback as the total-residual path. */
+          double mass_target[4];
+          double mass_scale = 0.0;
+
+          for(k = 0; k < 4; k++)
+            mass_target[k] =
+                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]);
+
+          if(solve_rank == 4)
+            {
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  {
+                    Flux_RD[k][j] = -1.0 * (Kmatrix[k][0][j][kplus] * rhs[0][2] + Kmatrix[k][1][j][kplus] * rhs[1][2] +
+                                             Kmatrix[k][2][j][kplus] * rhs[2][2] + Kmatrix[k][3][j][kplus] * rhs[3][2]);
+                    for(p = 0; p < 4; p++)
+                      mass_scale += fabs(Kmatrix[k][p][j][kplus]) * fabs(rhs[p][2]);
+                  }
+            }
+          else
+            {
+              RD_stat_f1_lumped++;
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  Flux_RD[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k];
+            }
+
+          for(k = 0; k < 4; k++)
+            mass_scale += fabs(mass_target[k]);
+          rd_check_conservation(Flux_RD, mass_target, mass_scale, thistask_triangles[i], "LDA-F1-mass-apply");
+        }
+#endif
+
+#if defined(RD_RK2_INTERNAL_LOOP) && !defined(RD_RK2_RATE_CONSISTENT_HEUN)
       if(rd_stage == 1)
         {
           /* Corrector: replace the spatial distribution by the total nodal
@@ -2147,7 +2322,7 @@ void compute_residuals(tessellation *T)
 
           rd_check_conservation(Flux_RD, total_target, rk2_scale + 0.5 * phi_scale, thistask_triangles[i], "RK2-total");
         }
-#endif /* #ifdef RD_RK2_INTERNAL_LOOP */
+#endif /* RD_RK2_INTERNAL_LOOP && !RD_RK2_RATE_CONSISTENT_HEUN */
 
 #if defined(RD_HIERARCHICAL_TIMESTEPS) && defined(LDA_SCHEME)
       if(rd_stage == RD_RK_STAGE_CORRECTOR)

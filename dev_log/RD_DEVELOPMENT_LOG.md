@@ -7125,3 +7125,68 @@ the fixed, `bash -n` checked wrapper and supplied the reported `0:0` record.
    pressure/velocity disturbance on a glass is more important than the tiny
    hierarchy-minus-equal defect and should not be attributed to frozen
    vertices.
+
+## 2026-08-03: rate-consistent LDA+F1 advanced by Heun restores second-order time convergence
+
+- Author: `Codex GPT-5`
+- Source baseline: commit `34a00e0`; the exact dirty-source patch is preserved
+  in every run's provenance.
+- Development artifact:
+  `build_artifacts/lda-f1-rate-heun-dev/34a00e0a4e72-88a8113c6afdfdb9/Arepo`,
+  SHA256 `71fa46b111907bf070d208bb6494a68ef5d25d55963be0ae0be66409ffc89552`.
+
+### 1. Change and discrete operator
+
+The new equal-bin-only experiment `RD_RK2_RATE_CONSISTENT_HEUN` treats the
+LDA+F1 expression as one semi-discrete rate
+
+```
+  k(U) = 2 v(U) - S^-1 M(U) v(U),
+```
+
+and advances that same operator with explicit Heun. Each RK stage therefore
+uses two element sweeps: one spatial LDA-rate sweep followed by one F1
+mass-application sweep. Four sweeps form `k(U^n)`, recover the physical
+predictor `U*=U^n+dt k(U^n)`, form `k(U*)`, and finish with
+`U^{n+1}=U^n+dt[k(U^n)+k(U*)]/2`. The implementation reuses the existing
+upwind solve for `M v`, preserves the exact-rank lumped fallback, and rejects
+hierarchical timesteps at compile time. This is deliberately an equal-bin
+temporal experiment; no B or multirate path is enabled by it.
+
+### 2. Fixed-mesh timestep ladders
+
+The artifact was run at `boost=1`, `TimeMax=1`, four ranks, and
+`dt=1/256,1/512,1/1024,1/2048` on both triangular `n=64` and tiled Swift glass
+`n=48` meshes. All eight jobs completed with exit status zero and exactly the
+requested 256, 512, 1024, or 2048 steps. Every step had `f1_lumped=0`;
+predictor minima were `rho>=0.493249, p>=0.371970` on the triangular mesh and
+`rho>=0.494172, p>=0.373874` on the glass. Maximum element conservation
+defects were `2.43e-17` and `4.86e-17`; global mass/energy drift was roundoff.
+
+Final states were matched by `ParticleIDs`. For
+`U=(rho,rho vx,rho vy,rho E)`, `q_i=||Delta U_i||_2`, and one common static
+`DualArea` weight per ladder, the adjacent Richardson differences are:
+
+| mesh | norm | D0 | D1 | p0 | D2 | p1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| triangular `n=64` | L1 | `9.58080e-7` | `2.39446e-7` | `2.000448` | `5.98492e-8` | `2.000294` |
+|  | L2 | `2.26515e-6` | `5.65930e-7` | `2.000910` | `1.41407e-7` | `2.000772` |
+|  | Linf | `1.86761e-5` | `4.66338e-6` | `2.001744` | `1.16555e-6` | `2.000369` |
+| glass `n=48` | L1 | `1.00117e-6` | `2.50274e-7` | `2.000116` | `6.25552e-8` | `2.000304` |
+|  | L2 | `2.27145e-6` | `5.67619e-7` | `2.000618` | `1.41889e-7` | `2.000159` |
+|  | Linf | `1.74965e-5` | `4.37233e-6` | `2.000589` | `1.09226e-6` | `2.001083` |
+
+The analytic density L1 errors approach fixed spatial plateaus
+(`3.08345e-4` triangular and `6.55049e-4` glass), as expected; they were not
+used to estimate the temporal order.
+
+### 3. Judgment
+
+This is clean asymptotic second-order temporal convergence on both a regular
+triangulation and the thesis-relevant glass family. It falsifies the broader
+idea that F1 necessarily limits the method to first order: the defect was the
+old stage/operator plumbing. The stage-beta experiment had little effect
+because changing beta could not repair that plumbing. The equal-bin LDA+F1
+time integrator now has a viable mathematical basis, but its four-sweep
+operator has not yet been derived for asynchronous triangles; hierarchy stays
+compile-disabled pending that separate derivation.
