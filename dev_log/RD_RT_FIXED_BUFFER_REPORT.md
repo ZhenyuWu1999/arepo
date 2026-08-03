@@ -196,10 +196,13 @@ The N production campaign and morphology figure are under
 `Hydro_data_analysis/Data_arepo_RD/rt_2d/gizmo_fixed_buffer_n96_d0025_seed0025_v2`.
 The B/LDA production campaign is
 `gizmo_fixed_buffer_lda_b_n96_d0025_seed0025_v1`; the complete matched N
-control is `gizmo_fixed_buffer_n96_d0025_control_t5_v1`. Short N/B/LDA gates are
-under the corresponding `control_t02` campaign directories. Every run output
-contains the immutable build manifest, binary checksum, parameter file, source
-status, rank count, and exit status.
+control is `gizmo_fixed_buffer_n96_d0025_control_t5_v1`.  The retained short
+zero-seed gate is `gizmo_fixed_buffer_lda_b_n96_d0025_control_t02_v1`, which
+contains the B and LDA cases.  Superseded pure-periodic, reflective-wall,
+incomplete and diagnostic-only campaigns were removed after their relevant
+results had been recorded here and in `RD_DEVELOPMENT_LOG.md`.  Every retained
+run output contains the immutable build manifest, binary checksum, parameter
+file, source status, rank count, and exit status.
 
 The problem parameters follow the GIZMO methods paper, section 4.4.2:
 <https://www.tapir.caltech.edu/~phopkins/Site/GIZMO_files/gizmo.pdf>.

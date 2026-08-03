@@ -8071,3 +8071,61 @@ plumes approach the fixed layer. Seeded reservoir mass exchange is about
 the final frames as boundary-independent validation. The next RT geometry
 should use roughly `Ly=2.0`, recenter the interface, retain the fixed buffers,
 and run matched B/LDA controls; no multi-copy periodic expansion is needed.
+
+## 2026-08-04: fixed-buffer RT result accepted provisionally and data set curated
+
+- Author: `Codex GPT-5`
+- Detailed report: [`RD_RT_FIXED_BUFFER_REPORT.md`](RD_RT_FIXED_BUFFER_REPORT.md)
+- No solver, gravity, residual, RK2, hierarchy, MPI or moving-mesh code was
+  changed in this step.
+
+The present RT result is retained as an acceptable qualitative demonstration:
+all N, B and LDA+F1 runs form the expected bubble/spike and mushroom topology,
+and the paired N control establishes that the imposed primary mode is real
+rather than entirely glass-seeded. There is no unique nonlinear reference
+solution against which every secondary finger can be labelled correct or
+incorrect. Fine fingers are therefore treated as a method- and
+resolution-sensitive morphology feature, not by themselves as proof of a
+solver error. Their strong appearance in the zero-seed control nevertheless
+means they cannot yet be interpreted as resolved physical RT structure.
+
+The zero-seed run is not required as a conventional presentation panel, but it
+is an important numerical control for this RD implementation because a
+glass/contact imbalance can seed unstable modes without the intended
+perturbation. The defensible presentation is consequently the absolute density
+morphology together with a seeded-minus-control or modal history. The current
+scientific window remains approximately `t <= 4`; by `t=4.5--5` the plumes
+interact with the fixed reservoirs. A taller box and full-time B/LDA controls
+are desirable follow-up tests, not prerequisites for retaining this pilot.
+
+The campaign shorthand is now recorded explicitly:
+
+- `n96` denotes a nominal linear sampling of 96 vertices per unit length. On
+  the `0.5 x 1.5` glass this gives 6912 vertices, equivalent in count to about
+  `48 x 144`.
+- `d0025` denotes the logistic density-transition width `Delta=0.025`; it is
+  not a timestep.
+- `seed0025` denotes the coefficient `A=0.025` in the localized GIZMO velocity
+  seed. The two `[1+cos]` factors give an actual peak `v_y` of about `0.1`.
+
+To keep the analysis tree bounded, approximately 165 MB of superseded
+pure-periodic, periodic-smooth, reflective-wall, incomplete and logger-only
+campaigns were moved to the system trash. Duplicate legacy-named PNG files
+were removed at the same time. The retained `rt_2d` tree contains only:
+
+1. `gizmo_fixed_buffer_n96_d0025_seed0025_v2`: N seeded production run,
+   absolute morphology, paired difference plots and modal histories;
+2. `gizmo_fixed_buffer_n96_d0025_control_t5_v1`: complete N zero-seed control;
+3. `gizmo_fixed_buffer_lda_b_n96_d0025_seed0025_v1`: B and LDA seeded
+   production runs and final density figures;
+4. `gizmo_fixed_buffer_lda_b_n96_d0025_control_t02_v1`: retained short B/LDA
+   hydrostatic/zero-seed safety gate.
+
+The canonical morphology filenames are `rt_gizmo_fixed_N_density.png`,
+`rt_gizmo_fixed_B_density.png`, and `rt_gizmo_fixed_LDA_density.png`. The N
+paired diagnostics are `rt_N_delta_rho_evolution.png`,
+`rt_N_delta_vy_evolution.png`, `rt_N_mode_histories.png`,
+`rt_N_seeded_control_rho_evolution.png`, and
+`rt_N_seeded_control_vy_evolution.png`. Historical log entries describing the
+discarded periodic pilot remain as the audit trail, but their old data paths
+are intentionally no longer live.
