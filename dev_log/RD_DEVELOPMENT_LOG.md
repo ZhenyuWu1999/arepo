@@ -6073,3 +6073,69 @@ median-dual geometry is persistent. This result does not cure the already
 measured first-order frozen-interface time error, and it does not validate
 moving meshes, LDA/F1, beta, gamma, Galerkin mass, arbitrary levels, or
 restarts.
+
+## 2026-08-03: frozen-stage hierarchical LDA+F1 experiment
+
+- Author: `Codex (GPT-5)`
+- Scope: test the user's proposed current-state construction: no dense output
+  for coarse shared vertices; frozen K/L use `RD_dU=0` in every fine KML
+  substep, while their conserved ledgers continue accepting residuals.
+
+Detailed formulae, the Springel-Figure-17-style time diagram, immutable
+artifacts, and full measurements are in Section 10 of:
+
+[Phase-B fixed-mesh hierarchical timestep prototype](RD_hierarchical_timestep_phaseb_prototype.md)
+
+The key semantic distinction is now explicit. `RD_dU=U*-U^n` is an RK stage
+increment, whereas `Q(t)/DualArea-U_sync` is an incomplete ledger difference
+containing contributions from the whole vertex star. The latter cannot be
+inserted into the final fine substep without a wrong time denominator,
+double-counting, and a circular dependence on the corrector being computed.
+Construction A therefore keeps the frozen stage increment zero throughout the
+coarse interval and recovers the new K/L primitives only after all residuals at
+the coarse endpoint have closed.
+
+For LDA+F1 the closing triangle residual is augmented by
+
+```
+2 * [ beta_i^* (|T|/(3 h_T)) sum_j dU_j
+      - (|T|/(3 h_T)) dU_i ] .
+```
+
+The common ledger multiplier remains `-h_T/2`. Summing over the three vertices
+cancels the two temporal terms because `sum_i beta_i=I`, so the augmentation is
+element-conservative even when frozen increments vanish. With N/lumped mass
+the bracket vanishes vertex by vertex, exactly recovering the validated N
+hierarchy. Rank-deficient `S^-` retains the conservative lumped F1 fallback.
+Only mixed stage-beta is allowed in this experiment.
+
+The mandatory equal-bin regression passes: concentrated mixed LDA+F1 and the
+new two-call path agree at `2.6e-15`, `2.9e-15`, `7.1e-15`, and `6.9e-17` in
+density, velocity, internal energy, and mass. Predictor diagnostics agree step
+by step and `f1_lumped=0`. Thus the split formula is algebraically equivalent
+to the existing equal-step implementation up to assembly-order round-off.
+
+The 2:1 full-mesh and active-only short tests both pass on one and four ranks.
+They retain 3968 live/128 frozen vertices and 4224/8192 due triangles;
+one/four-rank and active/full differences are at `1e-15` scale;
+`f1_lumped=0`; predictor states remain positive; and element conservation
+defects remain below `5.6e-17`.
+
+A `TimeMax=1`, four-rank active-only run completes 512 sync points while domain
+decomposition repeatedly migrates 1792/2176 particles. It agrees with the
+full-mesh result within `8.44e-15`, has minimum predictor density/pressure
+`0.4948897/0.3730988`, no F1 fallback, and maximum conservation defect
+`6.25e-17`.
+
+The coarse-`dt=1/256..1/2048`, fine-`dt/2`, `TimeMax=1` Richardson ladder is
+cleanly first order. Adjacent orders are L1 `0.99421,0.99704`, L2
+`0.99545,0.99771`, and Linf `1.00174,1.00089`. All jobs exit zero with the
+expected 512/1024/2048/4096 sync counts. Difference norms are larger than for
+the N/lumped hierarchy, so frozen-dU F1 does not improve the interface defect.
+
+Conclusion: the user's proposed zero-increment choice is a viable,
+conservative, MPI-independent experimental LDA+F1 hierarchy and does not need
+an artificial coarse-vertex dense output. It remains first order and should
+not be described as a second-order multirate LDA+F1 method. It is useful as a
+baseline against any future shared-trajectory construction, not evidence that
+such a construction is presently required.

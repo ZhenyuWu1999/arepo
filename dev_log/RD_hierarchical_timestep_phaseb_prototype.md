@@ -9,9 +9,10 @@ general RD timestep implementation
 
 ## 1. Outcome
 
-The first fixed-mesh hierarchical RD prototype is implemented for
-`N_SCHEME + RD_RK2_TOTAL_RESIDUAL`.  Its code structure is the anticipated
-hybrid:
+The first fixed-mesh hierarchical RD prototype was implemented for
+`N_SCHEME + RD_RK2_TOTAL_RESIDUAL`; a controlled frozen-stage
+`LDA_SCHEME + F1` extension has subsequently been implemented and tested. Its
+code structure is the anticipated hybrid:
 
 - it restores AREPO's original two hydro call sites, with
   `find_next_sync_point()` between them;
@@ -48,7 +49,7 @@ The new compile-time switch is `RD_HIERARCHICAL_TIMESTEPS`. The prototype
 requires:
 
 - `VORONOI_STATIC_MESH`;
-- `N_SCHEME`;
+- either `N_SCHEME`, or the experimental frozen-stage `LDA_SCHEME` path;
 - `RD_RK2_TOTAL_RESIDUAL`;
 
 It has now been tested in two fixed-geometry mesh modes:
@@ -444,3 +445,138 @@ provide the missing time state at frozen vertices.
 
 The present prototype should be retained as the conservative baseline and as a
 diagnostic control for any higher-order interface construction.
+
+## 10. Frozen-stage hierarchical LDA+F1 experiment
+
+### 10.1 Time semantics
+
+The experiment deliberately does not invent dense output for an inactive
+coarse vertex. In the Figure-17-style example with fine yellow triangle `KML`,
+coarse blue triangle `JKL`, fine step `h`, and coarse step `H=4h`, the state
+timeline is:
+
+```text
+time              0          h          2h         3h          H
+                  |----------|----------|----------|-----------|
+yellow KML        open-close open-close open-close open-close
+M primitive       U_M^0      U_M^1      U_M^2      U_M^3       U_M^4
+K,L primitive     U_KL^0 ------------------------------------- U_KL^H
+K,L RK dU         0          0          0          0
+K,L ledger Q      Q^0 --+dQ0--+dQ1------+dQ2-------+dQ3------- Q^H
+blue JKL          open----------------------------------------close
+```
+
+`RD_dU` means the RK stage increment, not the unsynchronised difference
+`Q(t)/DualArea-U_sync`. The latter contains incomplete contributions from the
+whole vertex star and cannot be inserted retroactively into the last fine
+substep. Construction A therefore sets `dU=0` for K and L in every fine
+corrector and recovers their primitives only after all contributions at `H`
+have closed.
+
+### 10.2 Element corrector
+
+For a due triangle `T`, let `dU_i=U_i^*-U_i^n` for a stage-live vertex and zero
+for a frozen vertex. The mixed-beta F1 target at the closing state is
+
+\[
+ G_T={|T|\over 3h_T}\sum_{j\in T}dU_j,
+ \qquad T_{i,T}=\beta_{i,T}^*G_T.
+\]
+
+The opening call remains
+
+\[
+ \Delta Q_{i,T}^{(0)}=-{h_T\over2}\phi_{i,T}(U^n),
+\]
+
+and assembles the full predictor. The closing ledger contribution is
+
+\[
+ \Delta Q_{i,T}^{(1)}={|T|\over3}dU_i-h_TT_{i,T}
+                       -{h_T\over2}\phi_{i,T}(U^*).
+\]
+
+The implementation retains the common `-h_T/2` ledger multiplier by replacing
+the closing residual with
+
+\[
+ \phi_{i,T}^{close}=\phi_{i,T}(U^*)
+   +2\left(T_{i,T}-{|T|\over3h_T}dU_i\right).
+\]
+
+Because `sum_i beta_i=I`, the two temporal terms cancel after summing the three
+vertex contributions. Thus the correction is conservative element by element,
+including when some `dU_i` are zero. For the N/lumped temporal mass,
+`T_i=|T|dU_i/(3h_T)` and the correction vanishes identically, recovering the
+previous N hierarchy. Rank-deficient `S^-` retains the existing conservative
+lumped F1 fallback and increments `f1_lumped`.
+
+Only the existing mixed stage-beta convention is enabled. Coherent beta paths
+would require persistent triangle identification across the two call sites and
+active-only mesh reconstruction; the earlier three-way experiment gives no
+accuracy reason to add that state now.
+
+### 10.3 Acceptance results
+
+All tests use the same jittered Yee `n=64`, boost-one IC.
+
+The equal-bin two-call path reproduces the concentrated mixed LDA+F1 path to
+round-off at `TimeMax=1/64`, `dt=1/256`: maximum differences are density
+`2.55e-15`, velocity `2.89e-15`, internal energy `7.11e-15`, and mass
+`6.94e-17`. Predictor minima agree step by step and `f1_lumped=0` in both.
+
+The 2:1 short full-mesh one/four-rank comparison differs by at most
+`8.88e-16` in density, `1.55e-15` in velocity, `2.66e-15` in internal energy,
+`3.47e-17` in mass, and `1.11e-15` in pressure. It retains 3968 stage-live and
+128 frozen vertices, due-element counts 4224/8192, `f1_lumped=0`, positive
+predictors, and element conservation defects below `5.56e-17`.
+
+The active-only short result agrees with the full mesh and between one/four
+ranks at round-off. A four-rank active-only `TimeMax=1` run completes 512 sync
+points while repeatedly exchanging 1792/2176 particles. It agrees with the
+full-mesh result to at most `8.44e-15`, has `f1_lumped=0`, minimum predictor
+density/pressure `0.4948897/0.3730988`, and maximum element conservation defect
+`6.25e-17`.
+
+The full-mesh hierarchy timestep ladder uses coarse
+`dt=1/256,1/512,1/1024,1/2048`, fine `dt/2`, and `TimeMax=1`. For
+`U=(rho,rho vx,rho vy,rho E)`, matched by ParticleID with common static
+DualArea weights:
+
+| Difference | L1 | L2 | Linf |
+| --- | ---: | ---: | ---: |
+| D0 | `5.49367e-5` | `1.44466e-4` | `1.79425e-3` |
+| D1 | `2.75787e-5` | `7.24613e-5` | `8.96042e-4` |
+| D2 | `1.38177e-5` | `3.62882e-5` | `4.47745e-4` |
+
+| Norm | p0 | p1 |
+| --- | ---: | ---: |
+| L1 | `0.99421` | `0.99704` |
+| L2 | `0.99545` | `0.99771` |
+| Linf | `1.00174` | `1.00089` |
+
+All ladder jobs exit zero with exactly 512/1024/2048/4096 synchronization
+events, `f1_lumped=0`, predictor density/pressure above
+`0.4948897/0.3730988`, and maximum element conservation defect below
+`7.29e-17`. The result is stable and cleanly first order. Its difference norms
+are also larger than the N/lumped hierarchy, so frozen-dU F1 does not improve
+the known interface accuracy defect.
+
+### 10.4 Artifacts and jobs
+
+| configuration | binary SHA256 | build job |
+| --- | --- | ---: |
+| concentrated mixed LDA+F1 | `f03ff08c534694212ad782bfb0d1c07b9fe81b2f52a44f1df73940569c641848` | `10358281` |
+| hierarchical equal-bin | `5a3d0c64435f4f17c4e19c99950f00016194ff7f1ae526fbd61ab1241d6c7549` | `10358282` |
+| hierarchical 2:1 full mesh | `476ec4b6eaccc4762e8e2b00c71663689ff9fcba7d679e41f3c0cc2833645081` | `10358286` |
+| hierarchical 2:1 active-only | `dfa3babb19278c097f3755b02d0b22a54f13b47e838d0045f5d22052ff93a673` | `10358287` |
+
+Equal-bin run jobs are `10358283,10358284`; short full-mesh jobs
+`10358288,10358289`; short active-only jobs `10358347,10358348`; ladder jobs
+`10358349--10358352`; and the long four-rank active-only job is `10358353`.
+Every listed job completed with exit `0:0`.
+
+This experiment demonstrates that frozen `dU=0` is a coherent conservative
+baseline, but not a second-order multirate LDA+F1 construction. Dense output or
+another coarse-vertex trajectory should be considered only if later evidence
+justifies the additional shared time trace and composite quadrature.

@@ -64,10 +64,17 @@ static lapack_int solve_system(int n, double *A, double *b);
 #endif
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
-#if !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(N_SCHEME)
-#error "RD_HIERARCHICAL_TIMESTEPS currently requires N_SCHEME + RD_RK2_TOTAL_RESIDUAL."
+#if !defined(RD_RK2_TOTAL_RESIDUAL) || (!defined(N_SCHEME) && !defined(LDA_SCHEME))
+#error "RD_HIERARCHICAL_TIMESTEPS currently requires RD_RK2_TOTAL_RESIDUAL with N_SCHEME or LDA_SCHEME."
 #endif
+#if defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR)
+#error "The first hierarchical LDA+F1 experiment supports only the existing mixed stage-beta convention."
+#endif
+#ifdef LDA_SCHEME
+#define RD_RK2_STAGE_BETA_LABEL "two-call-LDA-F1-frozen"
+#else
 #define RD_RK2_STAGE_BETA_LABEL "two-call-N-lumped"
+#endif
 #endif
 
 #if defined(RD_HIERARCHICAL_TEST_PATTERN) && !defined(RD_HIERARCHICAL_TIMESTEPS)
@@ -1677,8 +1684,15 @@ void compute_residuals(tessellation *T)
        * no beta tensor) and inherits the rank policy (Kimi amendment 2). */
       if(rd_stage == 1)
         {
+          double f1_interval = triangle_dt;
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+          /* The ledger call carries half weight, but dU is the predictor over
+           * the complete triangle interval h_T. */
+          f1_interval = full_triangle_dt;
+#endif
           for(k = 0; k < 4; k++)
-            rhs[k][2] = (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / triangle_dt;
+            rhs[k][2] =
+                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / f1_interval;
 
         }
 #endif
@@ -2060,6 +2074,68 @@ void compute_residuals(tessellation *T)
           rd_check_conservation(Flux_RD, total_target, rk2_scale + 0.5 * phi_scale, thistask_triangles[i], "RK2-total");
         }
 #endif /* #ifdef RD_RK2_INTERNAL_LOOP */
+
+#if defined(RD_HIERARCHICAL_TIMESTEPS) && defined(LDA_SCHEME)
+      if(rd_stage == RD_RK_STAGE_CORRECTOR)
+        {
+          /* Frozen-dU multirate F1 experiment.
+           *
+           * The opening call has already applied -h_T phi_i(U^n)/2 and
+           * assembled the full vertex predictor dU.  To reproduce the
+           * concentrated mixed-beta LDA+F1 corrector when all bins are equal,
+           * the closing ledger contribution is
+           *
+           *   |T| dU_i/3 - h_T beta_i^* [ |T| sum_j dU_j/(3 h_T) ]
+           *                    - h_T phi_i(U*)/2.
+           *
+           * Since the common ledger multiplier below is -h_T/2, add
+           * 2 (T_i^F1 - |T| dU_i/(3 h_T)) to the spatial residual. Frozen
+           * vertices have dU_i=0 by Construction A. Summing over i cancels
+           * the two temporal terms element by element, so the correction does
+           * not alter the element's conserved total. */
+          double T_time[4][3];
+          double rk2_scale = 0.0;
+
+          if(solve_rank == 4)
+            {
+              double Z_f1[4];
+              for(k = 0; k < 4; k++)
+                Z_f1[k] = rhs[k][2];
+
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  {
+                    T_time[k][j] = -1.0 * (Kmatrix[k][0][j][kplus] * Z_f1[0] + Kmatrix[k][1][j][kplus] * Z_f1[1] +
+                                             Kmatrix[k][2][j][kplus] * Z_f1[2] + Kmatrix[k][3][j][kplus] * Z_f1[3]);
+
+                    for(p = 0; p < 4; p++)
+                      rk2_scale += fabs(Kmatrix[k][p][j][kplus]) * fabs(Z_f1[p]);
+                  }
+            }
+          else
+            {
+              /* The bare beta_i acting on the arbitrary F1 target is not
+               * defined for rank-deficient S^-. Retain the existing
+               * conservative element-local lumped fallback. */
+              RD_stat_f1_lumped++;
+
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / full_triangle_dt;
+            }
+
+          for(k = 0; k < 4; k++)
+            for(j = 0; j < 3; j++)
+              {
+                double T_lumped = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / full_triangle_dt;
+                rk2_scale += 2.0 * (fabs(T_time[k][j]) + fabs(T_lumped));
+                Flux_RD[k][j] += 2.0 * (T_time[k][j] - T_lumped);
+              }
+
+          rd_check_conservation(Flux_RD, Phi, rk2_scale + LDA_roundoff_scale + phi_scale, thistask_triangles[i],
+                                "RK2-hier-LDA-F1");
+        }
+#endif
 
 #ifdef RD_DIAG_TRACE_ELEMENT
       if(rd_trace)
