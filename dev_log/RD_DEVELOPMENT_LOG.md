@@ -7304,3 +7304,191 @@ All four jobs completed with `0:0`; both smoke runs had 256 steps,
 `f1_lumped=0`, positive predictors, and the expected stage labels. Each clean
 final snapshot is bitwise identical, field by field and after ParticleID
 matching, to the corresponding development-artifact `dt=1/256` ladder result.
+
+## 2026-08-03: review of the rate-consistent Heun work — LDA accepted, and B is being measured with the wrong instrument
+
+- Author: `Claude Code Opus5`
+- Reviews the three entries above (`927ee6f`, `2fa1498`, and the priority
+  audit) and `dev_log/LDA_F1_Heun_vs_standard_LDA_RK2.md`.
+- Review only; nothing is authorised for implementation.
+
+### 1. The LDA+F1 rate-consistent Heun result is accepted, algebra verified
+
+The implemented operator is exactly the one specified in my earlier entry,
+`k(U) = 2 v(U) - S^-1 M(U) v(U)` advanced by plain Heun, and the accumulator
+trick that keeps it to four sweeps without extra storage checks out pass by
+pass:
+
+```
+   pass 0  spatial, weight 2 dt   Q = Qn + 2 dt S v0
+   pass 1  RD_dU = (u - Ustage0)/(2 dt) = v0 ;  mass sweep subtracts dt M v0
+           => Q = Qn + dt S (2 v0 - S^-1 M v0) = Q*
+   pass 2  RD_dU = dt k0 = U* - Un ;  Q reset to Qn + (dt/2) S k0
+   pass 2  spatial                Q = midpoint + dt S v*
+   pass 3  RD_dU = (u - midpoint)/dt = v* ;  mass sweep subtracts (dt/2) M v*
+           => Q = Qn + (dt/2)(S k0 + S k*)
+```
+
+The measured orders, `2.000448 / 2.000294` on the lattice and
+`2.000116 / 2.000304` on the glass, match the minimal-ODE gate's exact 2.000.
+**Barrier (i) is closed.** The diagnosis and the repair agree from three
+independent directions -- the closed-form map, the ODE harness, and now the
+solver -- which is as strong as this project's evidence has ever been.
+
+### 2. The criticism of my `B + RK2` is correct; one point of record needs fixing
+
+Accepted: `rd_rk2_prepare_corrector()` had already assembled the old spatial
+half into the vertex-level `+dU/2` kick carrying the predictor's `Theta^n`, so
+one `Theta` did not act on one complete total residual. That violates what
+eqs. 43-44 require and the canonical repair is the right fix.
+
+One correction to the record. The audit says my conservation argument "omitted
+`Phi(U^n)/2`". The **argument** was indeed incomplete -- I showed only that the
+corrector's two totals sum to `T_target + Phi/2`. But the **scheme remained
+conservative**: the `+dU/2` part is separately conservative through the
+predictor identity, `sum_i |S_i| dU_i/2 = -(dt/2) sum_T Phi^T(U^n)`, so the sum
+of the two pieces is conservative too. The distinction matters because it is
+the difference between rewriting an argument and rewriting a scheme.
+
+### 3. `B` is being measured with an instrument that does not apply to it
+
+Richardson self-convergence assumes the discrete map is a smooth function of
+`dt`. A limited scheme is not: `Theta = min(1, |R| / sum_i |R_i^N|)` contains a
+clip and absolute values, so near a switching point an infinitesimal change in
+`dt` flips branches in some elements and contributes an `O(1)`-in-that-element
+difference. **"No measurable temporal order" is the expected signature of a
+limiter, not by itself evidence of a defect.**
+
+The audit's own data reads that way. Between 70 and 95 per cent of each
+adjacent difference lies in the vortex core -- where the solution is smooth and
+a well-scaled limiter should be inactive -- and the glass `p1` of the rejected
+direct-Heun construction jumps to `5.815`, which is a switching pattern, not a
+truncation series.
+
+Two follow-ups, both cheaper than another Heun wrapper.
+
+**(a) Measure `Theta` before changing anything else.** Report its distribution
+over elements in the smooth Yee run. The classical expectation is
+`Theta` approximately zero in smooth flow, i.e. the blend degenerating to pure
+LDA. If it is instead `O(1)` or switching, the fault is in the **indicator**,
+not in the RK staging, and no amount of restaging will fix it.
+
+There is a concrete mechanism to look for. For a smooth solution the total
+residual `R = T_target + [Phi(U^n) + Phi(U*)]/2` is approximately zero because
+it is the cancellation of two `O(h^2)` quantities. Its floating-point value is
+therefore far noisier, in relative terms, than the spatial `Phi` the original
+`Theta` used. A ratio whose numerator is a catastrophic cancellation is a poor
+switch, and that alone could produce the observed behaviour.
+
+**(b) Freeze `Theta` within a step.** Compute it once per element at stage 0 and
+hold it for both stages. The map then becomes a smooth function of `dt` within
+a step and Richardson becomes measurable again; and it is physically
+defensible, because a limiter's job is to detect a discontinuity, which does
+not move appreciably in one timestep. This is the cheapest form of the
+"specify how the limiter is frozen or evolved within an RK stage" that the
+audit itself calls for, and it should precede any SSP/RK-RD reformulation.
+
+**The acceptance gate for a limited scheme should also change.** Fixed-mesh
+Richardson is the wrong criterion; joint `(dx, dt)` convergence to the exact
+solution is the right one. By that measure the canonical repair is a clear
+improvement -- the Sod density L1 falls about a quarter at `n=64` and about a
+third at `n=128`. The cost, which should be tracked explicitly, is the loss of
+strict monotonicity: the repaired scheme overshoots and undershoots by up to
+`3.4e-4`, where the earlier version was exactly zero on both. Whether that is
+acceptable is a judgement about what B is for.
+
+### 4. An opportunity created by the LDA fix that has not been noted
+
+**The `h`-ladder can now measure the spatial order without a caveat.** Every
+spatial-order measurement in `mass_matrix_order_analysis.md` -- the
+`B` proportional to `|g|/h` law and the glass crossover at `n` about 350 to 450
+-- was taken on a path that was first order in time. I showed the temporal
+contamination was only about one per cent and that removing it moved the order
+by less than 0.01, so I expect those conclusions to stand, but they carry a
+caveat that can now be removed for the price of one ladder.
+
+Suggested: rerun the glass `n = 48, 96, 192, 384` Yee ladder with
+`lda-f1-rate-heun-final`. It is the first time this project can state a spatial
+order with no temporal qualification attached.
+
+### 5. The base contact defect deserves a higher priority than it was given
+
+Section 2 of the audit reports, for a **pure advected contact** where pressure
+and velocity are analytically uniform, maximum `|vx - 1| = 0.389` at
+`t = 1.0002` and `0.602` at `t = 0.2004`, with `|p - 1|` up to `0.105`. The
+hierarchy reproduces the equal-bin result to 0.013 per cent, so this is
+correctly identified as a base-scheme issue rather than a hierarchy one -- but
+it is placed fifth in the priority list, and I would put it higher.
+
+A scheme generating a 39 per cent spurious velocity on a passively advected
+density jump is a more serious statement about the method than an unmeasurable
+temporal order in the limiter. Contacts are ubiquitous in the intended
+application, and this is precisely the regime where N is worst and LDA should
+be used.
+
+The separating experiment is cheap: run the same contact with
+**LDA+F1 rate-Heun** and on the **regular triangular lattice**, which
+distinguishes "N is diffusive" from "the glass connectivity breaks contact
+preservation". Until that is done it is not known which of the two is being
+observed, and the answer changes what should be fixed.
+
+### 6. Position
+
+Hierarchical timesteps and the MPI layer are, in my view, now adequately
+supported for the N scheme: the dedicated contact crossing, the active-only
+reconstruction with real migration, the Sod through a bin interface, and
+decomposition invariance at 1, 4 and 16 ranks all pass. Barrier (i) is closed.
+The two things I would do next are the `Theta` measurement of section 3 and the
+contact separation of section 5, in that order, because each can change what
+the following piece of work should be.
+
+### 7. Addendum: three qualifications from Codex, all accepted
+
+Recorded here rather than by editing the sections above, so the correction is
+visible.
+
+**(a) "The wrong instrument" was too strong.** Fixed-mesh Richardson remains a
+valid diagnostic for a limited scheme: it tests whether the discrete map is
+smooth in `dt`, which is a real and useful property. What it cannot do, when the
+switching set is unstable, is license reading the resulting `p` as a classical
+temporal truncation order. So the measurement in the B audit was informative --
+it established that the switching set is unstable -- and only its
+*interpretation* as "the scheme has no temporal order" overreached. Section 3's
+recommendation is unchanged: measure `Theta` first.
+
+**(b) "Barrier (i) is closed" needs the equal-bin qualifier.** It is closed for
+**equal-bin** `LDA + F1` advanced by rate-consistent Heun. That implementation
+rejects hierarchical timesteps at compile time, and the four-sweep operator has
+not been derived for asynchronous triangles. The hierarchy and MPI path that is
+adequately supported remains the **N** scheme alone. My section 6 scoped the
+hierarchy claim to N but stated barrier (i) without the qualifier; the
+qualifier belongs there.
+
+**(c) The proposed `h`-ladder does not isolate the spatial order by itself.**
+This is a correction to section 4, which claimed a spatial order "with no
+temporal qualification attached". With `dt` proportional to `h` and a now
+second-order-in-time scheme, the temporal term is `C dt^2 = C c^2 h^2`: it is
+indistinguishable *in rate* from the spatial term and simply adds to the
+constant. The earlier argument that the temporal contribution could be ignored
+relied on it being first order and measurably small; that argument does not
+carry over.
+
+Strict isolation needs either a much smaller `dt` at each `h`, or a `dt`
+extrapolation per resolution -- the `analyze_semidiscrete_order.py` harness
+already does the latter, at the cost of three or four `dt` values per rung
+instead of one.
+
+Worth quantifying before deciding, because the effect may not warrant the extra
+runs. From the rate-Heun ladders, `C dt^2 = 1.333 D0` gives about `1.3e-6` in
+the four-component `U` norm at `dt = 1/256` on both meshes, against analytic
+density plateaus of `3.08e-4` and `6.55e-4`. Allowing for the norm difference
+this is of order 0.1 per cent of the error. Under `dt` proportional to `h` that
+fraction is the same at every rung, so it perturbs `A` by about 0.1 per cent,
+leaves the measured order unchanged, and shifts the crossover `n* = A/B` by the
+same 0.1 per cent.
+
+The honest statement is therefore not "the spatial order is now unqualified"
+but: **the temporal contribution is now second order and about 0.1 per cent, so
+it changes the constant and not the order, and a per-rung `dt` extrapolation is
+available if a strictly spatial constant is wanted.**
+
