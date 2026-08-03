@@ -6149,3 +6149,307 @@ an artificial coarse-vertex dense output. It remains first order and should
 not be described as a second-order multirate LDA+F1 method. It is useful as a
 baseline against any future shared-trajectory construction, not evidence that
 such a construction is presently required.
+
+## 2026-08-03: route to second-order hierarchical time integration
+
+- Author: `Codex (GPT-5)`
+- Status: mathematical and implementation-design exploration only; no solver
+  source, configuration, binary, or production result was changed.
+- Mesh decision: future production accuracy judgments should use a glass-like
+  mesh, with the regular triangular family as the controlled reference. The
+  jittered-Cartesian family is retired as a spatial-order proxy because its
+  near-degenerate, randomly oriented Delaunay connectivity is a pathological
+  refinement family. It may still be retained as a deliberately harsh
+  robustness diagnostic.
+
+### 1. There are two independent first-order barriers
+
+The phrase "the hierarchical scheme is first order" currently conflates two
+separate measurements:
+
+1. At equal bins, `N + RK2` has Richardson order about `2.009`, whereas
+   `LDA + RK2/F1` has order about `1.011`. Mixed, coherent `beta^n`, and
+   coherent `beta*` all remain first order. This is a base F1 time-integration
+   defect and exists before local timesteps are introduced.
+2. With `N + RK2`, changing only from equal bins to a 2:1 hierarchy changes
+   the order from approximately two to approximately one. The frozen
+   coarse-side star layer is therefore an independent multirate coupling
+   defect.
+
+Consequently, adding a coarse-state trajectory directly to the present
+hierarchical LDA+F1 path cannot by itself produce a second-order method. The
+two defects should first be repaired and validated independently.
+
+### 2. Proposed hierarchy experiment: an uncommitted vertex predictor trace
+
+The next discriminating experiment should remain on `N + RK2`, whose
+equal-step time order is already established. For every vertex interval
+`[t_i,t_i+H_i]`, store the interval base state and the ordinary RD predictor
+rate
+
+```
+Uhat_i(t) = U_i^n + (t - t_i) k_i^n,
+k_i^n     = -(1/|S_i|) sum_{T in i} phi_i^T(U^n).
+```
+
+`Uhat_i(t)` is a continuous RK stage representation, not a committed fluid
+state. An inactive coarse vertex still does not recover its primitive
+variables, change its synchronization time, or use its provisional ledger as
+a stage state. Its physical conserved variables continue to accept all
+distributed residuals and are committed only at its own interval endpoint.
+
+For a due triangle on a fine subinterval `[a,b]`, `h=b-a`, all three vertices
+are evaluated at the same two physical times through their unique traces. For
+the N/lumped test the proposed ledger contribution is the composite
+trapezoidal residual
+
+```
+Delta Q_i^T = -(h/2) [phi_i^T(Uhat(a)) + phi_i^T(Uhat(b))].
+```
+
+The same triangle contribution is deposited into every participating
+vertex's ledger, so the existing macro-synchronised conservation proof is
+unchanged. Fine vertices may commit after each subinterval; coarse vertices
+only accumulate. At a coarse endpoint the corrected ledger state replaces,
+but is never confused with, the predictor endpoint. The next interval trace
+then starts from that corrected state.
+
+This resolves the earlier semantic concern. "Frozen" should mean *not
+committed*, not *represented as constant in every residual evaluation*. The
+current Construction A uses a zeroth-order continuous representation for K/L;
+the proposed trace is the linear continuous extension of the already required
+coarse RK predictor. Its pointwise state error is `O(H^2)`, so its contribution
+to an integral over the macro interval is `O(H^3)`, compatible with global
+second order.
+
+### 3. Minimal conservative ODE check
+
+Before touching the solver, the central claim was checked on the conservative
+coupled system
+
+```
+y' = -(y-z),    z' = +(y-z),    y+z = constant,
+```
+
+with `y` taking a coarse step `H`, `z` taking two steps `h=H/2`, and the same
+fine exchange increment accumulated with opposite signs in the two ledgers.
+Over `t=0..1`, refinement `H=1/8..1/128` gives:
+
+| coarse state used by the fine RHS | asymptotic order | conservation |
+| --- | ---: | ---: |
+| constant frozen state | `1.0399, 1.0194, 1.0095, 1.0047` | round-off |
+| linear coarse predictor trace | `2.1232, 2.0595, 2.0292, 2.0145` | round-off |
+
+This is not a proof for Euler/RD, but it reproduces the measured distinction:
+ledger symmetry alone gives exact conservation but only first-order accuracy;
+changing no ledger operation and supplying a first-order-accurate coarse time
+trace restores second-order macro accuracy in the minimal coupled problem.
+
+### 4. Equal-bin LDA/F1 must be repaired separately
+
+A clean reference formulation is to expose the spatial/mass treatment as one
+semi-discrete rate operator,
+
+```
+M(U) k(U) = -L(U),
+```
+
+and apply the *same* operator in both stages of standard Heun:
+
+```
+k0      = -M(U0)^-1 L(U0),
+Ustar   = U0 + dt k0,
+kstar   = -M(Ustar)^-1 L(Ustar),
+U1      = U0 + (dt/2) (k0 + kstar).
+```
+
+This need not begin with an exact mass solve. With
+`M=S(I+X)` and `v=S^-1(-L)`, the present GL spatial limit is
+`k_GL=(I-X)v`. Computing that same `k_GL(U)` explicitly at both RK stages
+would define a `rate-consistent GL + Heun` reference. It has the same
+`dt -> 0` GL operator as the current path but bypasses the unresolved
+time-dependent F1 total-residual algebra. A fixed-mesh adjacent-solution
+ladder then gives a sharp result:
+
+- order near two locates the current `O(dt)` term in the F1 corrector's time
+  realization;
+- order near one shows that the state-dependent mass operator needs a deeper
+  derivation before hierarchy work can use it.
+
+For a genuine asymptotic spatial target on a glass, the rate can later retain
+more Neumann terms or iterate the consistent-mass solve to tolerance, as
+derived in `mass_matrix_order_analysis.md`. A converged solve should not be
+inserted blindly into the LTS path: each fine event would require repeated
+element sweeps and ghost exchanges and could erase the computational benefit
+of time bins. A fixed small number of correction sweeps has a bounded halo,
+but then its spatial ceiling and asynchronous conservation must be proved.
+
+### 5. Implementation and acceptance order
+
+1. Add the trace experiment only to hierarchical `N + RK2`.
+2. Require equal bins to reproduce the existing concentrated N+RK2 result to
+   round-off.
+3. Repeat the fixed-`n` 2:1 Richardson ladder. The target is order two in L1,
+   L2, and Linf, not merely global conservation.
+4. Extend to 4:1, a coarse triangle surrounded by fine triangles, active-only
+   reconstruction, one/four ranks, and real particle migration. Retain the
+   positivity, actual-timestep, due-element, live/frozen, and conservation
+   diagnostics.
+5. Independently construct and test equal-bin `rate-consistent GL + Heun` on
+   the triangular control and a glass-like mesh.
+6. Combine LDA mass treatment with the hierarchical trace only after both
+   independent ladders are second order.
+7. Finish with a coupled `dx,dt` glass ladder at fixed CFL and error
+   localization around bin interfaces. A fixed-mesh `dt` ladder alone cannot
+   establish the production spatial order.
+
+Two literature patterns support, but do not replace, this RD-specific
+derivation. Hoang, Ju, Leng & Wang construct explicit conservative LTS by
+predicting interface information in time and then applying a common
+conservative interface correction
+(`https://arxiv.org/abs/1905.09705`). Throwe & Teukolsky instead obtain
+arbitrary-order linearly conservative LTS from Adams-Bashforth residual
+histories (`https://arxiv.org/abs/1811.02499`). The latter could avoid a state
+trace, but its multistep startup, timestep-bin changes, restart history,
+shock/positivity behavior, and MPI history migration make it a less natural
+first experiment for AREPO's present two-call RK structure.
+
+### Current judgment
+
+The immediate candidate for removing the hierarchy-induced `O(dt)` term is
+therefore not a provisional-ledger state and not a retroactive final-substep
+correction. It is one owner-defined, MPI-exchanged, linear predictor trace per
+vertex interval, used only to evaluate all incident triangle residuals at
+consistent physical times. Construction A remains the conservative baseline.
+Construction B should first be judged on `N + RK2`; LDA/F1 enters only after
+its equal-bin time operator is independently second order.
+
+## 2026-08-03: Kimi review of the Phase-B hierarchy implementation and the two-barrier route
+
+- Author: `Kimi K3`
+- Scope: commits `2941b9e` (vertex-star consolidation), `1133814` (Claude
+  cross-review), `45abb3a` (fixed-mesh prototype), `7e6f122`/`0e76da0`
+  (active-only static hierarchy), `8048286` (frozen-stage LDA+F1), and
+  `2d7d253` (route to second order). The three load-bearing diffs were
+  checked directly against the code: the two `run.c` call sites, the F1
+  augmentation in `residual_distribution_solver.c`, and the finest-bin
+  ownership rule in `rd_simplex_claimed`.
+
+### 1. Accepted without reservation
+
+- **Vertex-star freezing is the correct rule.** `h_i^star = min_{T containing i} h_T`
+  with stage-live iff `h_i^star = h_i` exactly encodes "a vertex update is
+  trustworthy only if every element contributing to its residual advances on
+  this stage". It closes the edge-local hole (a coarse vertex whose entire
+  star is fine), subsumes the edge rule, and makes the frozen set explicit:
+  one coarse codim-1 layer per bin interface. The earlier 2v4 failure mode
+  is now structurally excluded rather than empirically absent.
+- **The restored two-call split-Heun skeleton is the right architecture.**
+  Verified in `run.c`: `compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR)` at
+  the original predictor site and `RD_RK_STAGE_CORRECTOR` at the closing
+  site. Keeping AREPO's native call sites is precisely what leaves the
+  mesh-rebuild point available for future moving-mesh coupling; the RD
+  predictor remains the accepted non-graduated ghost-layer exchange.
+- **The equal-bin round-off gate is the right regression contract and is
+  being enforced honestly** (Richardson 1.9996/2.0031 for the N control;
+  2.6e-15 maximum defect for LDA+F1). First-order outcomes are reported as
+  first order, which is what makes the gates meaningful.
+- **The finest-bin ownership rule is provably sufficient.** Verified in
+  `rd_simplex_claimed`: min (ID, task) over the triangle's finest-bin
+  vertices guarantees an active owner with a constructed star whenever the
+  triangle is due. Persistent DualArea, rather than recomputation from
+  possibly-absent ghosts, is the right call for the active-only path; the
+  1e-15 agreement with the full-mesh path plus the particle-migration test
+  covers the mechanism.
+- **The frozen LDA+F1 augmentation algebra is correct, and it contains a
+  genuine bug fix.** Verified against the code: the closing-ledger addition
+  `2(T_time - T_lumped)` with `T_time = -beta_i^* (|T|/3h_T) sum_j dU_j`
+  telescopes element-wise via `sum_i beta_i^* = I`, frozen vertices carry
+  dU = 0, and the rank-deficient lumped fallback is conservative. The switch
+  to `f1_interval = full_triangle_dt` fixes a real factor-of-two error: the
+  ledger call carries half weight while the predictor dU spans the complete
+  triangle interval.
+- **The two-barrier decomposition is the central analytical contribution of
+  this round.** Separating the equal-bin F1 temporal defect (Richardson
+  ~1.011, no hierarchy present) from the multirate frozen-interface defect
+  (N-scheme 2:1 ~0.99, no F1 present) prevents two wasted efforts: no
+  interface construction will repair LDA, and no LDA repair will repair the
+  interface. The earlier mixed-stage-beta hypothesis is now falsified by the
+  three stage-beta experiments, and the log correctly stops pursuing it.
+
+### 2. Barrier (i): the equal-bin F1 defect is now the deepest open problem
+
+Since the defect persists with all bins equal and under all three stage-beta
+conventions, the remaining candidates narrow to the time realization of the
+F1 term itself. Leading conjecture, recorded here but to be settled by
+experiment: the F1 time target is built from the *predictor* increment dU,
+which is only a first-order-accurate estimate of the full-step increment
+(dU = -h_T beta Phi(U^n) + O(h^2), relative error O(h)). A corrector-stage
+correction assembled from a first-order target inherits a first-order
+temporal defect regardless of the beta convention — consistent with all
+three stage-beta experiments failing identically. The proposed
+`rate-consistent GL + Heun` reference (one k_GL operator evaluated at both
+stages) is the right discriminator: if it recovers order two, the defect
+lives in the two-stage operator/time-target realization; if it also sits
+near one, the F1 term must be re-derived term by term against thesis
+eq. 106-108, in the minimal-ODE harness before touching the solver. This
+experiment should precede any further LDA hierarchy work.
+
+### 3. Barrier (ii): the trace construction is the right direction — three points to fix before implementation
+
+The uncommitted linear trace `U_i(t) = U_i^n + (t - t_i) k_i^n` plus
+composite trapezoid quadrature is the classical conservative-multirate
+ansatz; the minimal-ODE evidence (frozen -> first order, linear trace ->
+second order, both conservative) is the correct gate evidence; and keeping
+the trace non-committed avoids the ledger-state failure modes already
+documented. Three points must enter the specification before coding:
+
+1. **Trace positivity.** Linear extrapolation can leave the admissible set
+   (negative density/pressure), and traces feed Roe averages: a non-physical
+   trace poisons the mean even when every committed state is physical. The
+   minimal-ODE harness exercises neither shocks nor positivity. The spec
+   needs a clamp/limit or a fallback-to-frozen rule for traces that exit the
+   admissible set — decided before the shock test, not after it fails.
+2. **Trace validity windows.** For power-of-2 bins, coarse due-times land on
+   fine sync times, so traces are read at completed fine steps and are well
+   defined. The spec must still state explicitly which (U, k) pair defines a
+   trace once the fine vertex has advanced past the reading time, and when
+   the MPI trace exchange fires (at fine-step completion). Writing this down
+   is cheap now and expensive to debug in 4:1 or dynamic-bin form later.
+3. **The missing shock test becomes more critical, not less.** Extrapolation
+   across a discontinuity is exactly where the trace construction breaks. A
+   shock tube with the bin interface normal to the shock, with positivity
+   and conservation diagnostics, should gate any production claim about
+   traces.
+
+### 4. Two carry-overs, re-prioritized
+
+- **CFL on traced states.** The stale-state CFL concern from the earlier
+  review does not vanish with traces; it moves. If the frozen layer is
+  effectively advanced by traces, the CFL estimate should use the traced
+  (best-estimate) state rather than the stale committed one. Specify
+  together with the trace work.
+- **The coupled (dx, dt) glass staircase should run before the trace
+  implementation, not after.** The codim-1 hypothesis predicts that L1
+  recovers ~second order under joint refinement even though Linf stays
+  first order. That number decides whether traces are mandatory for a
+  production N-scheme or merely an Linf improvement, and it may reorder the
+  acceptance sequence in section 5 of the route entry.
+
+### 5. Deferred without objection
+
+Dynamic bin assignment under mesh motion, 4:1 ratios,
+coarse-surrounded-by-fine topologies, and restart remain unverified. None
+blocks the two discriminating experiments above; all must be closed before
+any moving-mesh coupling claim.
+
+### Current judgment
+
+Construction A is a correct, conservative, well-tested baseline, and the
+implementation quality of this round (ownership proof, round-off gates,
+honest first-order reporting) is high. The programme now hinges on two
+independent experiments, in this order: (1) the coupled (dx, dt) glass
+staircase, because its outcome sets the priority of everything else;
+(2) rate-consistent GL + Heun, because barrier (i) blocks LDA regardless of
+what the interface does. Trace implementation follows, with the positivity
+and validity-window rules written down first.
