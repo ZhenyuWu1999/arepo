@@ -8029,3 +8029,45 @@ matched control campaigns alongside them.  The key figures are
 `rt_<scheme>_delta_rho_evolution.png`, `rt_<scheme>_delta_vy_evolution.png`,
 and `rt_<scheme>_mode_histories.png`; each run directory contains build and
 runtime provenance.
+
+## 2026-08-03: fixed-buffer classical RT is feasible, with a taller-box late-time gate
+
+- Author: `Codex GPT-5`
+- Detailed report: [`RD_RT_FIXED_BUFFER_REPORT.md`](RD_RT_FIXED_BUFFER_REPORT.md)
+- Solver commits: `3837390` (fixed RT reservoir) and `94843f9` (committed
+  reservoir-exchange diagnostic).
+- Analysis commits: `9337990`, `79b9062`, `1c9c2df`, `fefea93`, `5f46f89`,
+  and `99ea9e1`.
+
+The accepted construction keeps periodic geometry but freezes all RK-stage
+hydrodynamic increments and gravity kicks for vertices in `y<0.15` or
+`y>=1.35`. Boundary vertices still enter triangle residual evaluation. This is
+the concentrated-RK2 analogue of the development AREPO wind-tunnel injection
+region: it supplies fixed Dirichlet/reservoir data without reflective ghost
+triangles, and it does not require replicating the RT problem through several
+periodic images. The domain is intentionally open, so whole-box conservation
+is replaced by a logged reservoir exchange.
+
+Single-rank zero-seed gates for N, B and LDA+F1 all passed, with fixed states
+unchanged to roundoff and positive predictors. Seeded `n=96`, `0.5 x 1.5`,
+`Delta=0.025`, GIZMO-profile runs to `t=5` also completed for all schemes:
+
+| scheme | job | nonzero steps | min predictor rho | max element defect (abs) |
+| --- | ---: | ---: | ---: | ---: |
+| N | `10359783` | 8192 | `0.84548` | `1.324e-16` |
+| B | `10359789` | 12223 | `0.77505` | `1.323e-16` |
+| LDA+F1 rate-Heun | `10359788` | 12483 | `0.49955` | `5.204e-18` |
+
+The new density maps show the correct single-interface RT topology: coherent
+light bubbles, falling heavy spikes, and mushroom caps. A full N zero-seed
+control (`10359792`) confirms the imposed primary mode: seeded-minus-control
+mode amplitude is `0.0422`, `0.0686`, and `0.0762` at `t=2,3,4`. The control
+also develops many fine glass/contact-seeded fingers at late time, so secondary
+roll-up remains qualitative. Dissipation/noise ordering is N < B < LDA.
+
+The `Ly=1.5` extension is adequate through about `t=4`, but by `t=4.5--5` the
+plumes approach the fixed layer. Seeded reservoir mass exchange is about
+`9.6--10.3%` at `t=5`, and adjacent-layer velocities rise sharply. Do not use
+the final frames as boundary-independent validation. The next RT geometry
+should use roughly `Ly=2.0`, recenter the interface, retain the fixed buffers,
+and run matched B/LDA controls; no multi-copy periodic expansion is needed.
