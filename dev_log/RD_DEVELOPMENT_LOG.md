@@ -7289,3 +7289,18 @@ Heun wrapper: it must specify how the nonlinear limiter is frozen or evolved
 within an RK stage (and test switching-set stability), or use a proven
 SSP/RK-RD limited formulation. LDA+F1 Heun, by contrast, has passed its
 equal-bin temporal gate.
+
+### 6. Clean-source handoff artifacts
+
+Both retained paths were rebuilt from clean solver commit `2fa1498` on compute
+nodes and smoke-tested at triangular `n=64`, `dt=1/256`, four ranks:
+
+| path | artifact | SHA256 | build / smoke jobs |
+| --- | --- | --- | --- |
+| LDA+F1 rate-Heun | `build_artifacts/lda-f1-rate-heun-final/2fa14986f533-697fc884be2e5f06/Arepo` | `7edd51816c18d40a25c4c7e0b9f0c904b87a118c95bceb990ccd7756f17b1a74` | `10359682 / 10359684` |
+| coherent total-B repair | `build_artifacts/b-rk2-coherent-total-final/2fa14986f533-3b865c96854d5a86/Arepo` | `6b280519f1e52cb7ac4148dcece5529d861bc36cce11c89db5e1b8ed2886a49c` | `10359683 / 10359685` |
+
+All four jobs completed with `0:0`; both smoke runs had 256 steps,
+`f1_lumped=0`, positive predictors, and the expected stage labels. Each clean
+final snapshot is bitwise identical, field by field and after ParticleID
+matching, to the corresponding development-artifact `dt=1/256` ladder result.
