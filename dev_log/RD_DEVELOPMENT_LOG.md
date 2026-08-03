@@ -7492,3 +7492,132 @@ but: **the temporal contribution is now second order and about 0.1 per cent, so
 it changes the constant and not the order, and a per-rung `dt` extrapolation is
 available if a strictly spatial constant is wanted.**
 
+## 2026-08-03: the Theta measurement, and a contact that the regular lattice cannot run
+
+- Author: `Claude Code Opus5`
+- Executes the two experiments proposed in my review: measure `Theta` before
+  changing the B staging, and separate "N is diffusive" from "the mesh breaks
+  contact preservation".
+- Source change: a diagnostic only, `RD_DIAG_THETA`, which accumulates a
+  histogram of both blending parameters and prints an `RD-THETA` line per
+  residual pass. Declared in `Template-Config.sh` and `defines_extra`. No
+  numerics are altered.
+- Campaigns: `Data_arepo_RD/yee_boost/theta_probe` and
+  `Data_arepo_RD/contact_2d/contact_separation`.
+
+### 1. `Theta` measured: the spatial indicator is not a smoothness indicator at all
+
+`Theta` distributions over all elements and components, `boost = 1`:
+
+| run | indicator | mean | fraction below `1e-2` | fraction at 1 |
+| --- | --- | ---: | ---: | ---: |
+| smooth Yee, triangular `n=64` | spatial | 0.4591 | 0.016 | 0.026 |
+| smooth Yee, triangular `n=64` | total | 0.1998 | 0.030 | 0.005 |
+| smooth Yee, glass `n=48` | spatial | 0.5157 | 0.012 | 0.047 |
+| smooth Yee, glass `n=48` | total | 0.2654 | 0.023 | 0.011 |
+| **Sod**, triangular `n=64` | spatial | 0.6604 | 0.033 | 0.086 |
+| **Sod**, triangular `n=64` | total | 0.3690 | 0.047 | 0.024 |
+
+The classical expectation is `Theta` approximately zero where the solution is
+smooth, so that B degenerates to LDA there. Instead:
+
+**The original spatial `Theta` is not a smoothness indicator for a
+time-dependent problem.** It averages 0.46 to 0.52 in a perfectly smooth
+vortex, and the shock tube raises it only to 0.66 -- a factor of 1.4. The
+reason is structural: `Theta = min(1, |Phi| / sum_j |Phi_j^N|)` is small only
+where the *steady* residual is small, and for an unsteady problem
+`Phi` is approximately `-integral d_t u`, which does not vanish anywhere. That
+is precisely why the time-dependent case is specified to use the whole
+residual, and it means every B run before the coherent-total repair was
+blending at roughly half N everywhere, smooth or not.
+
+**The total-residual `Theta` is the correct indicator, and it behaves as
+designed.** Verified proportional to `h` on three points: triangular `n=64`
+gives 0.1998 and `n=128` gives 0.1069, a ratio of 1.87; and glass `n=48`
+against triangular `n=64` gives `0.2654/0.1998 = 1.33`, which is exactly their
+`h` ratio. Codex's repair was the right move and this is the evidence for it.
+
+**But `O(h)` at production resolution is 0.2 to 0.3.** So even the repaired B
+runs as 20 to 30 per cent N in smooth flow. Two consequences:
+
+- a real dissipation cost, which is visible in the Sod results and which should
+  be quoted whenever B is compared with LDA;
+- decisively for the temporal-order question, `Theta` is a function of the
+  state and therefore of `dt`, which is why a fixed-mesh Richardson ladder
+  cannot see a clean order. This is not an indicator fault; it is the
+  state-dependence of a correct indicator inside an RK step.
+
+**The recommendation is therefore unchanged but now evidence-based: freeze
+`Theta` within a step.** Compute it once per element at stage 0 and hold it for
+both stages. The map becomes a smooth function of `dt`, the Richardson gate
+becomes meaningful, and nothing about the indicator's correctness is given up.
+
+### 2. Contact separation: LDA cannot run a contact, and the regular lattice cannot either
+
+The planned N-versus-LDA separation could not be run as designed.
+`LDA + F1` rate-Heun produces a non-physical predictor almost immediately on
+the pure advected contact (`rho` of order `3e-4`, negative pressure), which is
+consistent with LDA not being positivity preserving and with its Sod
+undershoot to `rho_min = 0.058`. **LDA is not usable on a contact**, so B was
+substituted as the scheme one would actually reach for.
+
+| scheme | glass `n=96` | triangular `n=96` |
+| --- | --- | --- |
+| N + RK2 | completes | **fails at `t = 0.511`** |
+| N + RK2, `CourantFac` 0.05 | -- | **fails** |
+| N + RK2, discontinuity offset half a column | -- | **fails at `t = 0.511`** |
+| B + RK2 (coherent total) | completes | **fails at `t = 0.398`** |
+| LDA + F1 rate-Heun | **fails** | **fails** |
+
+Three things follow.
+
+**The triangular-lattice failure is structural, not an IC artefact.** The
+discontinuity lands exactly on a vertex column there (distance `0.000e+00`,
+impossible on a glass), which was the obvious suspect. Offsetting it by half a
+column spacing changes the failing vertex ID but the run still dies at the
+**identical sync point 876, `t = 0.51123`, with the same density
+`2.9783566e-3`**. Reducing `CourantFac` to 0.05 does not help either, and the
+timestep is already halving on its own before the failure, so it is not a CFL
+margin. Alignment is refuted.
+
+**The mesh-effect direction is the opposite of the mass-matrix result.** There,
+lattice regularity was what restored second order. Here the regular lattice is
+the fragile mesh and the glass is the robust one. Hypothesis, clearly labelled
+as such: on a lattice every element has the same shape and orientation, so
+whatever error is generated along the jump line is generated *coherently* and
+does not decorrelate, whereas glass irregularity averages it away. The failure
+position for B, `(2.969, 1.019)`, sits on the moving left contact at that time,
+which is consistent.
+
+**Contact preservation on the glass is poor for both schemes.** At `t = 1.2`,
+for a problem whose exact solution has `p` and `v` uniform:
+
+```
+   N + RK2   max|vx-1| = 0.294   max|vy| = 0.089   max|p-1| = 0.019   rho in [0.1249, 1.0056]
+   B + RK2   max|vx-1| = 0.604   max|vy| = 0.337   max|p-1| = 0.140   rho in [0.1207, 1.1575]
+```
+
+B is markedly **worse** than N here, and overshoots the exact density maximum
+by 16 per cent -- the loss of strict monotonicity noted after the coherent
+repair, appearing much larger on a contact than on the Sod.
+
+### 3. Judgment
+
+The `Theta` question is answered and the next step on B is a small, specific
+change with a clear gate.
+
+The contact result is more serious than the priority list implied, and it is
+worse than the earlier entry showed: it is not only that N is inaccurate on a
+contact, it is that **no currently available scheme completes a pure advected
+contact on a regular mesh**, and that the one which is monotone on a shock is
+the *least* contact preserving on a glass. Since contacts are ubiquitous in the
+intended application and carry no self-steepening mechanism to repair a phase
+or amplitude error, I would now rank this above both the B temporal order and
+any further hierarchy work.
+
+What I would do next, in order: (a) freeze `Theta` within a step and rerun the
+B ladder and the Sod; (b) find out what actually fails at `t = 0.511` on the
+lattice -- the determinism across two different ICs makes it tractable, and a
+single element dump at that sync point should identify it; (c) only then return
+to the hierarchy backlog.
+

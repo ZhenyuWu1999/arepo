@@ -406,6 +406,34 @@ static double RD_stat_min_stage_press;     /* smallest predictor pressure seen t
 static double RD_stat_min_dt_extrap;       /* smallest dt_Extrapolation seen this call */
 static double RD_stat_max_dt_extrap;       /* largest dt_Extrapolation seen this call */
 
+#ifdef RD_DIAG_THETA
+/* Distribution of the B blending parameter. The classical expectation is that
+ * Theta is near zero where the solution is smooth, so that B degenerates to
+ * LDA there; if it is instead O(1) or switching in smooth flow the fault is in
+ * the indicator rather than in the RK staging, and no amount of restaging
+ * repairs it. Index 0 is the spatial Theta of the original blend, index 1 the
+ * total-residual Theta of the corrector, so the two indicators can be compared
+ * on the same run. */
+#define RD_THETA_BINS 8
+static const double RD_theta_edges[RD_THETA_BINS - 1] = {1e-6, 1e-4, 1e-2, 0.1, 0.5, 0.9, 1.0};
+static long long RD_stat_theta_hist[2][RD_THETA_BINS];
+static long long RD_stat_theta_count[2];
+static double RD_stat_theta_sum[2];
+static double RD_stat_theta_max[2];
+
+static void rd_record_theta(int which, double theta)
+{
+  int bin = 0;
+  while(bin < RD_THETA_BINS - 1 && theta >= RD_theta_edges[bin])
+    bin++;
+
+  RD_stat_theta_hist[which][bin]++;
+  RD_stat_theta_count[which]++;
+  RD_stat_theta_sum[which] += theta;
+  RD_stat_theta_max[which] = dmax(RD_stat_theta_max[which], theta);
+}
+#endif
+
 static void rd_reset_solver_statistics(void)
 {
   RD_stat_elements        = 0;
@@ -424,6 +452,16 @@ static void rd_reset_solver_statistics(void)
 #endif
   RD_stat_min_dt_extrap   = MAX_DOUBLE_NUMBER;
   RD_stat_max_dt_extrap   = -MAX_DOUBLE_NUMBER;
+#ifdef RD_DIAG_THETA
+  for(int which = 0; which < 2; which++)
+    {
+      RD_stat_theta_count[which] = 0;
+      RD_stat_theta_sum[which]   = 0.0;
+      RD_stat_theta_max[which]   = 0.0;
+      for(int bin = 0; bin < RD_THETA_BINS; bin++)
+        RD_stat_theta_hist[which][bin] = 0;
+    }
+#endif
 }
 
 /* The two compute_residuals() call sites in run.c are expected to see
@@ -2046,6 +2084,9 @@ void compute_residuals(tessellation *T)
             {
               Theta_E[k] = dmin(1.0, fabs(Phi[k]) / Sum_Flux_N[k]);
             }
+#ifdef RD_DIAG_THETA
+          rd_record_theta(0, Theta_E[k]);
+#endif
 
           double equation_scale = fabs(Phi[k]);
           for(j = 0; j < 3; j++)
@@ -2292,6 +2333,9 @@ void compute_residuals(tessellation *T)
                     fabs(T_lumped[k][j] + 0.5 * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]));
 
               double theta = (sum_n_tot == 0.0) ? 0.0 : dmin(1.0, fabs(total_k) / sum_n_tot);
+#ifdef RD_DIAG_THETA
+              rd_record_theta(1, theta);
+#endif
 
               for(j = 0; j < 3; j++)
                 {
@@ -2559,6 +2603,29 @@ void compute_residuals(tessellation *T)
     MPI_Reduce(RD_stat_svd_rank_count, stat_rank_counts, 5, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(stat_mins, stat_min_out, 2, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     MPI_Reduce(stat_maxs, stat_max_out, 3, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+#ifdef RD_DIAG_THETA
+    {
+      long long hist[2][RD_THETA_BINS], count[2];
+      double sum[2], maxv[2];
+
+      MPI_Reduce(RD_stat_theta_hist, hist, 2 * RD_THETA_BINS, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(RD_stat_theta_count, count, 2, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(RD_stat_theta_sum, sum, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(RD_stat_theta_max, maxv, 2, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+      if(ThisTask == 0)
+        for(int which = 0; which < 2; which++)
+          if(count[which] > 0)
+            {
+              printf("RD-THETA time=%.8g kind=%s n=%lld mean=%.6e max=%.6e hist=[", All.Time,
+                     (which == 0) ? "spatial" : "total", count[which], sum[which] / count[which], maxv[which]);
+              for(int bin = 0; bin < RD_THETA_BINS; bin++)
+                printf("%s%.4f", bin ? "," : "", (double)hist[which][bin] / (double)count[which]);
+              printf("] edges=[1e-6,1e-4,1e-2,0.1,0.5,0.9,1]\n");
+            }
+    }
+#endif
 
     if(ThisTask == 0)
       printf(

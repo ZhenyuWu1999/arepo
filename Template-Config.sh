@@ -40,6 +40,8 @@
 #RD_HIERARCHICAL_TIMESTEPS     # Experimental fixed-mesh two-call RK2 hierarchy (N/lumped or frozen-dU LDA+F1)
 #RD_HIERARCHICAL_TEST_PATTERN  # Test only: refine the x < BoxSize/2 vertex bins by one level
 #RD_HIER_TEST_SPLIT_FRAC=0.5   # Test only: fraction of BoxSize_X below which the test pattern refines (default 0.5)
+#RD_DIAG_THETA                 # Diagnostic only: histogram of the B blending parameter
+#RD_B_FROZEN_THETA             # B blend: freeze Theta from stage-0 data so the map is dt-smooth
 #LDA_SCHEME                    # Low Diffusion A scheme for residual distribution
 #N_SCHEME                      # N scheme for residual distribution
 #B_SCHEME                      # Blended scheme for residual distribution
