@@ -576,6 +576,19 @@ Equal-bin run jobs are `10358283,10358284`; short full-mesh jobs
 `10358349--10358352`; and the long four-rank active-only job is `10358353`.
 Every listed job completed with exit `0:0`.
 
+After committing the implementation as `80482861a9f9`, a clean-source rebuild
+produced immutable artifact
+`lda-f1-hier-active-final/80482861a9f9-b1ef14b3b8a1b177/Arepo`, SHA256
+`25340756c1836a401efcddc006aa7ba8105250e4b8621c8638394fa1a35aa0c3`.
+Build job `10358354` and final short one/four-rank jobs `10358355,10358356`
+all completed with exit `0:0`. Each final snapshot is bitwise identical to
+the corresponding pre-commit active-only result. The final one/four-rank
+differences remain density `6.66e-16`, velocity `1.11e-15`, internal energy
+`2.66e-15`, mass `3.47e-17`, and pressure `9.99e-16`; coordinates and time
+bins are bitwise identical. Both runs retain 3968 live/128 frozen vertices,
+the expected 4224/8192 due-element alternation, `f1_lumped=0`, positive
+predictors, and element conservation defects no larger than `5.56e-17`.
+
 This experiment demonstrates that frozen `dU=0` is a coherent conservative
 baseline, but not a second-order multirate LDA+F1 construction. Dense output or
 another coarse-vertex trajectory should be considered only if later evidence

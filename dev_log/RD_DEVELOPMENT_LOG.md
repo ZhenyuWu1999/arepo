@@ -6133,6 +6133,16 @@ cleanly first order. Adjacent orders are L1 `0.99421,0.99704`, L2
 expected 512/1024/2048/4096 sync counts. Difference norms are larger than for
 the N/lumped hierarchy, so frozen-dU F1 does not improve the interface defect.
 
+The implementation was committed as `80482861a9f9`. A clean-source Slurm
+rebuild (`10358354`) produced immutable artifact
+`lda-f1-hier-active-final/80482861a9f9-b1ef14b3b8a1b177/Arepo`, SHA256
+`25340756c1836a401efcddc006aa7ba8105250e4b8621c8638394fa1a35aa0c3`.
+Final short one/four-rank jobs `10358355,10358356` both completed with exit
+`0:0`; each is bitwise identical to its corresponding pre-commit run. Their
+mutual differences remain at round-off (maximum `2.66e-15` over the tested
+primitive fields), with identical coordinates/time bins, `f1_lumped=0`,
+positive predictors, and maximum element conservation defect `5.56e-17`.
+
 Conclusion: the user's proposed zero-increment choice is a viable,
 conservative, MPI-independent experimental LDA+F1 hierarchy and does not need
 an artificial coarse-vertex dense output. It remains first order and should
