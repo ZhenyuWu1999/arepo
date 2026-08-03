@@ -177,6 +177,11 @@ if command -v module >/dev/null 2>&1; then
   fi
 fi
 
+# This cluster disallows process_vm_readv for OpenMPI's vader CMA path.  Force
+# the portable two-copy path, as the campaign wrapper already does, so direct
+# managed-artifact runs work reliably with more than one local MPI rank.
+export OMPI_MCA_btl_vader_single_copy_mechanism=none
+
 RUN_TAG="$(date -u '+%Y%m%dT%H%M%SZ').$$"
 RUN_LOG="${OUTPUT_DIR}/run-${RUN_TAG}.log"
 AREPO_LOG="${OUTPUT_DIR}/arepo-${RUN_TAG}.log"

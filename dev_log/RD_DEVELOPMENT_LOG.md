@@ -6906,3 +6906,222 @@ argument is least applicable.
 
 `B + RK2` is not yet available under the hierarchy, and the derivation of its
 multirate temporal term is the natural companion to that work.
+
+## 2026-08-03: priority audit -- B time ladder, an advected contact, and active-only migration through Sod
+
+- Author: `Codex GPT-5`
+- Source baseline: clean commit `fe7b0055e05ba54149986d4d56289f59d0d471e8`.
+- No solver source was changed for these tests. The only repository code change
+  is a runner fix described in section 4 below.
+- This entry tests the priorities proposed after the Claude/Kimi review:
+  equal-bin `B + RK2` temporal order first, a dedicated contact crossing the
+  hierarchy interface, and active-only mesh reconstruction plus real MPI
+  migration under a shock. `B` hierarchy remains compile-disabled while the
+  equal-bin question is unresolved.
+
+### 1. The present `B + RK2` equal-bin method does not have a measurable time order
+
+The new `B + RK2` binary was rebuilt from the committed Sod Config and clean
+source, then used without modification for fixed-mesh Yee ladders:
+
+- artifact:
+  `build_artifacts/b-rk2-equal-final/fe7b0055e05b-7a857d5131913141/Arepo`
+- SHA256:
+  `d56b1200509c255a7e7fc79116155cd3c8019276d1ec7f00479680a8bcca8192`
+- build job `10359514`; triangular/glass run jobs `10359515,10359516`;
+  every job completed with exit `0:0`.
+- fixed mesh, `boost=1`, one common IC per mesh, `TimeMax=1`, four ranks, and
+  `dt=1/256,1/512,1/1024,1/2048` with exactly 256, 512, 1024 and 2048 steps.
+  The initial snapshots are bitwise identical across each ladder.
+
+For `U=(rho,rho vx,rho vy,rho E)`, solutions are matched by ParticleID and
+`q_i=||Delta U_i||_2` is measured with the common static volume weights:
+`L1=sum_i w_i q_i`, `L2=sqrt(sum_i w_i q_i^2)`, and `Linf=max_i q_i`.
+
+| mesh | difference | L1 | L2 | Linf |
+| --- | --- | ---: | ---: | ---: |
+| triangular `n=64` | `D0: 1/256 - 1/512` | `3.37004e-4` | `1.96219e-3` | `3.50162e-2` |
+|  | `D1: 1/512 - 1/1024` | `3.11845e-4` | `2.10263e-3` | `4.60514e-2` |
+|  | `D2: 1/1024 - 1/2048` | `2.43838e-4` | `1.61974e-3` | `3.67642e-2` |
+| glass `n=48` | `D0` | `1.46160e-4` | `6.53063e-4` | `9.62980e-3` |
+|  | `D1` | `4.41244e-5` | `1.45871e-4` | `2.38870e-3` |
+|  | `D2` | `1.40347e-4` | `7.98340e-4` | `1.04846e-2` |
+
+| mesh | norm | `p0=log2(D0/D1)` | `p1=log2(D1/D2)` |
+| --- | --- | ---: | ---: |
+| triangular | L1 / L2 / Linf | `0.112 / -0.100 / -0.395` | `0.355 / 0.376 / 0.325` |
+| glass | L1 / L2 / Linf | `1.728 / 2.163 / 2.011` | `-1.669 / -2.452 / -2.134` |
+
+This is not a vector-norm artefact: density-only orders are also irregular
+(`0.122,-0.050` on the lattice and `1.679,-1.587` on the glass). The runs have
+positive predictor states, `f1_lumped=0`, round-off mass/energy conservation,
+and exact requested step counts. Between 70 and 95 per cent of each adjacent
+difference lies in the vortex core. The failure is therefore a local nonlinear
+scheme/staging issue, not a no-op timestep, bad IC, output mismatch, or global
+conservation failure.
+
+The source audit identifies a concrete missing RK2 half. At the corrector the
+new branch forms
+
+```
+  Theta* from T_target + Phi(U*)/2
+  and T_lumped + Phi_N(U*)/2,
+```
+
+but `rd_rk2_prepare_corrector()` has already inserted the old spatial half as
+the vertex-level `+dU/2` shortcut. That shortcut contains the predictor's
+spatial `Theta^n` and has lost its per-element N/LDA parts. Consequently the
+code does **not** apply one total-residual `Theta` to the complete RK2 residual,
+and the conservation argument in the preceding entry omitted `Phi(U^n)/2`.
+
+A coherent total-B corrector must save or recompute both old distributions and
+assemble, per component,
+
+```
+  R_i^N   = T_i^lumped + [Phi_i^N(U^n)   + Phi_i^N(U*)]   / 2,
+  R_i^LDA = T_i^F1     + [Phi_i^LDA(U^n) + Phi_i^LDA(U*)] / 2,
+  R       = T_target   + [Phi(U^n)       + Phi(U*)]       / 2,
+  Theta   = min(1, |R| / sum_i |R_i^N|),
+  R_i^B   = Theta R_i^N + (1-Theta) R_i^LDA.
+```
+
+It must suppress the local `+dU/2` shortcut, exactly as coherent `beta*` does.
+Even after this algebraic repair, the earlier minimal-ODE result warns that a
+non-lumped mass operator under the present staging can remain first order.
+The repaired B method therefore needs the same fixed-mesh ladder before any
+claim; a rate-consistent B operator advanced by Heun may still be required.
+
+**Decision:** `B + RK2` remains high priority, but `B` hierarchy is gated. Do
+not derive or enable its multirate path until the equal-bin corrector contains
+both spatial stages and shows a stable temporal limit.
+
+### 2. A dedicated contact crossing passes the hierarchy test but exposes a base N defect
+
+A new external harness under
+`Hydro_data_analysis/Analysis/shocktube_2d/{prepare_contact.py,analyze_contact.py}`
+uses a periodic advected density contact:
+
+```
+  rho = 1 inside x in [2.5,7.5), rho = 0.125 outside,
+  p = 1, vx = 1, vy = 0, gamma = 1.4.
+```
+
+The right contact crosses the controlled bin interface `x=8.5` at `t=1`.
+The mesh is the production-relevant `swift48_tiled` glass at `n=96` (9216
+vertices), coordinates remain static, and `TimeMax=1.2`. The hierarchy has
+9022 live and 194 frozen vertices, bins 17/18, `max_ratio=2`; its actual fine
+and coarse substeps are `2.9296875e-4` and `5.859375e-4`.
+
+Clean-source artifacts and formal jobs:
+
+| case | artifact SHA256 | job | status |
+| --- | --- | ---: | --- |
+| hierarchy | `3e282ef84f74ae1d5b8d9ce6ee611c29f373b368779afd0a44db7cab5efe5747` | `10359576` | `COMPLETED 0:0` |
+| equal-bin | `d9a56f3bf9e7a2a915c4ca5852b1709bed3a3369af7e30315d015ce4154b815d` | `10359573` | `COMPLETED 0:0` |
+
+The complete comparison is
+`Data_arepo_RD/contact_2d/stage0_contact_glass96/contact_comparison.json`.
+
+| time | equal rho L1 vs exact | hierarchy rho L1 vs exact | `||hier-equal||_L1` | defect near moving contact |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.2004 | `2.00335e-2` | `2.00335e-2` | `7.72e-8` | 46 % |
+| 0.6000 | `3.49237e-2` | `3.49237e-2` | `1.20e-6` | 89 % |
+| 0.8004 | `4.05591e-2` | `4.05591e-2` | `3.73e-6` | 94 % |
+| 1.0002 | `4.53114e-2` | `4.53114e-2` | `5.96e-6` | 95 % |
+| 1.2000 | `4.95614e-2` | `4.95554e-2` | `6.18e-6` | 94 % |
+
+At the crossing the hierarchy defect is only 0.013 per cent of the equal-bin
+analytic error and is correctly localised. Both paths have `f1_lumped=0`,
+positive predictor states, mass conservation within `2.0e-15` and energy
+within `1.3e-15`. Construction A therefore passes the dedicated contact
+comparison as strongly as it passed Sod.
+
+The equal-bin baseline is nevertheless not contact preserving on a glass. At
+`t=1.0002`, maximum `|p-1|=2.55e-2`, maximum `|vx-1|=0.389`, and maximum
+`|vy|=0.106`; at `t=0.2004` the transient maxima are 0.105, 0.602 and 0.196.
+The minimum density briefly reaches 0.1181 and minimum pressure 0.8952. This is
+not a hierarchy defect -- hierarchy and equal reproduce it almost exactly --
+but it is now a separate spatial/contact-resolution issue for the base N
+scheme and belongs in the future regression suite.
+
+### 3. Active-only reconstruction plus real MPI migration is round-off invariant
+
+The active-only Config removes `CREATE_FULL_MESH`, enables
+`VORONOI_STATIC_MESH_DO_DOMAIN_DECOMPOSITION`, retains the fixed coordinates,
+and uses the same `x=8.5` hierarchy split. The test is the glass `n=96` Sod
+through `t=1.2`, with an identical-IC full-mesh control.
+
+- active-only artifact:
+  `build_artifacts/n-rk2-hier-active-shock-final/fe7b0055e05b-3d76267807898eea/Arepo`
+- SHA256:
+  `0f0c8b6c97abf055386eb1aab10445acd39b6bbd119c8fd1b4f50f6705e9e9c7`
+- active-only jobs: four ranks `10359577`, one rank `10359580`, both
+  `COMPLETED 0:0` with solver exit status 0 in provenance.
+- current full-mesh four-rank control: job `10359578`, `COMPLETED 0:0`.
+
+The four-rank active-only run executes 4098 domain decompositions and every one
+migrates particles: between 2304 and 5181 particles per decomposition. Thus
+this is not merely a compile test or a decomposition with stable ownership.
+
+ParticleID-matched final-snapshot differences are:
+
+| comparison | rho L1 | rho max | vx max | vy max | pressure max | mass max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| active-only 1 rank vs 4 ranks | `5.41e-16` | `5.66e-15` | `3.46e-15` | `3.09e-15` | `9.99e-16` | `6.25e-17` |
+| active-only 4 ranks vs full mesh 4 ranks | `5.24e-16` | `6.22e-15` | `3.14e-15` | `3.67e-15` | `8.88e-16` | `6.77e-17` |
+
+Coordinates are bitwise identical and the hydro timebins are exactly equal in
+both comparisons. The active run retains 9022 live/194 frozen vertices and
+`max_ratio=2`; `f1_lumped=0`, predictor positivity holds, and mass/energy stay
+within `2.0e-15`/`1.6e-15`. The detailed comparison is
+`Data_arepo_RD/shocktube_2d/stage3_active_glass96/active_mesh_comparison.json`.
+
+This validates the current min-bin ownership adaptation, persistent DualArea,
+active-star reconstruction, and ledger exchange under a discontinuity and
+large repeated MPI migrations. It does **not** validate moving coordinates;
+`VORONOI_STATIC_MESH` remains in force.
+
+### 4. Runner/provenance incident and repair
+
+Direct `run_case.sbatch` runs did not carry the OpenMPI setting already present
+in `run_campaign.sbatch`. Three initial multi-rank jobs emitted this cluster's
+known vader/CMA `process_vm_readv` errors. The incomplete hierarchy/active
+outputs were preserved as `output-failed-10359574` and
+`output-failed-10359575`, and the formal jobs above were rerun.
+
+`run_case.sh` now exports
+
+```
+  OMPI_MCA_btl_vader_single_copy_mechanism=none
+```
+
+before `mpirun`. This changes only the local shared-memory transport, not the
+solver. One first single-rank solve (`10359572`) completed through final
+snapshot, restart and `MPI_Finalize`, but the live edit of its wrapper caused a
+post-solver Bash parse failure and Slurm exit 2. Its output is preserved as
+`output-wrapper-race-10359572`; formal job `10359580` reran from scratch with
+the fixed, `bash -n` checked wrapper and supplied the reported `0:0` record.
+
+### 5. Priority decision after these tests
+
+1. **LDA+F1 equal-bin temporal order remains a mathematical priority.** The
+   existing ladders and minimal ODE already identify the stage-operator
+   mismatch. Implement the equal-bin-only rate-consistent GL operator + Heun
+   experiment and require a clean `dt=1/256..1/2048` Richardson result before
+   considering its multirate analogue.
+2. **Repair and retest equal-bin B next.** Include both old/new N and LDA
+   spatial distributions in one total residual, with no `+dU/2` shortcut. If
+   the canonical repair is still first order, move directly to a
+   rate-consistent B operator. The present Sod monotonicity is useful but does
+   not establish temporal consistency.
+3. **Only then derive B hierarchy.** Its importance is unchanged, especially
+   for shocks, but enabling a multirate version of a nonconvergent equal-bin
+   corrector would make diagnosis harder rather than advance the method.
+4. **Construction A / N hierarchy is now well supported.** The dedicated
+   contact interface and active-only shock/migration gates both pass. Remaining
+   engineering gates are deeper ratios/coarse-island geometry and restart;
+   they no longer outrank the two equal-bin temporal defects.
+5. **Track base contact preservation separately.** The large equal-bin N
+   pressure/velocity disturbance on a glass is more important than the tiny
+   hierarchy-minus-equal defect and should not be attributed to frozen
+   vertices.
