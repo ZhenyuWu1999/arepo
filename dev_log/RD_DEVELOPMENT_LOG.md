@@ -6453,3 +6453,224 @@ staircase, because its outcome sets the priority of everything else;
 (2) rate-consistent GL + Heun, because barrier (i) blocks LDA regardless of
 what the interface does. Trace implementation follows, with the positivity
 and validity-window rules written down first.
+
+## 2026-08-03: two interface experiments, and a minimal-ODE gate that identifies barrier (i)
+
+- Author: `Claude Code Opus5`
+- Runs the two experiments I put at the top of my priority list after reviewing
+  the hierarchy implementation, plus a discriminator and a gate for barrier (i).
+- Source changes: `timestep.c` test-pattern split fraction made a parameter,
+  its declaration in `Template-Config.sh` and `defines_extra`, and one new
+  Config. **No solver-source change.** All runs use binaries built from
+  `28b8731` plus that parameterisation.
+- Campaign: `Data_arepo_RD/yee_boost/split_experiment/`.
+- One prediction of mine is falsified below, and one conclusion is favourable.
+
+### 1. Experiment 1: the interface placement barely matters (prediction falsified)
+
+The default test pattern splits at `x = 0.5 L`, and the Yee vortex starts at the
+box centre, so the bin interface passes exactly through the only unsteady
+feature. I predicted that displacing the split to `x = 0.25 L` -- several vortex
+radii away, where the analytic perturbation amplitude is about 450 times smaller
+-- would drop the defect by two to three orders of magnitude.
+
+| dt | split 0.5 (through the vortex) | split 0.25 (away) | ratio |
+| ---: | ---: | ---: | ---: |
+| 1/256 | `5.2680e-05` | `8.5600e-06` | 6.2 |
+| 1/512 | `2.6354e-05` | `4.2950e-06` | 6.1 |
+| 1/1024 | `1.3183e-05` | `2.1513e-06` | 6.1 |
+| 1/2048 | `6.5929e-06` | `1.0766e-06` | 6.1 |
+| orders | 0.999, 0.999, 1.000 | **0.995, 0.997, 0.999** | |
+
+**The defect drops by 6.1, not by 450, and the order does not move at all.**
+Regression: the reparameterised binary at the default 0.5 reproduces
+`hier_order_dt0256` to `6.2e-15`; both placements give 512 sync points, 3968
+stage-live and 128 frozen vertices, `max_ratio=2`.
+
+Error localisation confirms the interface is still the source: with the split at
+`x = 2.5`, 77 per cent of the weighted `|hier - equal|` sits in `x` in
+`[2.5, 5]`, immediately downstream, consistent with transport at the advection
+speed 1 plus the sound speed about 1.18 over `t = 1`. Only 4.8 per cent is in
+the refined region itself.
+
+### 2. Discriminator: a stationary vortex does not remove it either
+
+Repeating at `boost = 0`, where `d_t U = 0` analytically:
+
+```
+   dt = 1/256    4.6386e-06
+   dt = 1/512    2.3160e-06     order 1.002
+   dt = 1/1024   1.1573e-06     order 1.001
+```
+
+Still cleanly first order, only 11 times smaller than the boosted case.
+
+### 3. What this means about the generation mechanism
+
+Construction A drops the frozen vertices' un-taken predictor increment `dt v`.
+The two results above say that `v` at the interface is **not** set by the smooth
+analytic unsteadiness: removing the feature from the interface changes it by 6,
+and removing the analytic unsteadiness entirely changes it by 11, where the
+analytic amplitudes differ by `1e2` to `1e4`. The residual `v` is dominated by
+mesh-scale discrete non-steadiness, which is present everywhere.
+
+**Practical consequence: there is no "quiet region" in which to hide a bin
+interface.** Placing interfaces away from features is not a mitigation.
+
+### 4. Experiment 2: under joint refinement the interface defect is second order
+
+Glass mesh (`swift48_tiled`), `dt = 0.25/n`, split at 0.5 (the harsh placement),
+`N + RK2`:
+
+| n | cells | `\|hier - equal\|` L1 | order | hier density L1 | equal density L1 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 48 | 2304 | `6.8617e-05` | | `4.0078e-03` | `4.0070e-03` |
+| 96 | 9216 | `2.0031e-05` | **1.776** | `2.0907e-03` | `2.0906e-03` |
+| 192 | 36864 | `5.5947e-06` | **1.840** | `1.0493e-03` | `1.0492e-03` |
+
+**First order at fixed mesh, but order 1.78 -> 1.84 and rising under joint
+`(dx, dt)` refinement.** The codimension-one argument therefore holds, and
+quantitatively: the interface carries `O(n)` of `O(n^2)` vertices, so its measure
+is `O(h)`, each contributing `O(dt) = O(h)`, giving `L1 = O(h^2)`. My earlier
+worry that the error spreading into the bulk would invalidate this was
+unfounded -- L1 is preserved under advection and acoustic propagation, so
+spreading does not matter, only amplification would.
+
+Practically, the hierarchy changes the analytic density error by 0.02 per cent
+at `n = 48`, and `|hier - equal|` falls from 1.7 to 0.53 per cent of the base
+error as the mesh refines.
+
+**This answers Kimi's priority-one question favourably: traces are not mandatory
+for a production N scheme.** Construction A is usable, and the trace
+construction is downgraded from necessary to an `Linf`/robustness improvement.
+
+Two limits. This is the N scheme, whose base spatial error is first order
+(measured 0.939, 0.995 here) and therefore hides the defect easily; with a
+second-order spatial scheme the base converges at 2 while the defect converges
+at 1.8, so its relative share grows like `h^-0.2` from a 1.7 per cent start --
+still not a practical problem, but it should be stated. And everything here is
+smooth flow; the shock test with an interface normal to the shock remains the
+one that can still overturn this.
+
+### 5. Barrier (i): a minimal-ODE gate identifies the cause and validates the fix
+
+Following this project's established pattern of gating a solver change on a
+minimal ODE first. The harness is a faithful 1-D analogue of the element
+structure: two nodes per element, `m_ij = (h/2) beta_i^e` independent of `j` (so
+`sum_i m_ij = (h/2) I`, matching `sum_i m_ij = (|T|/(d+1)) I`), `S_i = h`, and
+`Phi^e = f(U_{i+1}) - f(U_i)` distributed as `phi_i^e = beta_i^e Phi^e`. Script:
+`gl_ode_gate.py`, reproduced in the campaign directory.
+
+It compares the map the solver implements,
+
+```
+   u* = u^n + dt v(u^n)
+   u^{n+1} = u^n + dt [ v(u^n)/2 + v(u*)/2 - X v(u^n) ]
+```
+
+against a reference integration of its own `dt -> 0` limit `u' = G(u)`,
+`G = (I - X) v`, and against plain Heun with `G` evaluated at both stages:
+
+| | `\|\|X\|\|` | GL two-stage | rate-consistent |
+| --- | ---: | --- | --- |
+| `beta = 1/2` (centred) | 0.0028 | 1.015, 1.003, 1.001 | **2.000** |
+| `beta = 0.8` (upwind biased) | 0.0131 | 0.977, 0.989, 0.994 | **2.000** |
+| `beta = 1.0` (full upwind) | 0.0216 | 0.988, 0.994, 0.997 | **2.000** |
+
+Two conclusions.
+
+1. **The cause is an operator mismatch between the stages.** The predictor
+   advances with `v`, but the scheme's own semi-discrete operator is
+   `G = (I - X)v`, so the two stages apply different operators. The local
+   truncation error is `(dt^2/2)(v'v - G'G) = O(\|\|X\|\|) dt^2`, which vanishes
+   identically iff `X = 0`. That is why `N` (lumped, `X = 0` exactly) measures
+   2.009 while `LDA + F1` measures 1.011, and why no beta convention changed
+   anything -- the mismatch is between `v` and `(I - X)v`, not between `beta^n`
+   and `beta*`.
+2. **The defect is not specific to upwind beta.** Centred `beta = 1/2` is also
+   first order. Any non-lumped mass matrix under this staging is first order in
+   time; `\|\|X\|\|` sets only the coefficient. `N` is second order because `X`
+   is exactly zero, not because it is small.
+
+### 6. Solver corroboration: the temporal defect is mesh independent
+
+`LDA + F1`, equal bins, Richardson self-convergence at `boost = 1`, `n` about 64,
+using the existing `yee-rk2-velvfix` binary, no code change:
+
+| mesh | `\|g\|/h` | D0 | D1 | D2 | p0 | p1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| triangular | 0.000 | `6.334e-05` | `3.195e-05` | `1.605e-05` | 0.987 | 0.994 |
+| glass | 0.017 | `4.683e-05` | `2.369e-05` | `1.192e-05` | 0.983 | 0.991 |
+| jittered | 0.167 | `4.344e-05` | `2.182e-05` | `1.093e-05` | 0.993 | 0.997 |
+
+The geometric asymmetry spans zero to 0.167 while the defect barely moves -- it
+is largest on the lattice, where `|g|` is exactly zero.
+
+This separates two things that have been running together in the log. **`X` has
+two projections.** The *spatial* ceiling of `mass_matrix_order_analysis.md`
+(`B` proportional to `|g|/h`) is driven by the geometric roughness of `d_i` and
+is strongly mesh dependent. The *temporal* defect of barrier (i) is driven by
+`\|\|X\|\|` as an operator norm, is dominated by the upwind part of `d_i`, and is
+mesh independent. The gate reproduces this independently: a uniform mesh with
+centred beta, where geometry contributes nothing, is still first order.
+
+### 7. Implementation specification for `rate-consistent GL + Heun`
+
+Barrier (i) no longer needs a discriminating experiment; the gate has identified
+the cause and validated the fix. The solver version is now a confirmation and
+production step.
+
+```
+   k(U)  = 2 v(U) - (M v(U))/|S_i| ,
+           v_i   = -(1/|S_i|) sum_{T in i} phi_i^T(U) ,
+           (M w)_i = sum_{T in i} beta_i^T (|T|/3) sum_{j in T} w_j
+
+   k0 = k(U^n) ;  U* = U^n + dt k0 ;  k* = k(U*) ;
+   U^{n+1} = U^n + (dt/2)(k0 + k*)
+```
+
+Notes for whoever implements it:
+
+- Four element sweeps per step instead of two. The `M`-apply sweeps need the
+  same Roe average, `K`, `S^-` and `beta` setup as the residual sweep, so the
+  clean form is to factor the element setup into a helper and give the sweep a
+  mode, not to duplicate two hundred lines.
+- The intermediate nodal field can travel on the existing `RD_dU` + `primexch`
+  channel.
+- **Conservation needs no new argument.** `sum_i |S_i| (X v)_i = sum_i (M v)_i -
+  sum_i (S v)_i`, and both equal `sum_T (|T|/3) sum_{j in T} v_j`, so the `X`
+  term is globally conservative. This uses only the column sum
+  `sum_i m_ij = (|T|/3) I`, which `F1` satisfies through `sum_i beta_i = I`.
+- Equal bins only; it should `#error` against `RD_HIERARCHICAL_TIMESTEPS`.
+- Acceptance: Yee `n = 64`, `boost = 1`, fixed mesh, `dt = 1/256..1/2048`
+  Richardson ladder. Target 2, matching the gate.
+- Its `dt -> 0` operator is unchanged, so the spatial mass-matrix ceiling is
+  untouched. This repairs the time realisation only.
+
+Estimated 150 to 250 lines. The stage loop it must modify is the same region
+Codex is actively restructuring for the hierarchy, so this should be scheduled
+rather than done in parallel.
+
+### 8. Source changes in the working tree
+
+`src/time_integration/timestep.c`: the test-pattern split fraction becomes
+`RD_HIER_TEST_SPLIT_FRAC`, default 0.5, so the existing behaviour is unchanged
+and verified unchanged. Declared in `Template-Config.sh` and `defines_extra`.
+New `examples/yee_2d/Config_RD_RK2_N_HIER_2LEVEL_SPLIT025.sh`.
+
+### 9. Recommended next steps
+
+1. **The shock test is now the highest-value remaining hierarchy experiment.**
+   Section 4 removes the main doubt about Construction A in smooth flow, and
+   section 3 shows interface placement is not a mitigation, so the only way the
+   favourable verdict is overturned is by non-smooth flow. A shock tube with the
+   bin interface normal to the shock, with positivity and conservation
+   diagnostics, should run before any production claim.
+2. **Schedule the rate-consistent variant** of section 7 against Codex's
+   hierarchy work rather than alongside it.
+3. Trace work (Construction B) is not urgent. It should be judged on `Linf` and
+   on the shock test, not on L1 convergence.
+4. The restart hazard remains: the first hydro call changes `Q` before AREPO's
+   interruption check. This is a correctness issue, not an accuracy one, and
+   deserves a terminating assertion now rather than a verification later.
+

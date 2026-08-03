@@ -205,8 +205,20 @@ void find_timesteps_without_gravity(void)
        * candidate, before the old-bin synchronization check.  Refining `bin`
        * after that check would subtract one level from an already retained
        * fine bin on every activation and make the test pattern ratchet toward
-       * ever smaller timesteps. */
-      if(P[i].Pos[0] < 0.5 * boxSize_X)
+       * ever smaller timesteps.
+       *
+       * The split fraction is a parameter because the default 0.5 places the
+       * bin interface exactly on the Yee vortex, which starts at the box
+       * centre. That is the harshest placement -- the frozen-state error is
+       * proportional to d_t U, which is negligible in the advecting uniform
+       * background and significant only inside the vortex -- so it conflates
+       * "the interface is defective" with "the interface crosses the only
+       * unsteady feature". Setting the fraction to 0.25 moves both interfaces
+       * several vortex radii away and separates the two. */
+#ifndef RD_HIER_TEST_SPLIT_FRAC
+#define RD_HIER_TEST_SPLIT_FRAC 0.5
+#endif
+      if(P[i].Pos[0] < RD_HIER_TEST_SPLIT_FRAC * boxSize_X)
         {
           integertime coarse_step = TIMEBASE;
           while(coarse_step > ti_step)
