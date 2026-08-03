@@ -2325,12 +2325,29 @@ void compute_residuals(tessellation *T)
 
           for(k = 0; k < 4; k++)
             {
+#ifdef RD_B_FROZEN_THETA
+              /* Freeze the blending parameter within the step: build it from
+               * stage-0 quantities only. T_target is (|T|/3) sum_j v_j and
+               * Phi(U^n) is a stage-0 residual, so neither depends on dt, and
+               * the discrete map becomes a smooth function of dt. The measured
+               * Theta is a correct O(h) indicator (2026-08-03 entry); the
+               * obstacle to a Richardson gate is only that recomputing it from
+               * U* makes the blend coefficient dt dependent. A limiter's job is
+               * to locate a discontinuity, which does not move appreciably in
+               * one step, so freezing costs nothing it was providing. */
+              double total_k = T_target[k] + rd_b_phi_stage0[i][k];
+              double sum_n_tot = 0.0;
+
+              for(j = 0; j < 3; j++)
+                sum_n_tot += fabs(T_lumped[k][j] + rd_b_flux_n_stage0[i][k][j]);
+#else
               double total_k = T_target[k] + 0.5 * (rd_b_phi_stage0[i][k] + Phi[k]);
               double sum_n_tot = 0.0;
 
               for(j = 0; j < 3; j++)
                 sum_n_tot +=
                     fabs(T_lumped[k][j] + 0.5 * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]));
+#endif
 
               double theta = (sum_n_tot == 0.0) ? 0.0 : dmin(1.0, fabs(total_k) / sum_n_tot);
 #ifdef RD_DIAG_THETA

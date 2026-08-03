@@ -7621,3 +7621,144 @@ lattice -- the determinism across two different ICs makes it tractable, and a
 single element dump at that sync point should identify it; (c) only then return
 to the hierarchy backlog.
 
+## 2026-08-03: frozen Theta fails its own gate but restores monotonicity, and the contact defect is derived in closed form
+
+- Author: `Claude Code Opus5`
+- Executes (a) and (b) from the preceding entry, plus a literature check.
+- Source change: `RD_B_FROZEN_THETA`, a compile-time variant that builds the
+  blend coefficient from stage-0 quantities only. Declared in
+  `Template-Config.sh` and `defines_extra`.
+- Campaigns: `Data_arepo_RD/yee_boost/b_frozen_theta`, and the
+  `B_RK2_FROZEN` cases of `shocktube_2d/stage0_v1`.
+
+### 1. Freezing `Theta` does not restore a measurable temporal order
+
+`T_target` is `(|T|/3) sum_j v_j` and `Phi(U^n)` is a stage-0 residual, so
+`Theta` built from them carries no `dt` dependence and the map is smooth in
+`dt` **within a step**. Fixed-mesh Yee ladders, `dt = 1/256..1/2048`:
+
+| mesh | norm | D0 | D1 | D2 | p0 | p1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| triangular `n=64` | L1 | `1.0157e-4` | `5.8091e-5` | `5.8820e-5` | 0.806 | **-0.018** |
+|  | L2 | `5.7348e-4` | `3.5405e-4` | `4.5438e-4` | 0.696 | -0.360 |
+|  | Linf | `1.6161e-2` | `9.9906e-3` | `1.2983e-2` | 0.694 | -0.378 |
+| glass `n=48` | L1 | `7.4530e-5` | `4.2651e-5` | `1.8638e-5` | 0.805 | 1.194 |
+|  | L2 | `1.8472e-4` | `1.1941e-4` | `4.6513e-5` | 0.629 | 1.360 |
+|  | Linf | `1.8343e-3` | `1.2189e-3` | `4.5459e-4` | 0.590 | 1.423 |
+
+**My proposal failed at what I proposed it for.** The reason, in hindsight, is
+that freezing removes only the *within-step* `dt` dependence. `Theta` still
+depends on the state at the start of each step, and that state depends on `dt`
+through the whole preceding trajectory, so two ladders visit different states
+and their switching sets still differ by `O(1)` in some elements at some times.
+Nothing short of making `Theta` a **smooth** functional of the state can fix
+that; freezing was never going to be enough, and I should have seen it.
+
+The practical consequence stands and is now better supported: **a fixed-mesh
+Richardson gate is not achievable for this blend**, and the acceptance criterion
+should be joint `(dx, dt)` convergence to the exact solution. The one untried
+idea is to replace the `min(1, x)` clip with a smooth saturation such as
+`x/(1+x)`; given that my last prediction here was wrong, I would treat that as
+a hypothesis to test rather than a fix to adopt.
+
+### 2. Freezing does restore strict monotonicity, at unchanged accuracy
+
+Sod, triangular lattice, `t = 1`:
+
+| scheme | rho L1 `n=64` | `n=128` | order | rho_min | p_min | over | under |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| N + RK2 | `3.750e-2` | `2.567e-2` | 0.547 | 0.12504 | 0.10005 | 0 | 0 |
+| B + RK2 (pre-repair) | `3.127e-2` | `2.096e-2` | 0.577 | 0.12500 | 0.10000 | 0 | 0 |
+| B + RK2 coherent (Codex) | `2.337e-2` | `1.346e-2` | -- | -- | -- | `8.7e-5` | `3.3e-4` |
+| **B + RK2 coherent, frozen `Theta`** | `2.351e-2` | `1.352e-2` | **0.798** | 0.12500 | 0.10000 | `2.2e-16` | **0** |
+
+Accuracy is within 0.6 per cent of the un-frozen coherent repair, so freezing
+is a very small perturbation -- but it **recovers strict monotonicity**, which
+the coherent repair had given up (`8.7e-5` over and `3.3e-4` under at
+`n = 128`). The frozen variant is therefore the best Sod result the solver has:
+47 per cent below N's error, 0.798 order, and monotone to round-off.
+
+That is a worthwhile result even though it is not the one the experiment was
+run for.
+
+### 3. Why RD generates spurious pressure at a contact: closed form
+
+This is the main finding of the entry, and it is derived and verified rather
+than measured.
+
+The residual is built from a P1 interpolation of the **parameter vector**
+`Z = sqrt(rho) (1, u, v, H)`. Ask what that interpolation does to a pure
+contact -- `p` and `u` uniform, `rho` jumping. Velocity survives exactly,
+because `u = z2/z1` and `z2 = u z1` makes the ratio constant along the segment.
+Pressure does not. With
+`p = (gamma-1)/gamma (z1 z4 - (z2^2 + z3^2)/2)` and `z1, z4` interpolated
+linearly, the bracket is quadratic in the interpolation parameter and equal at
+both ends, so it bulges in between by exactly
+
+```
+   dp / p  =  ( sqrt(rho_L) - sqrt(rho_R) )^2 / ( 4 sqrt(rho_L rho_R) )
+```
+
+Verified numerically against the interpolant to six digits: for the 8:1 contact
+used in these tests the closed form and the sampled maximum both give
+**0.295495**. The velocity error is exactly zero at every sample point.
+
+Two properties make this important.
+
+- **It depends only on the density ratio, not on `h`.** Refinement narrows the
+  affected band but does not reduce the amplitude: ratio 2 gives 3.0 per cent,
+  4 gives 12.5, 8 gives 29.6, 16 gives 56.3, 64 gives 153. The element
+  straddling the jump always carries the full ratio.
+- **It is a property of the formulation, not of this implementation.** Any RD
+  scheme using the conservative parameter-vector linearisation with a P1
+  representation has it. The element residual is
+  `closed-integral F(Z_h).n`, evaluated from exactly this interpolant, so the
+  spurious pressure enters the flux directly and drives real acoustic waves.
+
+This explains what was observed: the large spurious `|vx - 1|` on the glass
+contact, the fact that it does not improve with resolution, and why a shock
+tube is the easier problem -- there the pressure genuinely jumps, so the
+spurious component is a modest fraction of a real signal, and the wave
+structure is self-consistent.
+
+It also suggests why the regular lattice fails where the glass survives. On a
+lattice the jump meets every element in the same way, so the spurious pressure
+bump is generated **coherently** along the whole jump line and acts like a
+piston; on a glass the jump position varies from element to element and the
+bumps are incoherent. This part is a hypothesis, not a derivation.
+
+### 4. Literature
+
+The general phenomenon is documented for Roe-type methods -- conservative
+schemes with nonlinear pressure laws are known to create spurious acoustic
+waves near contact discontinuities, and there is a literature on fixing it for
+general equations of state. What I did not find is a statement of the specific
+RD mechanism above, which is sharper: it is not a Riemann-solver artefact but a
+consequence of interpolating `Z` linearly across an element, and it has a
+closed form. Sources consulted:
+
+- <https://www.sciencedirect.com/science/article/abs/pii/S0045782599000171>
+- <https://www.maths.nottingham.ac.uk/plp/pmzmeh/Papers/HR_CF10.pdf>
+- <https://arxiv.org/pdf/1902.07773>
+- <https://academic.oup.com/mnras/article/469/4/4306/3798772>
+
+Morton's thesis discusses contact discontinuities only in its review of
+HLL/HLLC, not for the RD solver itself; his Sod is the only test he ran that
+contains a contact.
+
+### 5. What I would do next
+
+1. **Adopt the frozen `Theta` variant** on the strength of section 2, quite
+   apart from the order question: it is more accurate than N by 47 per cent and
+   monotone to round-off on the Sod.
+2. **Change the B acceptance gate** to joint `(dx, dt)` convergence. Fixed-mesh
+   Richardson has now failed for three separate B constructions and the reason
+   is understood.
+3. **Treat section 3 as the contact agenda.** The closed form says the defect
+   cannot be refined away, so the options are a different interpolation variable
+   for the state (while keeping `Z` for the conservative linearisation), or an
+   explicit correction of the spurious pressure. Both are derivations, not
+   experiments, and should be scoped before any more contact runs.
+4. The `t = 0.511` lattice failure of the preceding entry is very likely the
+   coherent version of section 3; that should be confirmed before it is
+   investigated as a separate defect.
