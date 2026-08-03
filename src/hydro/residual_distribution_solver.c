@@ -406,8 +406,9 @@ static double RD_stat_min_stage_press;     /* smallest predictor pressure seen t
 static double RD_stat_min_dt_extrap;       /* smallest dt_Extrapolation seen this call */
 static double RD_stat_max_dt_extrap;       /* largest dt_Extrapolation seen this call */
 #ifdef RD_RT_FIXED_BOUNDARY
-static double RD_stat_boundary_absorbed[4];     /* signed dQ suppressed at fixed vertices */
-static double RD_stat_boundary_absorbed_abs[4]; /* absolute dQ suppressed at fixed vertices */
+static double RD_stat_boundary_absorbed[4];     /* signed trial-stage dQ suppressed at fixed vertices */
+static double RD_stat_boundary_absorbed_abs[4]; /* absolute trial-stage dQ suppressed at fixed vertices */
+static double RD_boundary_q_before[4];          /* global-budget reference before the staged RD call */
 
 static inline int rd_rt_fixed_boundary_vertex(int p)
 {
@@ -1212,6 +1213,18 @@ void compute_residuals(tessellation *T)
   TIMER_START(CPU_RESIDUAL_DISTRIBUTION);
 
   rd_reset_solver_statistics();
+
+#ifdef RD_RT_FIXED_BOUNDARY
+  for(int component = 0; component < 4; component++)
+    RD_boundary_q_before[component] = 0.0;
+  for(int q_index = 0; q_index < NumGas; q_index++)
+    {
+      RD_boundary_q_before[0] += P[q_index].Mass;
+      RD_boundary_q_before[1] += SphP[q_index].Momentum[0];
+      RD_boundary_q_before[2] += SphP[q_index].Momentum[1];
+      RD_boundary_q_before[3] += SphP[q_index].Energy;
+    }
+#endif
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
   if(rd_stage != RD_RK_STAGE_PREDICTOR && rd_stage != RD_RK_STAGE_CORRECTOR)
@@ -2641,16 +2654,31 @@ void compute_residuals(tessellation *T)
 
 #ifdef RD_RT_FIXED_BOUNDARY
   {
-    double local[8], global[8];
+    double local[12], global[12], q_after[4] = {0.0, 0.0, 0.0, 0.0};
+    for(int q_index = 0; q_index < NumGas; q_index++)
+      {
+        q_after[0] += P[q_index].Mass;
+        q_after[1] += SphP[q_index].Momentum[0];
+        q_after[2] += SphP[q_index].Momentum[1];
+        q_after[3] += SphP[q_index].Energy;
+      }
     for(int component = 0; component < 4; component++)
       {
-        local[component] = RD_stat_boundary_absorbed[component];
-        local[4 + component] = RD_stat_boundary_absorbed_abs[component];
+        /* The fixed boundary turns the domain into an open system.  The
+         * reservoir exchange that closes the committed hydro update is the
+         * negative change of the actually stored global Q.  Raw suppressed
+         * increments are also useful, but they include temporary RK trial
+         * stages and therefore must not be summed as a physical budget. */
+        local[component] = RD_boundary_q_before[component] - q_after[component];
+        local[4 + component] = RD_stat_boundary_absorbed[component];
+        local[8 + component] = RD_stat_boundary_absorbed_abs[component];
       }
-    MPI_Reduce(local, global, 8, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(local, global, 12, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     if(ThisTask == 0)
-      printf("RD-RT-BOUNDARY time=%.8g absorbed=[%.6e,%.6e,%.6e,%.6e] abs=[%.6e,%.6e,%.6e,%.6e]\n",
-             All.Time, global[0], global[1], global[2], global[3], global[4], global[5], global[6], global[7]);
+      printf("RD-RT-BOUNDARY time=%.8g exchange=[%.6e,%.6e,%.6e,%.6e] "
+             "stage_suppressed=[%.6e,%.6e,%.6e,%.6e] stage_abs=[%.6e,%.6e,%.6e,%.6e]\n",
+             All.Time, global[0], global[1], global[2], global[3], global[4], global[5], global[6], global[7], global[8],
+             global[9], global[10], global[11]);
   }
 #endif
 
