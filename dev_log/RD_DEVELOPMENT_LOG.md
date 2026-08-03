@@ -7867,3 +7867,30 @@ first RT implementation should use an explicit prescribed body force and test
 hydrostatic balance, stage consistency, energy accounting and boundary
 treatment before interpreting instability growth. It should not yet activate
 moving mesh or self-gravity.
+
+### 6. Two-dimensional pattern addendum
+
+Density and transverse-velocity time sequences were subsequently added in
+`Hydro_data_analysis` commit `7af87da`, including matched
+`vy(seeded)-vy(control)` maps. They materially sharpen the scalar diagnosis:
+
+- In the sharp Morton case, LDA produces large interpenetrating fingers and
+  strong secondary structure by `t~0.6`; B shows the same morphology at lower
+  amplitude; N retains a much broader, smoother deformation. This is a useful
+  qualitative comparison of dissipation, but not yet a reference KH solution.
+- The sharp run is strongly asymmetric between its two shear layers. Together
+  with the energetic unseeded control, this makes the apparent lower-layer
+  roll-up unsafe to interpret as a clean physical cat's-eye pattern.
+- In the smooth Paardekooper-profile run, density remains almost horizontally
+  layered through `t=2`, while `vy` develops broad coherent cells. The
+  seed-minus-control map retains the imposed mode-1 left/right sign structure
+  through `t=0.2`, so the seed has not vanished; it is simply subdominant in the
+  total transverse field.
+- The smooth density-ratio-one case also develops a pronounced lower-layer
+  transverse pattern without a matching symmetric upper-layer roll. This
+  reinforces the need for an exact two-interface eigenmode and a modal
+  projection before calling the pattern KH growth.
+
+The new figures are named `kh_<case>_rho_evolution.png`,
+`kh_<case>_vy_evolution.png`, and `kh_<case>_delta_vy_evolution.png` in the
+seeded campaign directory.
