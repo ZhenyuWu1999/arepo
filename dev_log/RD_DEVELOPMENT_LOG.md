@@ -7894,3 +7894,138 @@ Density and transverse-velocity time sequences were subsequently added in
 The new figures are named `kh_<case>_rho_evolution.png`,
 `kh_<case>_vy_evolution.png`, and `kh_<case>_delta_vy_evolution.png` in the
 seeded campaign directory.
+
+## 2026-08-03: prescribed-gravity Rayleigh--Taylor pilot runs, but only a paired modal diagnostic is interpretable
+
+- Author: `Codex GPT-5`
+- AREPO commits: `ad91a0c` (direct SWIFT-style wall setup) and `688ba06`
+  (periodic prescribed potential and LDA/N/B configurations).
+- Analysis commits: `50350d7`, `10da13f`, `3612cf3`, `b3357fa`, and
+  `5278c38` in `Hydro_data_analysis`.
+- No RD residual, RK2, hierarchy, MPI or moving-mesh implementation was changed.
+  The only solver-side source addition is an optional analytic external field.
+
+### 1. Why the direct SWIFT/GIZMO port was rejected
+
+The first setup copied the useful parts of the local SWIFT and GIZMO tests:
+`rho=1/2`, `gamma=1.4`, constant `g_y=-0.5`, a hydrostatic pressure profile,
+and a small interface perturbation.  Fixed top and bottom particles were
+approximated by AREPO reflective-y boundaries.
+
+The N gate, Slurm `10359767`, failed before the first hydro step because the RD
+dual-volume coverage audit measured `1.5080279216338097` for a physical area
+of `1.5` (relative excess `5.352e-3`).  Reflective ghost triangles are being
+counted as physical RD elements.  The audit was not disabled: a result with
+the wrong assembled control-volume measure would not validate RT.
+
+### 2. Periodic symmetric replacement and hydrostatic gate
+
+To remove unvalidated walls, the accepted pilot uses a periodic unit square,
+
+```
+g_y(y) = -g0 sin(2 pi y),                  g0 = 0.5,
+phi(y) = -(g0 / 2 pi) cos(2 pi y),
+```
+
+with a dense central band (`rho=2`) and light outer band (`rho=1`).  The lower
+interface is unstable under downward acceleration and the upper one under
+upward acceleration.  Their imposed perturbations are the periodic,
+reflection-related pair
+
+```
+v_y = A cos(2 pi x)
+      [ exp(-(y-0.25)^2/(2 sigma^2)) - exp(-(y-0.75)^2/(2 sigma^2)) ],
+sigma = 0.05.
+```
+
+Pressure is constructed by numerical integration of `dp/dy=rho*g_y` on a
+common fine grid.  The source enters the existing two gravity half-kicks
+around the full RD update, so this is the existing kick--hydro--kick split,
+not an unreviewed gravity term inserted into one RK stage.
+
+The sharp central band is not a usable equilibrium gate.  An unseeded N run
+to `t=0.2` produced `max|vy|=0.2010`, `E_ky=1.148e-3`, and density L1 drift
+`1.326e-2`; the P1 contact defect dominates.  Smooth-band scans gave:
+
+| transition width | unseeded `E_ky(t=0.2)` | `max abs(vy)` | density L1 drift |
+| ---: | ---: | ---: | ---: |
+| 0.10 | `1.298e-5` | `1.714e-2` | `3.34e-3` |
+| 0.20 | `1.147e-5` | `1.022e-2` | `3.17e-3` |
+
+Width `0.20` (about ten point spacings on this `48^2` glass) was adopted: its
+early unseeded velocity stays below the intended amplitude `A=0.025`.  This is
+a deliberately smoothed RT problem, not a validation of the sharp contact.
+
+### 3. Paired LDA/N/B experiment
+
+All production cases use the same static full `48^2` SWIFT glass, single MPI
+rank, equal timesteps, `dt=1/1024`, 2048 steps to `t=2`, and matched seeded and
+zero-seed ICs.  N jobs were `10359772--10359773`; LDA and B jobs were
+`10359776--10359779`.  All six completed with exit code 0.  Builds
+`10359768`, `10359774`, and `10359775` produced immutable binaries from clean
+commit `688ba06`:
+
+| scheme | artifact | binary SHA256 |
+| --- | --- | --- |
+| N | `rt-periodic-n-rk2/688ba0676e72-24ef2eca53eed510` | `30c3951da20efc3ddcdd7e0817496aae9d513d2376368f68ee88ba48b4979016` |
+| LDA rate-Heun | `rt-periodic-lda-rate-heun/688ba0676e72-e981bd53ee9a3263` | `ac9b32aea08ab59b40e80e513d7290e6f87e83d9fb24d0c2b6c6ba57d791ace1` |
+| B frozen Theta | `rt-periodic-b-rk2-frozen/688ba0676e72-7fcea29d9c9d6f18` | `19cc2e913f3a6426c50932394d687a66e8d7147783a898cf77dde55655950e4c` |
+
+Total vertical kinetic energy is **not** a clean growth observable.  At `t=2`
+the seeded and control energies are already similar because glass/source
+noise excites other unstable modes.  Instead, define the volume-weighted
+least-squares amplitude of the exact imposed velocity template `q(x,y)`:
+
+```
+a_q = sum_i V_i v_y,i q_i / sum_i V_i q_i^2,
+```
+
+and compare the adjacent paired solutions by particle ID.  Final results are:
+
+| scheme | `a_q` seeded | `a_q` control | paired `Delta a_q` | non-mode RMS `vy`, control | `E_ky` seeded / control |
+| --- | ---: | ---: | ---: | ---: | --- |
+| N | `0.02609` | `-0.000350` | `0.02644` | `0.01683` | `2.031e-4 / 1.893e-4` |
+| B frozen | `0.02759` | `-0.001054` | `0.02864` | `0.04038` | `8.077e-4 / 1.081e-3` |
+| LDA rate-Heun | `0.02777` | `-0.002583` | `0.03035` | `0.05571` | `1.710e-3 / 2.062e-3` |
+
+The seed projection initially falls from `0.025` to about `0.005` at `t=0.2`
+and then recovers/grows.  The paired density and velocity maps retain the
+intended opposite-phase structure at both interfaces through `t=2`, so all
+three schemes do respond to the imposed RT mode.  However, the control noise
+ordering is unambiguous: N is quietest, B is intermediate, and LDA is noisiest.
+Absolute LDA/B density maps develop glass-seeded fingers even without the
+intentional perturbation; they must not be presented as a clean physical
+linear mode or used to fit a published RT growth rate.
+
+### 4. Safety and conservation
+
+Every run has `f1_lumped=0` on every step and positive predictor states.  The
+minimum seeded predictor `(rho,p)` was `(0.9923,2.2460)` for N,
+`(0.9818,2.2222)` for B, and `(0.9216,2.2203)` for LDA.  Maximum element
+conservation defects were `1.14e-12` relative for N, `9.70e-13` for B and
+`2.01e-15` for LDA.  Snapshot mass stayed at round-off.
+
+Including the analytic potential energy, final seeded/control relative total
+energy drifts were `5.28e-4 / 5.37e-4` (N), `1.03e-4 / 1.21e-4` (B), and
+`1.25e-5 / 1.08e-5` (LDA).  These scheme-dependent drifts are small enough for
+this morphology pilot but require a timestep/source-splitting ladder before
+this setup can claim a quantitative gravity-coupling validation.
+
+### 5. Judgment and next gate
+
+The pilot is successful as a **qualitative paired stress test**, not as a
+quantitative RT benchmark.  It reinforces the KH/contact ordering: N damps the
+most and is best bounded, LDA admits the most secondary/noise structure, and B
+lies between them.  The useful next experiment is not a longer run.  It is a
+resolution pair (at least `48^2` and `96^2`) with the transition width held in
+physical units, plus a timestep ladder for the external-source energy drift.
+Only if the seeded-minus-control modal history converges under both should an
+RT growth rate be quoted.
+
+Figures and data are under
+`Data_arepo_RD/rt_2d/periodic_smooth_n48_w020_seed025_v1` (N) and
+`Data_arepo_RD/rt_2d/periodic_smooth_lda_b_n48_w020_seed025_v1` (LDA/B), with
+matched control campaigns alongside them.  The key figures are
+`rt_<scheme>_delta_rho_evolution.png`, `rt_<scheme>_delta_vy_evolution.png`,
+and `rt_<scheme>_mode_histories.png`; each run directory contains build and
+runtime provenance.
