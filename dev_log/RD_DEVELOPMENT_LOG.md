@@ -8129,3 +8129,98 @@ paired diagnostics are `rt_N_delta_rho_evolution.png`,
 `rt_N_seeded_control_vy_evolution.png`. Historical log entries describing the
 discarded periodic pilot remain as the audit trail, but their old data paths
 are intentionally no longer live.
+
+## 2026-08-04: GL+F1 versus rate-consistent Heun, measured; GL+F1 stays in production
+
+- Author: `Claude Code Opus5`
+- Answers a scoping question from Zhenyu: if the two LDA time integrators
+  perform similarly on the tests that matter, rate-Heun need not be a
+  production method or a thesis scheme at all.
+- Source change: two Sod Configs for the comparison
+  (`Config_SOD_LDA_RATE_HEUN.sh` and a no-assertion variant used to isolate the
+  A2 behaviour). No solver change.
+- Campaign: `Data_arepo_RD/yee_boost/heun_vs_glf1`. Both binaries built from
+  the same source and run back to back on one node with four ranks.
+- Documented in `dev_log/LDA_F1_Heun_vs_standard_LDA_RK2.md` sections 12.5-12.6.
+
+### 1. Accuracy at the production timestep
+
+Advected Yee, tiled glass, `dt = 0.25/n`, `boost = 1`, `t = 1`:
+
+| `n` | cells | GL+F1 | rate-Heun | difference |
+| ---: | ---: | ---: | ---: | ---: |
+| 48 | 2304 | `6.430158e-4` | `6.551337e-4` | +1.885 % |
+| 96 | 9216 | `1.748167e-4` | `1.778519e-4` | +1.736 % |
+| 192 | 36864 | `5.245707e-5` | `5.319881e-5` | +1.414 % |
+
+Spatial orders 1.879 / 1.737 against 1.881 / 1.741 -- indistinguishable.
+
+**rate-Heun is slightly *worse*.** The two maps differ in their `dt^2`
+coefficient, and at `dt` proportional to `h` the GL+F1 coefficient happens to
+sit closer to the truth on this problem. So the first-order-in-`dt` term of
+GL+F1 is not a disadvantage in the production regime; it is simply the 1 to 2
+per cent temporal term, with a sign that depends on the problem.
+
+### 2. Cost
+
+| `n` | GL+F1 | rate-Heun | ratio |
+| ---: | ---: | ---: | ---: |
+| 96 | 7 s | 11 s | 1.57 |
+| 192 | 47 s | 83 s | 1.77 |
+
+Approaching the 4:2 sweep ratio as residual work comes to dominate.
+
+### 3. Shock robustness, and a real but separate defect
+
+With `RD_DEBUG_ASSERTS`, rate-Heun terminates after two steps on the Sod:
+
+```
+   A2 LDA-F1-mass-apply   defect = 8.9e-37   roundoff_scale = 1.1e-35
+                          tolerance = 1.0e-47
+```
+
+Those magnitudes are numerically zero. The A2 scale for that check is built
+from `|K_i^+||z|`, and on a quiescent element `sum_j v_j` underflows, so the
+bound collapses and the assertion fires on floating-point noise -- the same
+failure mode the N scheme showed on a quiet Gresho element in the 2026-07-29
+entry. With assertions off the run completes and conserves mass to `5e-15`.
+
+**The scheme is not at fault; the diagnostic's scale is.** Backlog item: give
+the `LDA-F1-mass-apply` A2 tolerance an absolute floor. It is small and it
+affects only the rate-Heun path, but it is a genuine defect.
+
+Sod accuracy is also marginally worse for rate-Heun: `2.6855e-2` against
+`2.6261e-2` at `n = 64`, `1.6232e-2` against `1.5926e-2` at `n = 128`.
+
+### 4. Decision, and a retraction
+
+**GL+F1 remains the production path** on all three axes: 1.6 to 1.8 times
+cheaper, 1.4 to 2.3 per cent more accurate at the production timestep on both
+test problems, and free of the assertion issue. rate-Heun's one established
+advantage -- fixed-mesh second-order time -- is not observable when
+`dt` is proportional to `h` and does not convert into accuracy there.
+
+rate-Heun stays in the tree and belongs in the thesis as an **analysis topic,
+not a method**. The claim that the published GL+F1 staging has fixed-mesh
+temporal order one would be an assertion without a working validated repair;
+with one, the diagnosis is complete and the cost of the alternative is
+quantified. That is a stronger result than shipping it would have been.
+
+**Retraction.** I argued earlier that hierarchical timesteps would expose the
+temporal defect by decoupling `dt` from `h`. That is wrong. In a CFL-limited
+hierarchy each bin still satisfies `dt_T` proportional to `h_T/(|u|+c)`
+locally, so the `h^0.75` suppression of the coefficient continues to apply. A
+genuine decoupling needs a timestep set by something other than the local CFL.
+
+**Consequence for the plan:** the four-sweep operator does **not** need to be
+derived for asynchronous triangles, and that item should be removed from the
+Phase-B backlog. The LDA hierarchy will use GL+F1.
+
+### 5. Next
+
+With this settled and the contact defect accepted as a characterised
+limitation rather than a work item, the remaining equal-bin question is the
+B scheme: its acceptance gate should become joint `(dx, dt)` convergence to
+the exact solution rather than fixed-mesh Richardson, and the frozen-`Theta`
+variant is the current best candidate on the strength of its Sod result.
+Subject to Kimi and Codex agreeing, that is the next piece of work.
