@@ -494,6 +494,16 @@ int check_for_interruption_of_run(void)
 
   MPI_Bcast(&stopflag, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  /* This checkpoint site lies between the RD predictor and corrector.  The
+   * predictor has already updated conserved Q, while the restart format has
+   * no marker saying that an RK stage is open.  Refuse to serialize that
+   * ambiguous state: resuming it as AREPO's ordinary second hydro half-step
+   * has not been derived or validated. */
+  if(stopflag)
+    terminate_program("RD hierarchy cannot write a restart between predictor and corrector");
+#endif
+
   if(stopflag)
     {
       restart(0); /* write restart file */
@@ -530,6 +540,13 @@ int check_for_interruption_of_run(void)
     }
 
   MPI_Bcast(&stopflag, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  /* A scheduled checkpoint reaches the same open-stage location as a stop or
+   * user-requested restart above. */
+  if(stopflag == 3)
+    terminate_program("RD hierarchy cannot write a scheduled restart between predictor and corrector");
+#endif
 
   if(stopflag == 3)
     {

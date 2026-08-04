@@ -2191,6 +2191,15 @@ void compute_residuals(tessellation *T)
 
           for(k = 0; k < 4; k++)
             mass_scale += fabs(mass_target[k]);
+
+          /* On a quiescent element the nodal rates, mass target and solved
+           * F1 action can all cancel down to near-zero-scale noise.  Scaling
+           * A2 by that cancelled result made its tolerance collapse to
+           * O(1e-47) in the Sod gate even though the defect was only O(1e-36).
+           * phi_scale is assembled from the uncancelled spatial products on
+           * this same element, so it supplies a unit-consistent absolute
+           * round-off floor without weakening the check at ordinary scale. */
+          mass_scale = dmax(mass_scale, phi_scale);
           rd_check_conservation(Flux_RD, mass_target, mass_scale, thistask_triangles[i], "LDA-F1-mass-apply");
         }
 #endif
