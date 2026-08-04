@@ -8534,3 +8534,130 @@ KH/RT extensions, a contact correction, an asynchronous rate-Heun operator and
 new beta/gamma/Galerkin experiments remain outside this sequence. The immediate
 next executable work item is therefore the B frozen-Theta joint glass ladder,
 not B hierarchy or moving mesh.
+
+## 2026-08-04: B acceptance campaign, and a boost-zero cross-check that reproduces Morton
+
+- Author: `Claude Code Opus5`
+- Executes the equal-bin acceptance package for B, then a cross-check prompted
+  by Zhenyu: Morton (2023) measured the B scheme on the **stationary** Yee
+  vortex with the spatial indicator and found an order between N and LDA, which
+  looked inconsistent with our advected result.
+- Source change: `RD_B_SPATIAL_THETA`, a second compile-time switch selecting
+  the steady-form indicator (Arpaia & Ricchiuto eq. 42) instead of the whole
+  residual (eq. 44). It is orthogonal to `RD_B_FROZEN_THETA`, so the four
+  combinations are now available; conservation is unaffected by both, since it
+  holds for any `Theta`.
+- Campaigns: `Data_arepo_RD/yee_boost/b_acceptance` (26 cases) and
+  `.../b_boost0` (15 cases). All 41 completed with exit status zero.
+- The document `dev_log/B_scheme_complete_mathematics.md` is updated, including
+  two corrections recorded in section 3 below.
+
+### 1. Acceptance: advected Yee on the glass, joint `(dx, dt)` refinement
+
+`dt = 0.25/n`, `boost = 1`, `TimeMax = 1`, analytic density L1:
+
+| scheme | `n=48` | `n=96` | p | `n=192` | p | vs LDA at 192 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| LDA GL+F1 | `6.430e-4` | `1.748e-4` | 1.879 | `5.246e-5` | 1.737 | -- |
+| N + RK2 | `4.007e-3` | `2.091e-3` | 0.939 | `1.049e-3` | 0.995 | +1900 % |
+| **B total, frozen** | `1.057e-3` | `3.946e-4` | 1.421 | `1.887e-4` | 1.064 | **+260 %** |
+| B total, unfrozen | `1.049e-3` | `3.936e-4` | 1.414 | `1.895e-4` | 1.054 | +261 % |
+| B spatial, frozen | `2.770e-3` | `1.487e-3` | 0.898 | `8.166e-4` | 0.864 | +1457 % |
+| B spatial, unfrozen | `2.769e-3` | `1.487e-3` | 0.897 | `8.178e-4` | 0.862 | +1459 % |
+
+Sod, triangular lattice, `t = 1`:
+
+| variant | rho L1 `n=64` | `n=128` | order | rho_min | overshoot | undershoot |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **B total, frozen** | `2.351e-2` | `1.352e-2` | 0.798 | 0.12500 | `2.2e-16` | **0** |
+| B total, unfrozen | `2.337e-2` | `1.346e-2` | 0.796 | 0.12467 | `8.7e-5` | `3.3e-4` |
+| B spatial, frozen | `3.280e-2` | `2.230e-2` | 0.557 | 0.12497 | `3.3e-8` | `2.7e-5` |
+| B spatial, unfrozen | `3.300e-2` | `2.238e-2` | 0.560 | 0.12497 | 0 | `2.8e-5` |
+
+All four pass the gate: `f1_lumped = 0`, positive predictors, and `|dM/M| = 0`
+exactly at `n = 192`.
+
+**Two decisions follow.**
+
+*Frozen versus unfrozen is settled and the answer is that it does not matter.*
+The two differ by 0.04 to 0.42 per cent on the smooth ladder with orders equal
+to three decimals, and by 0.5 per cent on the Sod. Frozen is strictly monotone
+where unfrozen is not, is the simpler construction, and is the only form
+computable at the opening call of the two-call hierarchy. **Adopt frozen**,
+which is already what every production configuration uses.
+
+*The temporal term in the indicator matters a great deal.* At `boost = 1` the
+total form is 4.3 times more accurate than the spatial form at `n = 192` and
+holds order 1.06 where the spatial form collapses to 0.86, below N's own 0.995.
+
+### 2. The boost-zero cross-check: Morton is reproduced
+
+Same meshes, `boost = 0`:
+
+| scheme | `n=48` | `n=96` | p | `n=192` | p |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| LDA GL+F1 | `3.430e-4` | `8.322e-5` | 2.043 | `1.974e-5` | 2.076 |
+| N + RK2 | `2.157e-3` | `1.070e-3` | 1.011 | `5.347e-4` | 1.001 |
+| B total, frozen | `5.108e-4` | `1.427e-4` | 1.840 | `5.170e-5` | 1.464 |
+| **B spatial, frozen** | `5.314e-4` | `1.498e-4` | 1.826 | `6.086e-5` | **1.300** |
+
+**With the stationary vortex and the spatial indicator, B lands between N and
+LDA -- exactly the published result.** There is no contradiction: Morton's test
+and ours are different regimes, and the spatial indicator fails only in the one
+he did not run. Zhenyu's recollection was correct and the apparent conflict is
+resolved by the boost.
+
+### 3. Two corrections to earlier claims of mine
+
+The `RD_DIAG_THETA` histograms were run on the glass family at both boosts,
+which had not been done before. Mean `Theta` over elements and components:
+
+| `n` | `h` | `b=0` spatial | `b=0` total | `b=1` spatial | `b=1` total |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 48 | 0.2083 | 0.5429 | 0.4191 | 0.5466 | 0.2445 |
+| 96 | 0.1042 | 0.5047 | 0.4265 | 0.4860 | 0.1447 |
+| 192 | 0.0521 | 0.4511 | 0.4079 | 0.4607 | 0.0948 |
+
+**(a) "The total indicator is `O(h)`, verified on three points" was
+over-read.** Those points were triangular `n=64`, triangular `n=128` and glass
+`n=48`, and the agreement of the last with the `h` ratio of the first two was a
+coincidence across mesh families. Within one mesh family the total indicator
+falls like `h^0.7` when the solution is unsteady (slopes 0.76 and 0.61) and is
+**flat at about 0.42 when it is stationary**.
+
+**(b) "The spatial indicator fails because the problem is unsteady" was too
+narrow.** It measures 0.45 to 0.55 at `boost = 0` as well. The spatial form is
+`O(1)` in both regimes. What the boost changes is that the *total* form becomes
+small -- 0.095 against 0.461 at `n = 192` -- which is what opens the accuracy
+gap between them.
+
+Neither indicator therefore satisfies eq. (41)'s `O(h)` requirement as written.
+The published criterion still ranks them correctly, and that is what makes it
+useful, but the schemes should not be described as meeting it.
+
+### 4. An open question, and a request for review
+
+The mean `Theta` does not predict the order, and the direction is
+counter-intuitive.
+
+At `boost = 0` the total indicator is 0.41 to 0.43 and does not decrease, yet B
+retains order 1.84 and 1.46. At `boost = 1` it is **smaller**, 0.09 to 0.24,
+yet B manages only 1.42 and 1.06. A larger blend fraction coincides with the
+better order.
+
+My working guess is that the *spatial distribution* of `Theta` is what matters
+rather than its mean -- it may be large where the local error is small, for
+instance in the quiet far field -- so that the mean conceals the correlation
+that actually governs the truncation. That is a guess. Settling it needs a
+per-element correlation of `Theta` against the local error, which the
+diagnostic does not currently record.
+
+This is the point at which I would like Codex's review. The data are in
+`Data_arepo_RD/yee_boost/{b_acceptance,b_boost0}`, with the `RD-THETA`
+histograms in each `run.log`, and the four indicator variants are available as
+compile-time switches for any follow-up.
+
+The practical conclusions of sections 1 and 2 do not depend on the answer:
+frozen total-residual `Theta` is the candidate, it is 3.6 times LDA's error in
+smooth advected flow at `n = 192` with order 1.06, and that is the
+B-versus-LDA trade number the thesis has to quote.

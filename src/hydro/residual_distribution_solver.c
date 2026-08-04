@@ -2373,29 +2373,55 @@ void compute_residuals(tessellation *T)
 
           for(k = 0; k < 4; k++)
             {
-#ifdef RD_B_FROZEN_THETA
-              /* Freeze the blending parameter within the step: build it from
-               * stage-0 quantities only. T_target is (|T|/3) sum_j v_j and
-               * Phi(U^n) is a stage-0 residual, so neither depends on dt, and
-               * the discrete map becomes a smooth function of dt. The measured
-               * Theta is a correct O(h) indicator (2026-08-03 entry); the
-               * obstacle to a Richardson gate is only that recomputing it from
-               * U* makes the blend coefficient dt dependent. A limiter's job is
-               * to locate a discontinuity, which does not move appreciably in
-               * one step, so freezing costs nothing it was providing. */
-              double total_k = T_target[k] + rd_b_phi_stage0[i][k];
-              double sum_n_tot = 0.0;
-
-              for(j = 0; j < 3; j++)
-                sum_n_tot += fabs(T_lumped[k][j] + rd_b_flux_n_stage0[i][k][j]);
+              /* Two independent choices in the indicator, both of which leave
+               * conservation untouched because it holds for any Theta.
+               *
+               * RD_B_SPATIAL_THETA: whether the temporal term enters at all.
+               * Absent, the whole residual is used, which is eq. 44-45 of
+               * Arpaia & Ricchiuto (2015) and is what a time-dependent problem
+               * requires -- the spatial residual alone is a *steady-state*
+               * smoothness detector and measures 0.46 to 0.52 in a perfectly
+               * smooth vortex. Present, the steady form of their eq. 42 is
+               * used instead, retained as the control that establishes this.
+               *
+               * RD_B_FROZEN_THETA: which quadrature of the interval residual.
+               * The same paper notes that eqs. 44-45 are "somewhat unclear
+               * since the meaning of d u_h / d t needs to be made more
+               * precise", and never fixes it. Frozen is the left-endpoint rule
+               * and uses stage-0 data only; unfrozen is the trapezoid and is
+               * the higher-order estimator but reads the predictor state,
+               * which near a discontinuity is the oscillatory intermediate.
+               * Frozen is additionally the only form computable at the opening
+               * call of the two-call hierarchy. */
+#ifdef RD_B_SPATIAL_THETA
+              double theta_num = 0.0;
 #else
-              double total_k = T_target[k] + 0.5 * (rd_b_phi_stage0[i][k] + Phi[k]);
+              double theta_num = T_target[k];
+#endif
+#ifdef RD_B_FROZEN_THETA
+              theta_num += rd_b_phi_stage0[i][k];
+#else
+              theta_num += 0.5 * (rd_b_phi_stage0[i][k] + Phi[k]);
+#endif
+
               double sum_n_tot = 0.0;
 
               for(j = 0; j < 3; j++)
-                sum_n_tot +=
-                    fabs(T_lumped[k][j] + 0.5 * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]));
+                {
+#ifdef RD_B_SPATIAL_THETA
+                  double contrib = 0.0;
+#else
+                  double contrib = T_lumped[k][j];
 #endif
+#ifdef RD_B_FROZEN_THETA
+                  contrib += rd_b_flux_n_stage0[i][k][j];
+#else
+                  contrib += 0.5 * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]);
+#endif
+                  sum_n_tot += fabs(contrib);
+                }
+
+              double total_k = theta_num;
 
               double theta = (sum_n_tot == 0.0) ? 0.0 : dmin(1.0, fabs(total_k) / sum_n_tot);
 #ifdef RD_DIAG_THETA
