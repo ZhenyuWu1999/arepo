@@ -661,7 +661,12 @@ nothing, so the bound collapses and the assertion fires on floating-point
 noise. This is the same failure mode the N scheme showed on a quiet Gresho
 element. With assertions disabled the run completes normally and conserves
 mass to `5e-15`; the scheme is not at fault, the diagnostic's scale is.
-An absolute floor on that tolerance is a separate small repair.
+Commit `eb72efd` closes that diagnostic defect. The mass-apply A2 scale is now
+floored by the same element's uncancelled spatial `phi_scale`, which is
+unit-consistent and does not weaken the check at ordinary scale. A debug Sod
+smoke run passed the former second-step failure and completed to `t=0.03`
+without an A2 termination; its maximum reported element conservation defect
+was `6.94e-17`.
 
 Sod accuracy is also marginally worse for rate-Heun: density L1
 `2.6855e-2` against `2.6261e-2` at `n = 64`, and `1.6232e-2` against
@@ -669,8 +674,9 @@ Sod accuracy is also marginally worse for rate-Heun: density L1
 
 **Decision.** `GL+F1` remains the production path. `rate-Heun` costs 1.6 to
 1.8 times as much, is 1.4 to 2.3 per cent less accurate on both test problems
-at the production timestep, and currently trips a diagnostic on shocks. Its one
-established advantage, fixed-mesh second-order time, is not observable in the
+at the production timestep. Its former shock diagnostic failure is repaired,
+but that does not change the production decision. Its one established
+advantage, fixed-mesh second-order time, is not observable in the
 $\Delta t\propto h$ regime and does not convert into accuracy there.
 
 `rate-Heun` is nevertheless retained in the source tree and belongs in the

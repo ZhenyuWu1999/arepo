@@ -8382,3 +8382,155 @@ any physical test.
 - The runner fix (`OMPI_MCA_btl_vader_single_copy_mechanism=none`) and the
   artifact/SHA256 provenance discipline are worth keeping as permanent
   practice.
+
+## 2026-08-04: hygiene block A completed; static-B-to-moving-mesh roadmap fixed
+
+- Author: `Codex GPT-5`
+- Analysis commit: `8851462` in `Hydro_data_analysis`.
+- AREPO hygiene commit: `eb72efd`.
+- Scope decision: complete B and C on the static mesh before beginning D; no
+  B hierarchy or moving-mesh implementation was enabled in this entry.
+
+### A. Tooling and two correctness guards are now closed
+
+The previously uncommitted analysis tools have been audited and committed as
+one reproducibility unit. They include the self-similar regular triangular
+mesh, fixed-mesh timestep-ladder and semi-discrete extrapolation tools, and the
+periodic 2-D Sod/contact preparation and analysis scripts. Every Python module
+passes `py_compile` and every command-line entry reaches `--help` successfully.
+Generated `__pycache__` directories remain ignored and were removed. This
+commit is historical infrastructure for already reported experiments; it does
+not create a new numerical result.
+
+`eb72efd` closes the two small hygiene defects identified by Claude and Kimi:
+
+1. The `LDA-F1-mass-apply` A2 scale now uses
+   `max(mass_scale, phi_scale)`. On a quiescent element the mass target and F1
+   action may cancel to nearly zero even though the element's uncancelled
+   spatial products have ordinary scale. The local `phi_scale` therefore gives
+   a unit-consistent absolute round-off floor instead of allowing the tolerance
+   to collapse to `1e-47`.
+2. AREPO's checkpoint call site is between the hierarchy predictor and
+   corrector. The predictor has already modified conserved `Q`, while the
+   restart format carries no open-RK-stage marker. A stop, time-limit or
+   scheduled checkpoint now terminates before `restart(0)` rather than writing
+   an ambiguous mid-stage state. This is an explicit guard, not a claim that
+   hierarchical restart has been implemented; a real restart design must save
+   or reconstruct the RK stage and remains future work.
+
+Both affected configurations compile. A local debug rate-Heun Sod run passed
+the old second-step A2 failure and completed to `t=0.03`, with maximum reported
+element conservation defect `6.94e-17`. A normal N hierarchy smoke run reached
+`t=0.003`, with `f1_lumped=0` and positive predictors. A second run with a
+pre-existing stop file exited nonzero with the intended diagnostic and no
+`restartfiles` directory. The two artifacts were local system-LAPACKE builds,
+not production binaries:
+
+- `build_artifacts/hygiene-a2-rate-heun/e2c30690916b-823eafa99611994d`;
+- `build_artifacts/hygiene-restart-guard/e2c30690916b-c458acbf58d9e96a`.
+
+### B. Equal-bin frozen-Theta acceptance package
+
+The production candidate is the coherent-total B corrector with
+`RD_B_FROZEN_THETA`. Fixed-mesh Richardson is no longer an acceptance gate for
+this limited map: absolute values, clipping and a state-dependent switching set
+do not provide the smooth dependence on `dt` required by that instrument. The
+primary gate is joint `(dx, dt)` convergence to the analytic solution.
+
+The first campaign will use the same tiled SWIFT glass at `n=48,96,192`,
+`boost=1`, `TimeMax=1`, and `dt=0.25/n`, comparing three equal-bin paths on the
+same IC at each resolution:
+
+- production LDA+F1 GL;
+- N+RK2;
+- coherent B+RK2 with frozen `Theta` and `RD_DIAG_THETA`.
+
+For density and conserved `U`, report analytic `L1`, `L2` and `Linf` errors,
+adjacent joint-refinement orders, wall time, and particle-ID-matched scheme
+differences. Report the mean, maximum and histogram of both the spatial and
+total-residual `Theta`: the smooth-flow N fraction, previously about 20--30 per
+cent at production resolution, is the central B-versus-LDA dissipation cost.
+The gate requires monotonically decreasing analytic error, a stable joint
+order comparable with the existing glass ladders, positive predictors,
+`f1_lumped=0`, and round-off conservation. It does not demand a fixed-mesh
+temporal order of two. Add `n=384` only if the three-point order remains
+ambiguous.
+
+After the smooth ladder, run exactly one frozen-Theta case on the existing
+8:1 advected glass contact, matched to the coherent-B baseline. Measure density
+overshoot/undershoot, `max|p-1|`, `max|vx-1|`, transverse velocity, positivity
+and conservation. This is a boundedness/regression gate, not an attempt to
+remove the parameter-vector contact defect derived in closed form. A regular
+triangular contact remains forbidden as production evidence and retained only
+as a failure-mode regression.
+
+The proposed smooth saturation `x/(1+x)` is conditional and capped at one
+experiment. Run it only if the joint ladder remains dominated by switching
+noise or frozen B is unacceptably N-like in smooth flow. Otherwise skip it: a
+smooth saturation never reaches the pure-N limit at finite `x` and may give up
+the strict Sod monotonicity that motivated frozen `Theta`.
+
+### C. B hierarchy: derivation before implementation
+
+The current compile-time `#error` remains in force until an element-local
+multirate derivation is written. For every active triangle subinterval, the
+design must:
+
+1. construct and freeze one `Theta_T^n` from that subinterval's stage-0 state;
+2. assemble complete N/lumped and LDA/GL+F1 space-time residual branches over
+   the same interval, including old and new spatial pieces explicitly and not
+   through the irreversible nodal `+dU/2` shortcut;
+3. prove the branch identities
+
+   ```text
+   sum_i R^N_Ti = sum_i R^LDA_Ti = R_T,
+   R^B_Ti = Theta_T^n R^N_Ti + (1-Theta_T^n) R^LDA_Ti;
+   ```
+
+4. deposit `R^B_Ti` in the existing conserved ledger for every vertex, while
+   updating primitive variables only when the complete vertex star
+   synchronizes.
+
+The convex blend is conservative per subinterval only if both branches sum to
+the same `R_T`; that identity, plus predictor positivity and the frozen-vertex
+contract, is the mathematical entry gate. The hierarchy uses production
+GL+F1, not the four-sweep rate-Heun analysis method.
+
+Implementation and validation then proceed in this order:
+
+1. equal-bin collapse to the accepted frozen-B candidate;
+2. two-level smooth Yee, including alternative interface placement;
+3. Sod shock crossing a bin interface;
+4. a coarse island surrounded by fine triangles, then 4:1 and deeper ratios;
+5. 1/4/16-rank decomposition invariance;
+6. active-only reconstruction with repeated MPI migration;
+7. advected-contact crossing as a boundedness regression only.
+
+Every stage requires round-off element/global conservation, positive
+predictors, `f1_lumped=0` on the production glass, and a hierarchy-minus-equal
+defect that shrinks under joint refinement. The existing N Construction A
+remains the reference implementation and is not reopened by this work.
+
+### D. Moving mesh begins only after static B and C pass
+
+Moving mesh must not be mixed into the unresolved B derivation. Once C is
+accepted, the moving-mesh entry starts with the already validated N path and a
+derivation of the ALE/geometric-conservation terms for both RK stages. The
+static-hierarchy assumption that `DualArea` persists is then removed:
+`DualArea` must be recomputed consistently at every mesh rebuild, with geometry
+and state evaluated at the correct stage time.
+
+The acceptance sequence is:
+
+1. uniform free-stream preservation under prescribed mesh motion;
+2. geometric conservation and global conservation with repeated rebuilds;
+3. smooth moving-mesh advection and convergence;
+4. only then a shock, dynamic bins, active-only reconstruction and MPI
+   migration;
+5. extend the established moving-mesh architecture from N to B after the N
+   geometry gates pass.
+
+KH/RT extensions, a contact correction, an asynchronous rate-Heun operator and
+new beta/gamma/Galerkin experiments remain outside this sequence. The immediate
+next executable work item is therefore the B frozen-Theta joint glass ladder,
+not B hierarchy or moving mesh.
