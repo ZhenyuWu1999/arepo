@@ -8224,3 +8224,161 @@ B scheme: its acceptance gate should become joint `(dx, dt)` convergence to
 the exact solution rather than fixed-mesh Richardson, and the frozen-`Theta`
 variant is the current best candidate on the strength of its Sod result.
 Subject to Kimi and Codex agreeing, that is the next piece of work.
+
+## 2026-08-04: Kimi review — contact shelved with conditions, B scheme next, sequencing decided by Zhenyu
+
+- Author: `Kimi K3`
+- Scope: the fourteen entries since `28b8731` — the minimal-ODE gate and
+  rate-consistent Heun closure of barrier (i), the joint `(dx, dt)`
+  staircase and shock/contact hierarchy gates for barrier (ii), the B scheme
+  arc (first exercise, missing-half audit, coherent-total repair, frozen
+  `Theta`), the contact closed-form derivation, the KH/RT pilots, and the
+  GL+F1 versus rate-Heun head-to-head.
+- Verdict requested by Zhenyu on two decisions: shelving the contact
+  discontinuity problem, and taking the B scheme as the next work item
+  (moving mesh after). Both are accepted here, with conditions recorded;
+  one sequencing preference of Zhenyu's overrides a suggestion of mine and
+  is recorded as the decision.
+
+### 1. Disposition of my earlier reservations
+
+For the record, since three of my review items were settled by experiment
+this round:
+
+- **Barrier (i) conjecture — right location, imprecise mechanism, verdict
+  accepted.** I had conjectured the F1 time target being built from the
+  first-order predictor increment was the cause. The minimal-ODE gate
+  localised it more sharply: the predictor advances with `v` while the
+  scheme's own semi-discrete operator is `G = (I - X) v`, so the two stages
+  apply different operators, with local error `O(||X||) dt^2`. This explains
+  everything my conjecture could not — why no beta convention mattered, why
+  N is exempt (X = 0 exactly, not approximately), and why the defect is
+  mesh-independent. The rate-consistent Heun repair measuring 2.0000 on both
+  mesh families closes the question experimentally.
+- **The coupled (dx, dt) glass staircase answered favourably.** The frozen
+  interface defect is order 1.78 to 1.84 and falls as a share of the base
+  error under joint refinement; the codimension-one argument holds
+  quantitatively. Traces are correctly downgraded from mandatory to an
+  `Linf`/robustness improvement, and with that downgrade my three trace
+  preconditions (positivity clamp, validity windows, shock gate) cease to
+  block anything; they stand as spec requirements if trace work resumes.
+- **The N hierarchy validation is now the most complete block in the
+  project.** Conservation at 2e-15 through a shock crossing a bin
+  interface, positivity exactly at the analytic bound, defect shrinking with
+  resolution on both mesh families, decomposition invariance at 1/4/16
+  ranks, active-only migration round-off invariance, and a dedicated
+  contact crossing. I have no remaining objection to Construction A as the
+  production N baseline.
+
+### 2. Shelving the contact problem — agreed, because the closed form changed what shelving means
+
+The derivation in the frozen-Theta entry is the important result of this
+round: P1 interpolation of the parameter vector
+`Z = sqrt(rho) (1, u, v, H)` across a contact produces a spurious pressure
+
+```
+   dp / p = ( sqrt(rho_L) - sqrt(rho_R) )^2 / ( 4 sqrt(rho_L rho_R) )
+```
+
+which depends only on the density ratio, not on `h`, and is a property of
+the *formulation* (any conservative parameter-vector linearisation with a
+P1 state), not of this implementation. Three consequences follow. The
+defect cannot be refined away, re-staged away, or hierarchy-ed away, so
+further measurement would only re-measure a known quantity. The repair
+paths (a different interpolation variable, an explicit pressure correction)
+are derivation-level research that would disturb the conservation and
+positivity properties already validated — not engineering tickets. And the
+production mesh is the glass, where contacts run to completion with bounded
+noise that the KH/RT zero-seed controls have now quantified. Shelving is
+therefore not an admission of defeat but the correct allocation of effort.
+
+Three conditions on the shelving, so that it is a documented limitation and
+not a forgotten one:
+
+1. **The closed form belongs in the thesis as a characterised limitation.**
+   The literature search found the general Roe-type contact phenomenon but
+   not this specific RD mechanism with its closed form. That is worth a
+   thesis subsection in its own right, framed as analysis, not as a known
+   issue.
+2. **Shelve the fix, not the guard.** The `t = 0.511` regular-lattice
+   failure is *not* explained by the closed form — the form explains the
+   spurious amplitude, not the fatal instability, and the coherent-piston
+   account remains a labelled hypothesis. Until it is confirmed, the
+   operational rule "no contact-bearing problems on the regular triangular
+   lattice" should be stated explicitly wherever the lattice is used as a
+   control, and a regression test should keep watching the failure mode.
+3. **Two cheap hygiene items ride along, not shelved:** the absolute floor
+   for the `LDA-F1-mass-apply` A2 tolerance (a genuine small defect on the
+   rate-Heun path, noted in the GL+F1 entry), and the restart hazard from
+   the interface-experiments entry (the first hydro call mutates `Q` before
+   AREPO's interruption check) — recommended there as a terminating
+   assertion, not yet recorded as done.
+
+### 3. The B scheme as the next work item — agreed, with the package sharpened
+
+Three failed Richardson attempts plus an understood cause (the limiter's
+switching set is not a smooth function of `dt`; freezing removes only the
+within-step dependence) mean the remaining B work is not another staging
+experiment. The package, in order:
+
+1. **Adopt the frozen-`Theta` variant as the candidate** and change the
+   acceptance gate to joint `(dx, dt)` convergence to the exact solution.
+   Rationale already in the log: best Sod result the solver has (47 per
+   cent below N, monotone to round-off), and the Richardson instrument is
+   dead for this blend for understood reasons.
+2. **Quantify the smooth-flow dissipation cost explicitly.** The total
+   `Theta` is the correct indicator but is `O(h)` — 0.2 to 0.3 at
+   production resolution, i.e. the repaired B runs as 20 to 30 per cent N
+   in smooth flow. This is the central B-versus-LDA trade number and the
+   thesis must quote it; measure the B accuracy loss against LDA on the
+   Yee ladder directly.
+3. **Fill the obvious hole: frozen `Theta` on the advected glass contact.**
+   The contact is B's worst case (16 per cent density overshoot,
+   `max|vx-1| = 0.604`), and the frozen variant — chosen precisely for
+   restoring monotonicity — has not been run on it. One cheap run; do it
+   before any production claim about B on non-smooth flow.
+4. **At most one experiment on a smooth saturation** (`x/(1+x)` in place of
+   `min(1, x)`), treated as a hypothesis exactly as its author labelled it,
+   not as a fix.
+5. **Then the B hierarchy derivation** (the multirate temporal term for the
+   blend), which remains compile-disabled by deliberate gating.
+
+### 4. Sequencing — B settled entirely on the static mesh before moving mesh (Zhenyu's decision)
+
+My review suggestion was to defer the B *hierarchy* derivation until after
+moving-mesh entry, on the grounds that the N hierarchy already covers the
+"shock plus hierarchy" production requirement. Zhenyu's decision, which
+this project adopts, is the stricter one: **the B scheme is to be fully
+settled in the static-mesh regime — equal-bin acceptance, then the
+multirate derivation — before any moving-mesh work begins.** On reflection
+this is the more consistent position with the discipline this project has
+applied all along (one error source at a time; the same gating logic the
+priority audit used to keep B hierarchy disabled while equal-bin B was
+unsettled). Moving mesh changes geometry in both RK stages, forces DualArea
+recomputation at every rebuild (the current persistence is a static-hierarchy
+design), and eventually brings dynamic bins; entering that with a
+half-settled B would entangle two open error sources in every failing test.
+B is also the only path that is both second order in time and monotone on a
+shock, so the flagship non-smooth configuration should be complete before
+the geometry starts moving.
+
+When moving-mesh work does begin, its entry gate is already clear from this
+log's architecture decisions: a derivation pass coupling the ALE geometry
+terms to the two-call split-Heun structure, DualArea recomputation at each
+rebuild, and free-stream preservation as the first acceptance test, before
+any physical test.
+
+### 5. Smaller endorsements
+
+- GL+F1 staying in production, with rate-Heun recorded as an analysis topic
+  rather than a method, is the right call on the measured evidence (1.6 to
+  1.8 times cheaper, 1.4 to 2.3 per cent more accurate at `dt` proportional
+  to `h`); the retraction about hierarchies not exposing the temporal
+  defect under a local CFL is correct and removes the four-sweep
+  asynchronous derivation from the backlog.
+- The KH/RT pilots are correctly framed as qualitative paired stress tests;
+  the zero-seed controls are what make them interpretable at all, and the
+  fixed-buffer construction is a sound replacement for unvalidated walls.
+- The runner fix (`OMPI_MCA_btl_vader_single_copy_mechanism=none`) and the
+  artifact/SHA256 provenance discipline are worth keeping as permanent
+  practice.
