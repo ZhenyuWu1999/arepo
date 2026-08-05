@@ -8661,3 +8661,334 @@ The practical conclusions of sections 1 and 2 do not depend on the answer:
 frozen total-residual `Theta` is the candidate, it is 3.6 times LDA's error in
 smooth advected flow at `n = 192` with order 1.06, and that is the
 B-versus-LDA trade number the thesis has to quote.
+
+## 2026-08-04: element-local B diagnostic resolves the mean-Theta paradox
+
+- Author: `Codex GPT-5`
+- Scope: diagnostics only. No limiter, residual, mass matrix or time
+  integration formula was changed.
+- Added compile-time diagnostic `RD_DIAG_THETA_MAP`, which writes one CSV per
+  rank on the final corrector only. It records element centroid/area/IDs,
+  componentwise total `Theta`, and
+  `dt sum_i |R_i^N-R_i^LDA|` both before and after multiplication by `Theta`.
+- Analysis script:
+  `Hydro_data_analysis/Analysis/yee_boost/analyze_b_theta_map.py`.
+- Campaign:
+  `Data_arepo_RD/yee_boost/b_theta_map`, tiled Swift glass, `n=48,96`,
+  `boost=0,1`, `dt=0.25/n`, `TimeMax=1`, four ranks. The four IC SHA256
+  values exactly match the corresponding Claude acceptance inputs.
+- Build artifact:
+  `build_artifacts/b-theta-map/89b23e091410-88fdf6162387fb58/Arepo`, SHA256
+  `477cacdcb37173713828c4b2323b3410bc978d28c6264d4212af773caab15f54`.
+- Slurm: build `10368128`, campaign `10368149`; both completed exit zero.
+  All four physical runs also exited zero and passed the existing Yee
+  validator. Their density L1 errors reproduce the acceptance campaign:
+  `5.107780e-4,1.426455e-4` at boost zero and
+  `1.056654e-3,3.945537e-4` at boost one. Every final diagnostic reports
+  `f1_lumped=0`, positive predictor minima, exactly zero mass/energy change,
+  and element conservation defects at round-off. After sorting by particle ID,
+  all four final snapshots are bit-identical to Claude's originals in density,
+  velocity, internal energy and mass (maximum absolute difference zero).
+
+For density, define the actually applied B-minus-LDA magnitude
+
+    C_T = dt Theta_T sum_i |R_i^N - R_i^LDA| / |T|.
+
+Results (`n=48,96` in each pair):
+
+| measure | boost 0 | boost 1 |
+| --- | ---: | ---: |
+| Spearman(`Theta_rho`, local error) | `+0.061,-0.244` | `-0.244,-0.239` |
+| Spearman(`C_T`, local error) | `0.943,0.940` | `0.915,0.928` |
+| correction in top-error 10% | `39.4%,35.9%` | `42.2%,45.7%` |
+| correction in vortex core (`r<1`, ~3.1% of elements) | `9.5%,8.8%` | `21.4%,21.3%` |
+
+The apparent paradox is therefore resolved: mean `Theta` is not the
+dissipation or error measure. At boost zero, density `Theta` is very large in
+the quiet far field (`0.75,0.85`) and very small in the core (`0.084,0.044`),
+so its large global mean costs little. In the advected case, the global mean
+is smaller, but the actual N-minus-LDA correction is more concentrated in the
+vortex core and increasingly in the high-error tail as the mesh is refined.
+This is consistent with the joint order drifting toward one. Because the map
+is from the final step whereas the error is cumulative, the result is strong
+correlational evidence, not a proof of local truncation causality.
+
+### Consequence for a genuinely higher-order B successor
+
+The current B formula has no unconditional second-order guarantee because its
+N branch is first order and neither measured indicator satisfies the required
+smooth-region `Theta=O(h)` scaling. A likely successor should add a selective
+troubled-region sensor and use LDA in genuinely smooth flow. A pressure or
+compression shock sensor is an obvious first experiment, but multiplying
+`Theta` by such a sensor is safe for conservation only; positivity and
+monotonicity must be re-established because a missed shock would expose the
+unlimited LDA branch. An a-posteriori LDA candidate with local N fallback
+(MOOD-like) is more principled but a materially larger project. No such
+scheme is implemented here.
+
+## 2026-08-04: AREPO shock-sensor audit; defer a new sensor until after hierarchy and moving-mesh architecture
+
+- Author: `Codex GPT-5`
+- Full analysis and estimates are recorded in
+  `dev_log/B_scheme_complete_mathematics.md`, Section 4.6.
+- The current AREPO FV source has only
+  `NO_RECONSTRUCTION_AT_STRONG_SHOCKS`, which turns off MUSCL reconstruction
+  across a face for a pressure ratio above 100. This is an emergency flattening
+  rule, not a smooth B sensor.
+- `/home/zwu/arepo_dev/arepo/src/shock_finder/` is Kevin Schaal's approximately
+  5650-line shock finder. It combines `div(v)<0`, aligned temperature/density
+  gradients and Rankine--Hugoniot jump thresholds, then performs Voronoi-ray
+  tracing and MPI to measure Mach number and dissipation. It is a diagnostic
+  and subgrid-physics module, not a reconstruction limiter; wholesale porting
+  is inappropriate for B.
+- Only its local shock-zone predicate is a useful future-work seed. A minimal
+  equal-bin prototype is estimated at 2--4 working days, a thesis-quality
+  sensor with convergence/shock/contact/MPI/hierarchy validation at 2--4
+  weeks, and a full shock-finder port at 4--8 weeks.
+- Decision: do not place this work on the thesis critical path. Retain the
+  accepted frozen-total B, implement and validate B hierarchy next, and revisit
+  a selective sensor after the time/geometry architecture is stable.
+- Hierarchy caveat recorded at the same time: frozen-total `Theta` includes a
+  `T_target` made from star-complete nodal `dU`, so it is unavailable on the
+  first triangle visit of the current one-pass opening loop. A two-pass opening
+  assembly or persisted stage-0 branch correction is required; merely removing
+  the compile guard is not valid.
+
+## 2026-08-04: review proposal — defer B hierarchy and start moving-mesh ALE with N, then LDA
+
+- Author: `Codex GPT-5`, recording Zhenyu's proposed change of priority for
+  review by Kimi and Claude.
+- Status: **proposal for review, not yet an implementation authorization**.
+- This supersedes the earlier sequencing statement that static B hierarchy had
+  to be completed before any moving-mesh work. It does not overturn any
+  numerical result or remove the existing B compile guard.
+
+### 1. Decision and rationale
+
+Do not implement B hierarchical timesteps merely to make B run in that mode.
+The accepted frozen-total B is conservative and shock-robust on the tested
+static equal-bin cases, but its smooth advected-glass order drifts toward one
+and its `n=192` Yee density error is 3.6 times LDA's. Hierarchical execution
+does not improve that spatial/nonlinear-blending behaviour.
+
+A meaningful improvement would require a selective shock/smoothness sensor or
+an a-posteriori fallback. The AREPO source audit shows that this is a separate
+2--4 week thesis-quality project, not a small prerequisite that should be
+hidden inside hierarchy work. Meanwhile coherent frozen-total B hierarchy has
+its own element-history problem: `Theta` needs star-complete `dU`, and the same
+coefficient/stage-0 branches must survive opening, mesh rebuild/domain
+decomposition and closing. Spending that effort would add a mode to the least
+accurate smooth-flow candidate without improving the method.
+
+The proposed thesis priority is therefore:
+
+1. retain frozen-total B as the documented **static equal-timestep** shock
+   candidate;
+2. retain the already validated **N and LDA hierarchical-timestep** results;
+3. defer B hierarchy, a new shock sensor and moving-mesh B to future work;
+4. begin moving-mesh/ALE with equal-timestep N, then extend the accepted
+   geometry architecture to LDA/GL+F1 if the N gates pass.
+
+This is a prioritisation by scientific return, not an assertion that moving
+mesh is easier. Moving mesh is the larger project, but it addresses AREPO's
+defining capability and has a published ALE-RD formulation, whereas
+asynchronous B has no reference construction to port.
+
+### 2. Scope boundary for the first moving-mesh campaign
+
+The first ALE implementation must deliberately exclude:
+
+- hierarchical time bins (`FORCE_EQUAL_TIMESTEPS` remains enabled);
+- B and every nonlinear sensor;
+- gravity, refinement/derefinement and source terms;
+- 3-D;
+- mesh regularisation and uncontrolled connectivity changes until the
+  prescribed-motion gate passes.
+
+The initial target is 2-D hydrodynamic N+RK2 with a prescribed vertex velocity
+and either fixed connectivity or a test interval short enough that no Delaunay
+flip occurs. This isolates geometry and the discrete geometric conservation
+law from every already difficult extension.
+
+### 3. Phase M0 — derivation and data-lifetime audit
+
+Before removing `VORONOI_STATIC_MESH`, write the discrete update implemented by
+the code and map every term to Arpaia--Ricchiuto ALE-RD:
+
+    d_t(J U) + J div(F(U) - sigma U) = 0,
+
+    R_T = [ integral_{T^{n+1}} U* - integral_{T^n} U^n ] / dt
+          + 0.5 Phi_T(U^n) + 0.5 Phi_T(U*).
+
+The audit must specify ownership and lifetime of:
+
+- vertex coordinates at `n` and `n+1`;
+- the half-time element normals/area from averaged coordinates;
+- old and new median-dual areas;
+- old/new element correspondence and canonical vertex IDs;
+- stage state and mesh velocity exchange under MPI.
+
+The current relative eigenvalues
+`u.n +/- c - v_mesh.n` are a useful prerequisite, not a complete ALE residual.
+The predictor's geometrically non-conservative residual and the corrector's
+conservative residual must be distinguished explicitly.
+
+**M0 gate:** a reviewed algebraic element/vertex identity proving global
+conservation and the DGCL before physics code is changed.
+
+### 4. Phase M1 — prescribed-motion N and DGCL
+
+Implement N only, behind a dedicated experimental compile switch. Required
+tests, in order:
+
+1. `v_mesh=0` collapses to the accepted static N result, preferably bitwise and
+   otherwise to round-off;
+2. uniform density, pressure and velocity remain uniform under a non-trivial
+   periodic prescribed mesh deformation;
+3. each element satisfies the discrete geometric conservation law
+
+       |T^{n+1}| - |T^n|
+         = dt integral_{boundary T^{n+1/2}} sigma_h.n ds;
+
+4. `sum_i DualArea_i` remains the box area, while each nodal `DualArea` evolves
+   consistently with `Q_i=DualArea_i U_i`;
+5. mass, momentum and total energy are conserved to round-off;
+6. the result is invariant between one and four MPI ranks by particle ID.
+
+No smooth-flow accuracy claim is made until all six pass. A failed free-stream
+or DGCL gate stops the phase; it must not be hidden by adding diffusion or mesh
+regularisation.
+
+Estimated focused effort: 5--10 working days for derivation plus a
+fixed-connectivity/prescribed-motion prototype.
+
+### 5. Phase M2 — normal AREPO mesh motion and topology
+
+After M1, set the mesh-generating velocity to the fluid velocity, initially
+without regularisation. Test:
+
+1. translating uniform flow and a uniform flow with deliberately nonuniform
+   vertex motion;
+2. moving-mesh Yee/Gresho against the static N controls;
+3. Sod with positivity, monotonicity and exact global conservation;
+4. one/four-rank decomposition invariance through repeated mesh rebuilds.
+
+AREPO may change Delaunay connectivity between `T^n` and `T^{n+1}`. The
+continuous-deformation ALE derivation does not by itself define an edge flip.
+The implementation must either retain connectivity through one RK step or
+adapt the published collapse/expansion interpretation of topology changes. A
+silent nearest-element remap is not acceptable.
+
+**M2 gate:** uniform-flow/DGCL and conservation remain valid across at least
+one real connectivity change. If topology cannot be handled within the thesis
+schedule, stop with M1 as a controlled ALE prototype and record full dynamic
+retriangulation as future work rather than claiming production moving mesh.
+
+Estimated additional effort: 2--4 weeks; topology handling is the dominant
+uncertainty.
+
+### 6. Phase M3 — LDA/GL+F1 on the accepted N geometry
+
+Only after N establishes the ALE geometry contract, add LDA. The temporal term
+must use the geometry-dependent mass matrices,
+
+    sum_j [m_ij^{T^{n+1}} U_j* - m_ij^{T^n} U_j^n] / dt,
+
+not the static `m_ij(U_j*-U_j^n)/dt` shortcut. Near-Lagrangian motion makes
+`S^-` rank deficiency common, so the existing F1 SVD/fallback policy must be
+revalidated rather than assumed.
+
+Required gates:
+
+1. zero-motion collapse to static LDA+GL/F1;
+2. the same uniform-flow/DGCL and MPI tests as N;
+3. positive predictors and `f1_lumped=0` on the smooth production glass;
+4. joint `(dx,dt)` convergence on moving Yee, with N as the first-order control;
+5. Sod robustness compared with moving N and static LDA.
+
+Estimated additional effort after stable N geometry: 1--2 weeks.
+
+### 7. Explicitly deferred work and proposed thesis boundary
+
+Deferred until after the thesis critical path:
+
+- B hierarchical timesteps;
+- shock/smoothness-sensor B and MOOD-like local fallback;
+- moving-mesh B;
+- moving mesh combined with hierarchical time bins;
+- 3-D ALE-RD, gravity and refinement.
+
+Proposed thesis capability statement:
+
+| capability | N | LDA | B |
+| --- | --- | --- | --- |
+| static, equal timestep | complete | complete | complete, with documented smooth/contact limitations |
+| static hierarchy | complete | complete | future work |
+| moving mesh, equal timestep | primary target | stretch target after N | future work |
+
+This boundary is scientifically coherent: hierarchy is demonstrated with both
+the monotone N and higher-order LDA branches; B documents the robustness versus
+accuracy trade without pretending that scheduling changes its convergence;
+moving mesh is developed first with the branch that has no F1 or nonlinear
+blend, then reused by LDA.
+
+### 8. Questions for Kimi and Claude review
+
+1. Is deferring B hierarchy consistent with the thesis claims already drafted,
+   or is there a specific result that truly requires hierarchical B?
+2. Is the M0 interpretation of the predictor/corrector ALE residual and the
+   new-control-volume placement correct?
+3. Can AREPO connectivity be safely held fixed during one RK step for M1/M2,
+   or must the collapse/expansion topology treatment enter immediately?
+4. Are old/new nodal median-dual areas sufficient state, or must old element
+   connectivity and mass matrices also persist explicitly?
+5. Is N-first then LDA the correct separation of geometry from F1, and are any
+   existing static/hierarchy invariants invalidated by this sequence?
+6. Which result is the minimum defensible moving-mesh thesis deliverable:
+   prescribed deformation with DGCL, or full AREPO retriangulation with edge
+   flips?
+
+Until these questions are reviewed, no moving-mesh source guard is removed and
+no B hierarchy implementation is started.
+
+### Addendum: spatial-Theta B hierarchy retained only as a fallback spike
+
+Zhenyu noted that a frozen **spatial** `Theta` removes the main total-B
+hierarchy obstacle. This is correct: it is available from `U^n` on the first
+opening visit and can be recomputed from the unchanged committed primitives at
+closing, so no star-complete `T_target` or persistent old N/LDA element
+branches are required. A complete formula, conservation argument, tests and
+stop conditions are now recorded in
+`dev_log/B_scheme_complete_mathematics.md`, Section 8.1.
+
+The bounded estimate is 3--6 working days, but the result would only be an
+`experimental spatial-Theta B hierarchy`. Existing advected-Yee and Sod tests
+show that spatial B is less accurate than frozen-total B and has no smooth
+second-order guarantee. It adds an execution mode without improving the
+method. The active proposal therefore remains unchanged: **proceed directly
+to moving-mesh equal-bin N, then LDA**, and retain the spatial-B spike solely
+as a documented fallback if later review or thesis-completeness requirements
+demand it.
+
+---
+
+## 2026-08-05: this log is closed; work continues in volume 2
+
+- Author: `Claude Code Opus 5`, at Zhenyu's request.
+- **Nothing here is retracted.** The split is administrative: this file had
+  reached 8971 lines and no longer fit comfortably in an agent context window,
+  which had begun to cost re-derivation of already settled facts.
+
+The active log is now `dev_log/RD_DEVELOPMENT_LOG_2.md`, which opens with the
+moving-mesh / ALE phase. Its section 1 carries the handover forward: what is
+settled, what is deferred and by whose decision, the conventions that continue
+to apply, and the questions still open at this point — in particular the
+unresolved question of why the mean blending parameter `Theta` does not predict
+the measured order, which is with Codex for review.
+
+Corrections to anything in this volume are recorded in volume 2 with a pointer
+back, so the two files read as one chronology. The companion documents
+(`B_scheme_complete_mathematics.md`, `LDA_F1_Heun_vs_standard_LDA_RK2.md`,
+`mass_matrix_order_analysis.md`, `RD_hierarchical_timestep_*.md`,
+`RK2_timestep_movingmesh_analysis.md`) are unaffected and remain live
+references for both volumes.
