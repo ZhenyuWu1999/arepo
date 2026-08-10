@@ -3,7 +3,7 @@
 InitCondFile                          ./IC_freestream_glass48
 ICFormat                              3
 
-OutputDir                             ../../output_ALE_fs_glass_reg/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_ALE_fs_glass_reg/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

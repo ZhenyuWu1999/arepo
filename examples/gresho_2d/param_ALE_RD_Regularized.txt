@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_freestream_random48
 ICFormat                              3
-OutputDir                             ../../output_ALE_RD_regularized/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_ALE_RD_regularized/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

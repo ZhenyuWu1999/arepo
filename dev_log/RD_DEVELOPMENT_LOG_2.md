@@ -3512,3 +3512,88 @@ committed generator. Roughly thirty parameter files and eight initial
 conditions have accumulated over sections 18 to 21. The campaign about to be
 run is the one whose numbers will be cited, so it should be the first one a
 fresh checkout can reproduce.
+
+---
+
+## 22. 2026-08-11: what `sigma` actually is, and the reproducibility cleanup
+
+### 22.1 The three components of the mesh velocity
+
+`set_vertex_velocities.c` builds `VelVertex` in three stages:
+
+```
+VelVertex = P[i].Vel                          fluid velocity                (:83)
+          + 0.5 * dt * (-grad p / rho)        half-step acceleration    (:100-114)
+          + regularisation drift              centroid and face angle   (:150-250)
+```
+
+`SphP[i].Grad.dpress` is AREPO's finite-volume least-squares gradient, computed
+by `calculate_gradients()` at `run.c:214`, immediately before
+`set_vertex_velocities()` at `run.c:220`. The half-step acceleration is the
+Pakmor et al. (2016) device; under MHD it also picks up the Lorentz term.
+
+Three observations.
+
+**It does not threaten the DGCL.** `sigma` is arbitrary provided the same
+displacement velocity enters the point drift, the reconstructed geometry and the
+ALE residual, and it does: `predict.c:383` drifts with `VelVertex` and the
+geometry helper reconstructs from the same field.
+
+**It is, however, doing unnoticed protective work.** Section 21.3 found
+`min_pivot_ratio` never approaching the fallback threshold, even on a glass
+where the geometry diagnostic reports the centroid regularisation completely
+inactive. The reason is this term: it keeps `w = |u - sigma| / c` away from
+zero, so `S^-` never becomes the near-singular matrix that section 3.4 measured
+on prescribed pure-Lagrangian motion. **Replacing `sigma` by a pure Lagrangian
+velocity would move the solver back into the regime section 3.4 warned about.**
+That coupling between the mesh-velocity policy and the upwind matrices' rank was
+not previously noticed, and it should be checked whenever the policy changes —
+which section 14.5 item 6 plans to do.
+
+Codex's observation that RD could build its own pressure gradient stands: the
+natural RD object is the `P^1` element gradient
+`grad p_h = sum_j p_j n_j / (2|T|)` on the Delaunay element, rather than the
+finite-volume least-squares gradient on the Voronoi cell. That is a mesh-policy
+comparison for section 14.5 item 6, not a correctness question.
+
+**A correction to section 10.** `rd_ale_geometry_velocity_begin()` is called
+after the acceleration loop, so `RdAleQuasiLagrangianRms` already includes
+`u + (dt/2) a` and only `RdAleRegularisation*` isolates the regularisation. The
+section 10 description of the bracketing is otherwise accurate, and this is
+exactly why the glass runs show zero regularisation activity yet a non-zero
+mesh velocity.
+
+### 22.2 Reproducibility, carried as P3 since section 15.5
+
+Done, as a cleanup before the accuracy campaign rather than after it.
+
+**Initial conditions.** `examples/gresho_2d/create_mmrd_ics.py` regenerates
+every initial condition the moving-mesh campaign used, and writes
+`MMRD_ICS.sha256`. The self-contained families, the `smoothjit` resolution pair
+and the eight `ens` members, are built from fixed seeds; the `freestream` and
+`smooth` families reuse an existing Gresho point set and overwrite only the
+fluid state, so a comparison against the Gresho runs varies the state and not
+the generators. Running it reproduced the four spot-checked initial conditions
+**bit for bit** against the files the campaign actually used, so sections 18 to
+21 are now reproducible from the repository. `--verify` checksums what is on
+disk.
+
+**Parameter files.** Fifty-one moving-mesh parameter files had an output path
+inside the working tree. They now point at the results location below. The three
+remaining absolute `/home/zwu/...` paths are in `param_StaticMesh.txt`,
+`param_RD.txt` and `param_MM.txt`, which predate this phase and are left alone.
+
+**Run output.** Fifty-two `output_*` directories, 384 MB, and 303 batch logs
+have been moved out of the repository to
+
+```
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/
+```
+
+with a `README.md` recording that nothing there is tracked, nothing there is an
+input, and each directory is reproducible from its like-named parameter file,
+the generator above and the immutable artifact named in its `provenance-*`
+directory. Batch logs are under `_slurm_logs/`.
+
+P4, the general build-fingerprint hole for untracked sources, remains open and
+is now the only outstanding item from section 14.2.

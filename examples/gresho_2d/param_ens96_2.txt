@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_ens96_2
 ICFormat                              3
-OutputDir                             ../../output_ens96_2/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_ens96_2/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

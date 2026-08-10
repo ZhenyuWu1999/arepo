@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_smoothjit96
 ICFormat                              3
-OutputDir                             ../../output_res96/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_res96/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

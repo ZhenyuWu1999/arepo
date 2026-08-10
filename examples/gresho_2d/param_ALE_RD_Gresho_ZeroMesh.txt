@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_gresho_v0_random48
 ICFormat                              3
-OutputDir                             ../../output_ALE_RD_gresho_zero_mesh/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_ALE_RD_gresho_zero_mesh/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_freestream_random48
 ICFormat                              3
-OutputDir                             ../../output_G_zero_orig/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_G_zero_orig/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

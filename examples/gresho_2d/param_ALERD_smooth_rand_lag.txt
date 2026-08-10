@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_smooth_random48
 ICFormat                              3
-OutputDir                             ../../output_ALERD_smooth_rand_lag/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_ALERD_smooth_rand_lag/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

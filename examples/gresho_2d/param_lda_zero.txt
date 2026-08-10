@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_smoothjit48
 ICFormat                              3
-OutputDir                             ../../output_lda_zero/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_lda_zero/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

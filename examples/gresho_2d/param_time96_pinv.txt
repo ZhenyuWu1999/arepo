@@ -2,7 +2,7 @@
 
 InitCondFile                          ./IC_smoothjit96
 ICFormat                              3
-OutputDir                             ../../output_time96_pinv/
+OutputDir                             ../../../Hydro_data_analysis/Data_MMRD_debug/output_time96_pinv/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1
