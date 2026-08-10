@@ -3395,3 +3395,120 @@ The methodological lesson is recorded deliberately: two-point ratios of a
 fluctuating quantity produced a plausible but meaningless order in section 19,
 and only an ensemble settled it. Any future order claim about a
 topology-driven quantity in this project should use one.
+
+---
+
+## 21. 2026-08-11: LDA on the moving mesh, and the pseudo-inverse switch measured
+
+- Author: `Claude Code Opus 5`.
+- Source change: one guard in `residual_distribution_solver.c`. Nothing else.
+
+### 21.1 LDA needed one line
+
+The `RD_ALE_EQUALSTEP` guard required `N_SCHEME`. Opening it to `LDA_SCHEME`
+was the only code change, for two reasons that were not obvious until the
+source was read:
+
+- **The mass coefficient was already correct.** Line 1123 assigns
+  `set->normals[slot] = geometry->normals[RD_ALE_MID]`, replacing the whole
+  structure, so `tri_normals_list[i].area` is `A_mid` everywhere it is used,
+  including the F1 temporal target. The Arpaia midpoint mass therefore reaches
+  LDA without any further change, which is what section 8.4 predicted would be
+  a one-line edit and turns out to be a zero-line one.
+- **The mesh-velocity split needed nothing either.** The section 18 correction
+  is added to `Phi[k]`, and `rhs[k][0] = Phi[k]` is exactly what the LDA solve
+  consumes, so LDA distributes the correction with `beta_i` automatically. That
+  is the correct weight: the row sum of `m_ij^{LDA} = (|T|/3) beta_i` is
+  `beta_i |T|`. The explicit `1/3` loop written for N is inside the
+  `N_SCHEME || B_SCHEME` block and compiles out under LDA, which is also
+  correct, since `1/3` is the row sum of N's lumped mass.
+
+B remains excluded, now by an explicit message rather than by omission.
+
+### 21.2 The LDA gates
+
+| gate | flips | `d(mass, px, py, E)` |
+| --- | ---: | --- |
+| `sigma = 0` | 0 | `-2.2e-16, -1.1e-16, +5.6e-17, -4.4e-16` |
+| uniform state, regularisation on | **609** | `0, 0, 0, +4.4e-16` |
+
+The zero-mesh run also exercises the internal bitwise-collapse assertion at
+`residual_distribution_solver.c:1161`, which passed. On the uniform state,
+`max|dv| = 4.4e-16` and `max|du| = 1.8e-15`: **LDA preserves the free stream
+exactly through 609 connectivity changes.** Both gates match what N achieved in
+sections 17 and 19, so moving to a second-order distribution has cost nothing
+in the geometric properties.
+
+### 21.3 The pseudo-inverse switch: cost measured, benefit absent
+
+Section 3.5 decided that the ALE path should require `RD_ALWAYS_PSEUDOINVERSE`,
+because at `sigma = u` the advective eigenvalues vanish, `S^-` becomes
+singular, and the pivot-ratio branch at `RD_LU_FALLBACK_PIVOT_RATIO = 1e-12`
+would then be decided by round-off and hence by the domain decomposition. That
+decision was never implemented. It is now measured instead.
+
+**Cost**, `n = 96`, `t = 0.04`, identical 64 steps and 829 flips in both runs:
+
+| solver | wall | CPU from `cpu.txt` |
+| --- | ---: | ---: |
+| LU with pivot fallback | 16 s | **15.40 s** |
+| always pseudo-inverse | 30 s | **28.76 s** |
+
+**The pseudo-inverse costs 87 per cent more.**
+
+**Benefit**, same pair, and a second pair on a glass:
+
+| case | conservation, LU | conservation, pseudo-inverse | `max\|dVel\|` between them |
+| --- | --- | --- | ---: |
+| n=96 jittered, 829 flips | `+3.3273e-7, +3.6508e-7, +2.0977e-9, +5.5714e-7` | **identical to all digits** | 2.4e-13 |
+| n=48 glass, 2 flips | `+3.8517e-7, +3.1164e-7, +1.1550e-7, +1.5427e-7` | **identical to all digits** | 7.4e-15 |
+
+The two solvers agree to `8e-14` relative in mass and give bitwise-identical
+conserved totals. There is no benefit to buy.
+
+**Why the section 3.4 concern does not materialise.** The solver reports
+`min_pivot_ratio` per step. In these runs it is `5e-7` to `1.4e-6`, **five to
+six orders above the `1e-12` fallback threshold**, so the SVD path never fires
+at all. That holds even on the glass, where the geometry diagnostic reports
+`regularisation_active_fraction = 0` from the first step to the last and
+`reg_rms = 0`, that is, where the centroid drift is switched off entirely and
+`sigma` is the fluid velocity.
+
+Section 3.4 measured the degeneracy on **prescribed** pure-Lagrangian motion of
+an analytic velocity field, with `sigma` set exactly equal to `u`. AREPO's
+`VelVertex` is never exactly `u`: even with the centroid regularisation
+inactive it carries the finite-volume half-acceleration predictor, which keeps
+`w = |u - sigma|/c` away from zero. The offline model that produced the concern
+does not describe the code's actual mesh velocity.
+
+**Revised recommendation, superseding section 3.5.** Do not require
+`RD_ALWAYS_PSEUDOINVERSE` on the ALE path. It doubles the solver cost and
+changes nothing measurable. Keep it as what its own comment says it is, a
+reference path for confirming the fast path, and re-check `min_pivot_ratio` on
+any new flow class. Two caveats stand:
+
+- the degeneracy is a property of **stagnation**, `u = sigma = 0`, not of the
+  Lagrangian limit as such. Section 3.5 recorded that the Sod at `t = 0` runs
+  100 per cent on the SVD path because `u = 0` in both states. A shock tube or
+  any flow with a stagnation region will still exercise it, and should be
+  re-measured when it is reached;
+- the rank-invariance half of the argument cannot be tested at all yet, because
+  the ALE prototype is guarded to one MPI rank. It must be revisited when the
+  prototype goes multi-rank, and `min_pivot_ratio` is the quantity to watch.
+
+### 21.4 Status and next
+
+LDA now has, on the moving mesh: bitwise static collapse, exact free-stream
+preservation through 609 flips, and the same conservation behaviour as N. With
+section 20's result that the remaining defect is purely topological and
+fourth-order convergent, **the accuracy programme is unblocked**: the moving
+Yee and Gresho convergence campaign, which is the minimum defensible thesis
+deliverable of section 4, can now be run with a second-order scheme.
+
+The one item that should precede it is reproducibility, carried as P3 since
+section 15.5 and now overdue: the parameter files contain absolute
+`/home/zwu/...` paths, and the initial conditions are untracked HDF5 with no
+committed generator. Roughly thirty parameter files and eight initial
+conditions have accumulated over sections 18 to 21. The campaign about to be
+run is the one whose numbers will be cited, so it should be the first one a
+fresh checkout can reproduce.

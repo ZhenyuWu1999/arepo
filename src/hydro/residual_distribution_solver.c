@@ -65,8 +65,11 @@ static lapack_int solve_system(int n, double *A, double *b);
 #endif
 
 #ifdef RD_ALE_EQUALSTEP
-#if defined(VORONOI_STATIC_MESH) || !defined(FORCE_EQUAL_TIMESTEPS) || !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(N_SCHEME)
-#error "RD_ALE_EQUALSTEP v1 requires moving-mesh, equal-step, total-residual N/lumped RD."
+#if defined(VORONOI_STATIC_MESH) || !defined(FORCE_EQUAL_TIMESTEPS) || !defined(RD_RK2_TOTAL_RESIDUAL)
+#error "RD_ALE_EQUALSTEP requires a moving mesh, equal timesteps and the total-residual RK2 path."
+#endif
+#if !defined(N_SCHEME) && !defined(LDA_SCHEME)
+#error "RD_ALE_EQUALSTEP supports N/lumped and LDA/F1; B and its nonlinear sensor stay outside the ALE phase."
 #endif
 #if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || defined(MHD) || \
     defined(PASSIVE_SCALARS)
