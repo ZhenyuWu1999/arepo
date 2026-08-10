@@ -38,6 +38,15 @@ This is the **active** development log. It succeeds
 > accepts `U` as the RD degree of freedom and `Q=mU` as storage, but deliberately
 > leaves the exact endpoint-mass/modified-midpoint equivalence and an
 > interrupted hierarchical flip interval open for review.
+>
+> **Latest implementation status, 2026-08-10:** section 10 records the first
+> diagnostic-only Stage 0 implementation inside AREPO and a real Gresho
+> regularisation on/off comparison.  The element DGCL and area identities hold
+> to round-off.  Regularisation did not materially reduce the number of edge
+> flips per unit physical time, but it prevented the severe mesh degradation
+> and space-time triangle inversions seen without regularisation.  No ALE-RD
+> fluid update has been implemented yet.  The immediate test order and the
+> mesh-velocity-predictor question are fixed in section 10.6.
 
 - Opened: 2026-08-05.
 - Time zone: Europe/London.
@@ -954,20 +963,21 @@ as a cheap direct check of 7.3(a) and (b).
 
 Zhenyu has recorded that he is not fully convinced. The specific soft points:
 
-1. **Is `sum_i Delta m_i^topo x_i = 0` correct?** The argument is that
-   `sum_i m_i x_i = sum_T |T| g_T = integral x dx` over the patch, identical for
-   both triangulations because both tile it. This is the load-bearing step; if it
-   fails the leak returns to `O(h^3)` and the case for a topology operator is
-   reopened.
+1. ~~**Is `sum_i Delta m_i^topo x_i = 0` correct?**~~ **Measured; see section 9.1.
+   Confirmed to round-off on real connectivity changes including cascades.**
+   The argument is that `sum_i m_i x_i = sum_T |T| g_T = integral x dx` over the
+   patch, identical for both triangulations because both tile it. This was the
+   load-bearing step; it holds.
 2. **Is it legitimate to treat `U_i` as a point value carried through the
    flip?** In `P^1` Lagrange terms it is by definition. A reviewer could argue
    that the converged RD solution's `U_i` is only a point value to `O(h^2)`, and
    that this weakens 7.3(a).
-3. **Does the leak accumulate coherently?** The `O(h)` cumulative estimate
-   assumes `Delta m_i^topo` has no systematic correlation with the local
-   Hessian. Under shear, flips may have a preferred orientation relative to the
-   flow, in which case the errors could add rather than random-walk. Not
-   measured.
+3. **Does the leak accumulate coherently?** **Partly answered; see section 9.4.**
+   No drift is detectable at 400 steps, and for Lagrangian motion the per-step
+   defects are serially uncorrelated, so the random walk is the right model. A
+   weak drift below the detection threshold is not excluded, and settling that
+   requires a long run on a mesh that stays healthy, which requires AREPO's
+   regularisation. Carried into the implementation as a standing diagnostic.
 4. **Smoothness is assumed.** At a shock the two interpolants differ by
    `O(jump)` and the leak is `O(h^2 * jump)`, not `O(h^4)`. Whether that is
    tolerable on the Sod and shear cases is untested, and is the situation in
@@ -1398,6 +1408,430 @@ asking for since section 4.
 
 ---
 
+## 9. 2026-08-07: the topology defect measured on real connectivity changes
+
+- Author: `Claude Code Opus 5`, at Zhenyu's request, before any AREPO change.
+- **No solver source was changed.** Mesh-only measurement, no build, no cluster.
+- New code: `Hydro_data_analysis/Analysis/moving_mesh/ale_topology_defect.py`,
+  `python ale_topology_defect.py --steps 40 --long-steps 400`.
+- Complements Codex's `ale_geometry_identities.py` of 2026-08-06, which was run
+  and independently reproduces every claim of section 8.7: `delta_T` vanishes for
+  rigid translation, matches the closed form
+  `(dt^2/8)(sigma_1-sigma_0) x (sigma_2-sigma_0)` to round-off, and the mass and
+  divisor pair identities `Campoli - Arpaia = delta_T` hold in both places.
+  226 checks, all passing. It also reproduces section 7.3: the unrebased `Q`
+  gives `max|dU| = 2.1`, an `O(1)` jump, while the rebase preserves `U` exactly.
+
+### 9.1 The moment identities hold on real, cascading flips
+
+`ale_geometry_identities.py` verifies the moment identities on **one symmetric
+unit square**, which is the easiest instance, and obtains the `O(h^4)` order by
+scaling that one patch. This entry measures the same quantities on the
+connectivity changes that actually occur under Lagrangian motion, grouping the
+symmetric difference of the two triangulations into connected patches.
+
+40 steps at CFL 0.3, relative errors normalised by the patch weight and by the
+patch diameter:
+
+| case | changed | patches | **cascades** | rel abs zeroth | rel abs first |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| jittered n=24 yee | 883 | 306 | **93** | 9.6e-16 | 4.4e-16 |
+| jittered n=24 kh | 832 | 325 | **71** | 1.2e-15 | 7.2e-16 |
+| jittered n=48 yee | 1727 | 719 | **110** | 1.1e-15 | 8.2e-16 |
+| jittered n=48 kh | 1631 | 689 | **106** | 2.3e-15 | 1.2e-15 |
+| swift48 n=48 yee | 1433 | 520 | **134** | 1.5e-15 | 7.8e-16 |
+| swift48 n=48 kh | 1352 | 432 | **137** | 1.5e-15 | 1.0e-15 |
+
+6462 checks, all passing. The cascade column counts patches with more than two
+triangles on one side, that is, not isolated 2-2 flips: between 71 and 137 per
+case. **Section 7.9 item 1, the load-bearing step of section 7, is confirmed**,
+and so is section 8.3's generalisation that the identities need no
+isolated-flip hypothesis and hold for any two triangulations of the same point
+set.
+
+### 9.2 The periodic boundary is a real trap, and AREPO inherits it
+
+This deserves emphasis, because it was a genuine failure before it was
+understood, and the same trap exists in the AREPO implementation.
+
+The first run of the patch moment test **failed on four patches**, with relative
+first-moment errors of 0.15 to 0.41 — `O(1)`, not round-off. All four straddled
+the periodic boundary. The cause is not mathematical. `periodic_triangulation`
+keeps the image whose lowest-index vertex lies in the central copy; when the
+connectivity changes, the lowest-index vertex of a boundary-straddling patch can
+change, so **the same physical point is represented by different periodic images
+in the old and the new triangulation**. The first moment then differs by a
+lattice vector times the patch area, which is exactly the observed magnitude.
+Minimal-imaging each patch against an anchor before taking any moment removes it
+completely, and is unambiguous because a patch is `O(h)` across while the box is
+`O(1)`.
+
+**The AREPO consequence.** The same reconstruction is required there:
+`x^n = x^{n+1} - VelVertex * dt` must be formed for ghost points as well as
+local ones, and **the image chosen for a ghost point must be the one consistent
+with the element that uses it**, not an independently chosen minimal image.
+`DP[].x` already carries the resolved image for the current configuration, and
+subtracting `VelVertex * dt` preserves it, so the natural implementation is
+correct — but only if `VelVertex` for the ghost is fetched through the same
+`PrimExch` indexing that the residual loop already uses at
+`residual_distribution_solver.c:1581`, and never recomputed from a wrapped
+position. A per-patch first-moment check belongs in the Stage 0 diagnostics from
+the start, rather than being reached for after a symptom appears.
+
+### 9.3 The `O(h^4)` order, on hundreds of real patches
+
+Per-patch defect `|sum_{i in P} dm_i U_i|` for a smooth periodic field, jittered
+family, 40 steps:
+
+| motion | n | patches | mean | order | median | order | worst | order |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| yee | 24 | 306 | 5.216e-4 | | 3.419e-4 | | 4.264e-3 | |
+| yee | 48 | 719 | 2.600e-5 | **4.33** | 1.642e-5 | **4.38** | 1.525e-4 | 4.81 |
+| kh | 24 | 325 | 8.025e-4 | | 6.558e-4 | | 5.702e-3 | |
+| kh | 48 | 689 | 4.645e-5 | **4.11** | 3.861e-5 | **4.09** | 3.463e-4 | 4.04 |
+
+The mean and the median are the meaningful statistics; the worst is an extreme
+value over a few hundred samples. All six orders bracket 4. **Section 7.3's
+`O(h^4)` per patch is confirmed on real flips.** The accumulated defect follows:
+over the same 40 steps, `sum |D_n|` falls from 5.00e-2 at n=24 to 4.49e-3 at
+n=48, a factor 11.1, or `h^3.5`, consistent with `h^4` per patch against a
+roughly doubled patch count.
+
+### 9.4 Accumulation: no drift detected, and the offline ceiling
+
+The question of section 7.9 item 3 is whether the per-step defects add
+coherently, giving a systematic drift `~ N mu`, or random-walk, giving bounded
+noise `~ sqrt(N) s`. An earlier version of this script fitted a slope to
+`|cumsum D|` on one realisation and returned exponents from -0.96 to 2.19,
+including negative ones, which is the signature of an estimator measuring noise.
+That approach is abandoned. The decomposition
+
+```
+sum_{n<=N} D_n = N mu + fluctuation of size ~ sqrt(N) s,   mu = mean(D), s = std(D)
+```
+
+is exact and needs no ensemble: `t = |mu| sqrt(N) / s` tests whether any drift
+exists, and `N* = (s/mu)^2` is where a drift would overtake the walk.
+
+400 steps, n=24, CFL 0.3. `map` is the Arpaia section 6.2.1 prescribed mapping,
+whose displacement vanishes on the box boundary and returns to the identity each
+period:
+
+| motion | flips/step | **min\|T\|/mean\|T\|** | field | mu | s | **t** | **lag-1** |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| **map** | 51.7 | **1.6e-1** | trig | -1.21e-4 | 1.13e-2 | **0.21** | +0.889 |
+| **map** | 51.7 | **1.6e-1** | bump | +1.82e-4 | 3.91e-3 | **0.93** | +0.629 |
+| yee | 20.6 | 5.8e-3 | trig | +1.74e-4 | 3.34e-3 | 1.04 | -0.024 |
+| yee | 20.6 | 5.8e-3 | bump | +3.10e-4 | 5.89e-3 | 1.05 | -0.021 |
+| kh | 23.2 | **3.4e-4** | trig | +1.43e-4 | 5.17e-3 | 0.55 | +0.000 |
+| kh | 23.2 | **3.4e-4** | bump | +6.84e-5 | 6.89e-3 | 0.20 | -0.019 |
+
+**No `t` exceeds 1.05, so no statistically significant drift is present at 400
+steps in any case or either field.** The lag-1 autocorrelation separates the two
+kinds of motion: for Lagrangian motion it is essentially zero, so the per-step
+defects are serially uncorrelated and **the random walk is the correct model**;
+for the prescribed map it is 0.63 to 0.89, which is expected because the map is
+smooth in time, and means the fluctuation grows faster than `sqrt(N)` at first
+while still carrying no drift.
+
+**The offline measurement has reached its ceiling, and the reason is the missing
+regularisation.** The `min|T|/mean|T|` column is a mesh-quality monitor. After
+400 unregularised Lagrangian steps the shear case has fallen to 3.4e-4, that is,
+near-degenerate slivers, and the vortex to 5.8e-3. Those two rows are therefore
+partly measuring a pathological mesh. The `map` row, whose mesh quality stays
+bounded at 0.163 for the whole run while carrying the **highest** flip rate of
+the three, is the trustworthy one, and it shows no drift.
+
+Extrapolating at n=24 and CFL 0.3, which is the worst combination tested, with
+`mu` taken at face value even though it is not significant:
+
+| | N = 1e3 | N = 1e4 |
+| --- | ---: | ---: |
+| drift, one-sigma upper bound | 0.7-3.1e-3 | 0.7-3.1e-2 |
+| random walk | 1.0-3.6e-3 | 0.3-1.1e-2 |
+
+This is not negligible at that resolution and CFL, which corrects an earlier
+verbal characterisation of the question as academic. It converges rapidly,
+however: `h^3.5` in the accumulated defect from 9.3, and the production Yee
+campaign runs at CFL 0.03, where 9.5 shows the flip rate is five times lower
+again.
+
+### 9.5 The dt sweep: `delta_T` grows as `dt^2`, and both hazards stay empty
+
+Jittered n=48, single step, per CFL:
+
+| CFL | changed (yee) | max `delta_T`/\|T\| (yee) | max (kh) | inverted pullback | **non-positive Arpaia divisor** |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.03 | 14 | 1.36e-5 | 1.06e-7 | 0 | **0** |
+| 0.10 | 32 | 1.51e-4 | 1.17e-6 | 0 | **0** |
+| 0.30 | 78 | 1.35e-3 | 1.04e-5 | 0 | **0** |
+| 0.80 | 172 | 9.32e-3 | 7.41e-5 | 0 | **0** |
+| 1.50 | 282 | 3.00e-2 | 2.60e-4 | 0 | **0** |
+| 3.00 | 416 | 8.83e-2 | 1.04e-3 | 0 | **0** |
+
+Three results:
+
+1. **`delta_T` scales exactly as `dt^2`** — a tenfold CFL increase multiplies it
+   by 99 — confirming the closed form of section 8.7 numerically.
+2. **The caveat Arpaia--Ricchiuto raise against their own scheme never fires.**
+   The modified median dual `|Sbar_i^{n+1/2}|` stays positive at every CFL up to
+   3.0, and no pulled-back element inverts either. Their argument that the
+   correction is `O(h^2)` for `O(h)` displacements survives at the
+   quasi-Lagrangian design point, at least without regularisation.
+3. **The choice of formulation is numerically almost immaterial.** At the
+   production CFL of 0.3 the two forms' mass coefficients differ by 0.14 per
+   cent on the vortex and 0.001 per cent on the shear layer. This is direct
+   support for section 8.7's recommendation to implement the common structure
+   and select the pair of scalars at compile time. The difference reaches only
+   9 per cent even at CFL 3.
+
+Note also that at CFL 0.03, which is what the Yee campaign's `dt = 0.25/n`
+corresponds to, only 14 triangles change per step out of the whole mesh. **On
+the thesis convergence runs the topology defect is close to absent.**
+
+### 9.6 What this closes, and what must move into AREPO
+
+Closed offline:
+
+- the moment identities on real cascading flips (7.9 item 1);
+- the `O(h^4)` per-patch order, on hundreds of samples rather than one square;
+- `delta_T = O(dt^2)` and the equivalence of section 8.7, independently
+  reproduced by Codex's script;
+- the Arpaia positivity caveat, empty to CFL 3;
+- the periodic-image trap, understood and fixed, with the AREPO requirement
+  stated in 9.2.
+
+Cannot be closed offline, and should be carried as Stage 0 diagnostics rather
+than as separate experiments:
+
+1. **Mesh regularisation.** Springel (2010)'s drift toward the cell centroid is
+   not modelled here. It should reduce distortion and therefore the flip rate,
+   which would make these numbers conservative, but that is an assumption. It
+   also cannot be imitated by an analytic velocity field, because
+   `set_vertex_velocities.c:166` switches the correction off entirely once a
+   cell is round enough, so the real `sigma` carries a spatially discontinuous
+   component.
+2. **The residual weak drift.** Excluding a drift below `t = 1` needs a long run
+   on a mesh that stays healthy, which is precisely what regularisation
+   provides. A per-step `D_n = sum_i dm_i^topo U_i` output makes the answer a
+   by-product of the real runs.
+3. **Ghost and periodic image consistency**, per 9.2.
+
+**Recommendation: proceed to the Stage 0 implementation**, which is the
+diagnostic-only geometry layer, with the per-patch first moment and the per-step
+`D_n` among its outputs from the first commit.
+
+---
+
+## 10. 2026-08-10: Stage 0 in AREPO — the instrument, and what it measured
+
+- Stage 0 instrument: **Codex**, `src/mesh/rd_ale_geometry_diagnostics.c`, with
+  `examples/gresho_2d/Config_ALE_Geometry_Stage0{,_NoReg}.sh` and matching
+  parameter files. Hooked at `run.c:118` and `run.c:324`, and around
+  `set_vertex_velocities`.
+- Free-stream gate, per-generator diagnostic, CFL sweep, glass comparison and
+  the two build-tooling fixes: **Claude Code Opus 5**.
+- **The RD solver was not touched.** Every run below is a plain finite-volume
+  AREPO run; the diagnostic only observes.
+
+### 10.1 The design, and why it is the right Stage 0
+
+Codex's decision is better than the Stage 0 proposed in section 9.6: **let the
+finite-volume solver drive the mesh and have the diagnostic only observe.** That
+buys the real quasi-Lagrangian `sigma`, the real regularisation and the real
+Delaunay rebuild without a line of ALE-RD code and without any change to solver
+behaviour. The paired regularisation-on/off Configs then answer 9.6 item 1
+directly.
+
+The section 9.2 periodic-image trap turns out to be **structurally absent** in
+AREPO, which is worth recording because section 9 flagged it as a risk.
+`rd_ale_point_velocity` maps a ghost back to its primary only to read
+`VelVertex`, while the position stays `dp->x`, which already carries the
+resolved image. `x^n = dp->x - dt * VelVertex` therefore preserves the image by
+construction. The trap was real in the Python tiling and is not real here.
+
+### 10.2 Codex's Gresho runs, and the section 8.7 identity inside AREPO
+
+Gresho on `IC_gresho_v0_random48`, to `t = 0.5`:
+
+| | regularisation on | regularisation off |
+| --- | ---: | ---: |
+| steps | 1222 | 2404 |
+| edge flips per unit time | 9043 | 8847 |
+| `max_delta_identity` | **6.5e-18** | **7.0e-18** |
+| `max delta_T / \|T\|` | 7.8e-3 | 1.9e-2 |
+| inverted pulled-back elements | **0** | **4** |
+| non-positive Arpaia divisor | **0** | **0** |
+| `min\|T\|/mean\|T\|`, final (worst) | 9.5e-2 | 2.6e-3 (7.5e-5) |
+| `D_trig`: `t` statistic / lag-1 | 1.10 / +0.046 | 0.27 / -0.005 |
+| `\|cumulative D_trig\|` | 4.9e-5 | 1.8e-5 |
+
+Three results:
+
+1. **The section 8.7 closed form for `delta_T` holds inside AREPO to 6.5e-18**,
+   with real regularisation, real rebuilds and real quasi-Lagrangian motion.
+   `delta_from_area` and `delta_from_velocity` are computed independently and
+   agree at round-off. This is the strongest confirmation the equivalence of the
+   two candidate formulations will get short of running them.
+2. **Regularisation eliminates pulled-back inversions** (0 against 4) and keeps
+   the mesh about a thousand times healthier by minimum area. It does not change
+   the flip rate per unit time, which is the same to two per cent; what it
+   changes is the step count, because a healthy mesh admits a larger timestep.
+3. **The Arpaia positivity caveat never fires**, over 1222 and 2404 real steps.
+4. No drift is detectable: `t <= 1.10`, lag-1 essentially zero, consistent with
+   section 9.4.
+
+### 10.3 Gate zero: the free stream, and the validation of the instrument
+
+Section 9.6 asked for a case with an a-priori known answer. A uniform state with
+uniform velocity and **regularisation off** gives one: `VelVertex` is then
+exactly the fluid velocity, the mesh translates rigidly, the periodic Delaunay
+triangulation is translation invariant, and
+`delta_T = (dt^2/8)(sigma_1-sigma_0) x (sigma_2-sigma_0)` vanishes identically
+because `sigma` is uniform. Every geometric diagnostic must therefore be exactly
+zero. Initial conditions: the `random48` Gresho point cloud with
+`rho = p = 1`, `v = (1, 0.5)`, in
+`examples/gresho_2d/IC_freestream_random48.hdf5`.
+
+1024 steps to `t = 0.5`:
+
+| quantity | required | measured |
+| --- | ---: | ---: |
+| edge flips, total | 0 | **0** |
+| `max delta_T / \|T\|` | 0 | **7.0e-13** |
+| `max_delta_identity` | 0 | 3.8e-18 |
+| pulled-back area coverage | 0 | 5.1e-15 |
+| inverted, non-positive divisor | 0 | 0, 0 |
+| `max \|D_n\|` per step | 0 | **7.6e-16** |
+| `\|cumulative D\|` | 0 | **9.1e-15** |
+| `min\|T\|/mean\|T\|` | constant | 4.1490e-3 for all 1024 steps |
+
+**Every quantity that must vanish sits at round-off. The instrument is
+validated.**
+
+### 10.4 A per-generator ledger diagnostic, and what it shows
+
+The aggregate probe defect is built from spatially periodic functions and is
+therefore blind to a whole-lattice-vector image error, and it can hide a large
+nodal error behind a cancellation. Added to the instrument: a median-dual nodal
+mass snapshot **keyed by particle ID** — index keying would be wrong, because
+the domain decomposition reorders `P` and `SphP` even on one rank — with four
+new columns, `dm_signed_sum`, `dm_abs_sum`, `dm_abs_max`, `dm_touched_nodes`.
+
+Its first result is the important one: across every run below,
+`|sum_i dm_i|` stays at **4e-17 to 6e-17 per step**. **The zeroth-moment
+identity of section 7.3, the load-bearing step of section 7, now holds inside
+AREPO and not only in the offline Python.**
+
+### 10.5 CFL sweep, with regularisation on
+
+Gresho `random48`, regularisation on, to `t = 0.1`:
+
+| CFL | steps | flips per unit time | `max delta_T/\|T\|` | inverted | non-pos `Sbar` | `\|sum dm\|` max | `max\|dm_i\|` | touched per step | `\|cum D\|` |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.05 | 2072 | 16470 | 3.09e-4 | 0 | 0 | 6.2e-17 | 6.142e-4 | 3.2 | 1.68e-5 |
+| 0.10 | 1036 | 16540 | 1.10e-3 | 0 | 0 | 4.7e-17 | 6.150e-4 | 6.3 | 1.80e-5 |
+| 0.30 | 265 | 16420 | 1.06e-2 | 0 | 0 | 5.4e-17 | 6.219e-4 | 24.3 | 1.97e-5 |
+| 0.60 | 133 | 16480 | 2.75e-2 | 0 | 0 | 4.2e-17 | 6.255e-4 | 47.7 | 1.60e-5 |
+
+Five results, of which the last has a direct design consequence:
+
+1. `delta_T` grows as `dt^2` — CFL 0.1 to 0.3 multiplies it by 9.6 against a
+   predicted 9 — confirming section 8.7's closed form under regularisation.
+2. **The flip rate per unit time is independent of the timestep**, 16420 to
+   16540 across a twelvefold range of `dt`. Connectivity change is a property of
+   the flow and the regularisation, not of the discretisation.
+3. **`max|dm_i|` is likewise independent of `dt`**, 6.14e-4 to 6.26e-4, as it
+   must be: the nodal mass jump at a flip is a geometric quantity. Consistently,
+   the number of nodes touched per step grows linearly with `dt`.
+4. Neither hazard fires at any CFL up to 0.6.
+5. **The accumulated ledger defect is independent of CFL**, 1.6e-5 to 2.0e-5.
+   **Refining the timestep does not reduce the topology defect**, exactly as the
+   theory says, because it is a topology effect and not a time-discretisation
+   effect. The only lever is spatial resolution, where section 9.3 measured
+   `h^3.5`. Any future claim that the defect has been controlled must therefore
+   cite a resolution, never a timestep.
+
+### 10.6 Glass against random: regularisation contributes nothing to a relaxed mesh
+
+The free-stream run **with** regularisation on the `random48` cloud produces
+1060 flips and a cumulative defect of 4.3e-5 — comparable to the full Gresho
+vortex — even though the fluid state is uniform and there is no shear at all.
+That invited the reading that regularisation is the dominant source of topology
+change. **It is not.** The falling `regularisation_active_fraction`, 0.729 to
+0.061, says the flips are a relaxation transient of an unrelaxed initial mesh,
+and repeating the free stream on the glass confirms it:
+
+| free stream, regularisation on | steps | flips per unit time | `reg_active` | `min\|T\|/mean\|T\|` | `\|cum D\|` | `max\|dm_i\|` |
+| --- | ---: | ---: | --- | --- | ---: | ---: |
+| `glass48` | 256 | **0** | 0.000 to 0.000 | 0.8747, constant | **1.1e-15** | **2.8e-18** |
+| `random48` | 522 | 2120 | 0.729 to 0.061 | 1.40e-2 to 8.33e-2 | 4.3e-5 | — |
+
+**On a mesh already near a centroidal tessellation, regularisation is inert: no
+flips, no ledger defect, mesh quality unchanged to round-off.** The correct
+statement of 9.6 item 1 is therefore that regularisation drives a substantial
+relaxation transient on an unrelaxed mesh and contributes nothing once relaxed.
+
+The operational consequence is concrete: **production moving-mesh runs should
+start from a glass.** The first several hundred steps of a `random48` run
+measure mesh relaxation, not physics, and any convergence study started from
+such an initial condition is contaminated by it. This also applies to the
+existing `random48` Gresho runs of 10.2.
+
+### 10.7 Two defects in the build tooling
+
+1. **Fixed.** `build_case.sh` required `libmkl_rt` in `ldd` whenever `MKLROOT`
+   was set, but only `RESIDUAL_DISTRIBUTION` links LAPACKE. A diagnostic-only
+   Stage 0 build correctly has no MKL and was refused publication, which is why
+   the first Stage 0 runs bypassed the immutable artifact system and used a
+   local `build_ale_stage0/`. The check is now conditional on the Config
+   enabling `RESIDUAL_DISTRIBUTION`, with a reverse check that a Config without
+   it must not link MKL either. All binaries here went through the normal
+   artifact path.
+2. **Not fixed, and more serious.** The build fingerprint is
+   `git commit + tracked diff + Config + toolchain`. `rd_ale_geometry_diagnostics.c`
+   is currently **untracked**, so editing it leaves `build_fingerprint` and
+   `artifact_id` unchanged: rebuilding after the section 10.4 change produced the
+   identical id `bb3059da014d-15fc659e04b2ad93`. Nothing went wrong here only
+   because the build name differed, so a fresh bundle was compiled; the binary
+   was verified to contain the new symbols. **A rebuild under the same name
+   would have silently reused the stale binary**, which is precisely what the
+   provenance system exists to prevent. The fix is to place the new sources under
+   version control — `rd_ale_geometry_diagnostics.c`, the two Configs and the
+   parameter files — so the diff hash covers them. Not done here, because it is a
+   commit decision.
+
+### 10.8 Status
+
+Answered in AREPO:
+
+- the section 8.7 `delta_T` identity, to 6.5e-18, under real regularisation;
+- the zeroth-moment identity per generator, to 6e-17 per step;
+- the instrument itself, by a free-stream gate in which every quantity that must
+  vanish does;
+- the effect of regularisation: it removes pulled-back inversions and keeps the
+  mesh healthy, is inert on a relaxed mesh, and does not change the flip rate per
+  unit time;
+- the `dt` dependence: `delta_T ~ dt^2`, but flip rate, `max|dm_i|` and the
+  accumulated defect are all `dt`-independent;
+- the Arpaia positivity caveat, empty at every CFL up to 0.6.
+
+Not done:
+
+- **Yee.** `examples/yee_2d/` contains no initial condition and no generator;
+  its `param.txt` points at a relative `./IC`. Running it needs an HDF5 writer
+  built on the `Analysis/yee_boost` tooling. Its value is a direct comparison
+  against the offline flip rates of section 3.3, which is now a cross-check
+  rather than an open question.
+- The first-moment identity per patch inside AREPO. The zeroth moment is
+  covered by 10.4; the first moment would need patch assembly in C and is
+  confirmed offline in 9.1.
+- MPI rank invariance: the instrument is guarded to one rank.
+- The section 8.8 round-off cross-check between the two formulations, which
+  needs the flux and belongs to Stage 2.
+
+---
+
 ## 8. 2026-08-06 (later): write the ALE-RD mathematics before changing the solver
 
 - Decision: Zhenyu, following the section 6/7 discussion.
@@ -1659,3 +2093,231 @@ Euler conservation, a uniform-state solver update, MPI ownership, pathological
 large-displacement meshes, hierarchical timesteps, or 3-D. Fluid tests should
 follow in the order uniform state, Yee plus boost, Gresho plus boost, and only
 then shock/shear cases.
+
+## 10. 2026-08-10: Stage 0 in AREPO, regularisation, and the next test order
+
+- Author: `Codex`, following Zhenyu's decision to exercise the real AREPO mesh
+  before changing the RD fluid update.
+- Status: **working tree only; not committed.**  This entry does not claim that
+  ALE-RD is implemented.
+- Scope of the completed runs: 2-D, periodic, equal timesteps, no refinement,
+  one MPI rank.  Ordinary AREPO finite-volume hydrodynamics supplies the
+  physical state and mesh motion; the new code observes geometry only.
+
+### 10.1 Diagnostic-only C layer
+
+The compile-time option `RD_ALE_GEOMETRY_DIAGNOSTICS` adds
+`src/mesh/rd_ale_geometry_diagnostics.c`.  It is called after the initial mesh
+and after every real AREPO mesh rebuild.  On the post-rebuild connectivity it
+forms the continuous periodic trajectory
+
+```
+x_old = x_new - drift_dt VelVertex
+x_mid = x_new - (drift_dt/2) VelVertex
+```
+
+using the periodic image already resolved for each Delaunay element.  It does
+not construct an old or midpoint Delaunay mesh.  Its CSV records:
+
+- actual-old, pulled-old, midpoint and new area coverage;
+- removed and added edges by sorted particle ID;
+- `A_old`, `A_mid`, `A_new`, `delta_T`, the element area/mesh-flux identity,
+  Arpaia and Campoli nodal divisors, and inversion/positivity counters;
+- two smooth manufactured topology defects and their cumulative sums;
+- current minimum angle, minimum area ratio, generator-centroid offset;
+- total mesh velocity and the regularisation correction isolated around the
+  second loop of `set_vertex_velocities()`.
+
+The latest source also records the quasi-Lagrangian velocity before
+regularisation as a separate column.  The long runs below predate that final
+column, but the subsequent short smoke run checked the updated 36-column CSV.
+
+Four submitted jobs failed first for cluster/configuration reasons (missing
+`liblapacke` in a non-RD FV build, an unavailable Slurm PMI interface, and then
+missing parsed regularisation parameters in the no-regularisation parameter
+file).  The Makefile and submission scripts were corrected without running a
+build on the login node.  These failures occurred outside the diagnostic
+algebra.  The short and long compute-node runs then completed.
+
+### 10.2 Algebraic gate on the real rebuild
+
+The short Gresho smoke run reached `t=0.05` in 137 global steps.  On the real
+AREPO triangulations and periodic images it gave:
+
+- maximum area-coverage error `4.9e-15`;
+- maximum element area/mesh-flux identity error `6.2e-18`;
+- zero pulled-back inversions, zero non-positive midpoint triangles, and zero
+  non-positive Arpaia nodal divisors;
+- 1265 removed and 1265 added edges.
+
+Thus the Python common-geometry construction has survived its first direct C
+translation and actual AREPO topology changes.  This is a geometry result, not
+yet a free-stream test of the RD update.
+
+### 10.3 Long Gresho regularisation on/off comparison
+
+Both cases start from the same irregular `48 x 48` Gresho particle set and run
+the actual FV problem to the same physical time `t=0.5`.
+
+| quantity | regularisation on | regularisation off |
+| --- | ---: | ---: |
+| global steps | 1222 | 2404 |
+| removed edges | 4525 | 4415 |
+| removed edges per unit physical time | 9050 | 8830 |
+| final `min(A_new)/mean(A_new)` | `9.47e-2` | `2.64e-3` |
+| worst `min(A_new)/mean(A_new)` | `9.96e-3` | `7.54e-5` |
+| final minimum angle | `0.3236` rad | `0.00372` rad |
+| worst minimum angle | `0.0158` rad | `9.34e-5` rad |
+| pulled-back inverted triangles | 0 | 4 |
+| non-positive midpoint triangles | 0 | 3 |
+| non-positive Arpaia nodal divisors | 0 | 0 |
+| sum of absolute trigonometric topology defects | `1.01e-3` | `1.65e-3` |
+| sum of absolute wave topology defects | `1.35e-3` | `1.76e-3` |
+
+Coverage remains within `6.6e-15` and the element area identity within
+`7.0e-18` in both cases.  The no-regularisation hazards occur at:
+
+```
+step 1700, t=0.328125:       2 pulled inversions, 1 midpoint failure
+step 2201, t=0.450439453125: 2 pulled inversions, 2 midpoint failures
+```
+
+At both times the rebuilt new triangles are still positive.  The failure is in
+the continuous space-time trajectory of the pulled-back new connectivity, not
+in the Delaunay rebuild itself.  A positive summed Arpaia nodal divisor does
+not rescue an individually inverted element.
+
+### 10.4 Interpretation of regularisation and topology noise
+
+The earlier expectation that regularisation should reduce the flip rate is
+withdrawn.  In this run the two cases have essentially the same number of
+flips per unit physical time.  Regularisation instead keeps the **point set and
+the space-time elements healthy**.  Without it, sliver triangles shrink the
+hydrodynamic timestep, nearly doubling the number of global steps, and finally
+invalidate the linear pulled-back element trajectory.  This is compatible with
+the fact that a Delaunay triangulation is optimal only relative to its given
+point set; it cannot make a badly distributed point set quasi-uniform.
+
+For both manufactured fields the signed cumulative topology defect is much
+smaller than the sum of absolute increments.  A mean-drift test gives no
+significant drift in either run (all available `t` statistics are below 1.11).
+The result is compatible with weakly correlated/random-walk accumulation, but
+one realisation is not evidence for a universal stochastic law.  The standing
+diagnostic therefore remains the complete increment time series, its mean,
+variance, lag correlation, signed sum and sum of absolute values.
+
+### 10.5 What mesh velocity Stage 0 is actually testing
+
+For ordinary pure hydrodynamics the present public AREPO path uses
+
+```
+sigma_i = v_i - (dt_i/(2 rho_i)) Grad(p)_i + v_reg_i,
+```
+
+with gravity already half-kicked into `P[i].Vel` when gravity is enabled and a
+Lorentz acceleration added under MHD.  The pressure gradient is produced by
+AREPO's Voronoi least-squares finite-volume gradient estimator.  Hence the
+completed Stage 0 runs test the real current AREPO policy, including its
+half-step estimate of the interval-average fluid velocity.
+
+This does not make that finite-volume gradient part of the ALE-RD mathematics.
+The ALE mesh velocity is arbitrary: conservation and DGCL require only that the
+same `sigma_i` be used consistently in the point drift, pulled-back/midpoint
+geometry and ALE residual.  The half-acceleration term improves the physical
+trajectory from
+
+```
+x_new = x_old + dt v_old                         (first-order trajectory)
+```
+
+to
+
+```
+x_new = x_old + dt v_old + (dt^2/2) a_old        (second-order predictor),
+```
+
+but is not required for an admissible ALE update.  The regularisation drift
+has a different purpose and direction, and can be exactly zero in already
+round cells, so it does not replace the acceleration predictor.
+
+There is also a semantic mismatch to resolve before the production RD path:
+the FV least-squares estimator treats primitive data as Voronoi-cell averages
+located at cell centroids, whereas RD stores nodal values at the Delaunay
+generators.  The natural RD-native comparison is the lumped projection
+
+```
+grad(p)|_T = sum_(j in T) p_j grad(phi_j),
+grad(p)_i^RD = (1/m_i) sum_(T contains i) (|T|/3) grad(p)|_T,
+m_i = sum_(T contains i) |T|/3.
+```
+
+No choice between these predictors is needed to continue the geometry tests.
+They should be retained as explicitly labelled experimental modes rather than
+silently identifying the FV estimator with the RD spatial operator.
+
+### 10.6 Prioritised test plan and handoff
+
+The next tests are ordered by dependency.  Items 1--4 remain diagnostic-only
+and can be performed before any ALE-RD fluid update.  Zhenyu intends to hand
+this part to Claude first.
+
+1. **Uniform flow plus uniform boost, highest priority.**  Use the same
+   irregular periodic point set at boost zero and at one non-zero constant
+   boost, each with regularisation off and on.  With regularisation off this is
+   exact rigid translation: pressure acceleration, relative point motion,
+   genuine flips and topology defect should vanish.  With regularisation on,
+   the two boosted runs must have the same relative geometry, edge history and
+   regularisation correction to round-off.  This isolates Galilean covariance
+   and periodic-image bookkeeping from all fluid dynamics.
+
+2. **Expose and compare the acceleration predictor.**  Extend the diagnostic
+   decomposition to output separately `v_i`, the half-pressure acceleration
+   correction, and `v_i^reg`.  Provide two controlled mesh-motion policies:
+
+   ```
+   sigma = v + v_reg
+   sigma = v + (dt/2) a_pressure_FV + v_reg.
+   ```
+
+   Compare them first on Gresho, where the pressure acceleration is the
+   centripetal correction that turns a tangent Euler drift into a second-order
+   approximation to a circular trajectory.  Record trajectory/centroid
+   offsets, mesh quality, timestep history, flips, inversions and topology
+   defects.  Do not interpret either policy as a DGCL requirement.
+
+3. **Smooth vortex boost matrix.**  Run Yee at boost 0 and 1, with
+   regularisation on and off; repeat the most informative cases with the
+   pressure predictor disabled.  This tests a smooth analytic accelerating
+   flow and checks that adding a bulk velocity does not alter relative mesh
+   geometry or the regularisation correction.  Gresho plus boost is the second
+   vortex check; its unboosted regularisation pair is already complete.
+
+4. **Long smooth-shear stress test.**  Run a smoothed KH/shear case with
+   regularisation on and off.  Its purpose is not yet shock accuracy, but the
+   onset of slivers, timestep collapse, pulled/midpoint inversion and possible
+   coherent accumulation under persistent differential motion.
+
+5. **First ALE-RD solver gate, only after the common geometry is connected.**
+   Use a uniform conservative state under prescribed non-rigid mesh motion.
+   Require static-mesh collapse, particle-wise free-stream preservation,
+   element DGCL, global conservation, and agreement of the Arpaia midpoint and
+   Campoli endpoint scalar-pair implementations to their expected algebraic
+   difference.  Test N/lumped first, including its endpoint central geometric
+   share.  Repeat on one rank and then multiple ranks before a non-uniform
+   fluid problem.
+
+6. **RD-native pressure predictor comparison.**  After item 5, add
+   `grad(p)^RD` as a third labelled policy and compare it with no acceleration
+   and AREPO FV-LSF acceleration on Yee and Gresho.  The acceptance criterion
+   is solution and mesh convergence, not equality of the three trajectories.
+
+7. **Physical RD tests last.**  Proceed through Yee plus boost, Gresho plus
+   boost, then contact/Sod and finally shear.  Discontinuities are where the
+   `O(h^4)` smooth flip argument no longer applies and where the pressure
+   predictor may need limiting.  Hierarchical timesteps, refinement, 3-D and
+   gravity remain later phases.
+
+The immediate stop condition is therefore clear: Claude can complete items
+1--4 without changing `residual_distribution_solver.c`.  An ALE-RD fluid test
+should not be started until item 5 has a reviewed common-geometry interface and
+a uniform-state/DGCL acceptance test.

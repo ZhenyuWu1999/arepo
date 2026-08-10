@@ -299,8 +299,24 @@ if grep -q "not found" "${STAGING_DIR}/binary.ldd.txt"; then
   grep "not found" "${STAGING_DIR}/binary.ldd.txt" >&2
   exit 9
 fi
-if [[ "${LAPACK_BACKEND}" = "mkl" ]] && ! grep -q "libmkl_rt" "${STAGING_DIR}/binary.ldd.txt"; then
+# Only the residual-distribution solver links LAPACKE. A Config without it -- a
+# plain finite-volume run, or a diagnostic-only build such as the Stage-0 ALE
+# geometry instrument -- produces a binary that correctly has no libmkl_rt, and
+# must not be rejected for it.
+if grep -qE '^[[:space:]]*RESIDUAL_DISTRIBUTION([[:space:]]|=|$)' "${CONFIG_SNAPSHOT}"; then
+  NEEDS_LAPACK=1
+else
+  NEEDS_LAPACK=0
+fi
+
+if [[ "${NEEDS_LAPACK}" -eq 1 && "${LAPACK_BACKEND}" = "mkl" ]] &&
+   ! grep -q "libmkl_rt" "${STAGING_DIR}/binary.ldd.txt"; then
   echo "MKL build was requested but libmkl_rt is absent from ldd; refusing to publish." >&2
+  exit 9
+fi
+
+if [[ "${NEEDS_LAPACK}" -eq 0 ]] && grep -q "libmkl_rt" "${STAGING_DIR}/binary.ldd.txt"; then
+  echo "Config does not enable RESIDUAL_DISTRIBUTION yet the binary links libmkl_rt; refusing to publish." >&2
   exit 9
 fi
 
