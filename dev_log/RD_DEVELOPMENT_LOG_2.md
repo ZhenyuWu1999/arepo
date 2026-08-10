@@ -3003,3 +3003,164 @@ The first ALE-RD slice has therefore passed its static-collapse, geometry and
 free-stream gates. Its first non-uniform moving-fluid run has done the useful
 thing a prototype should do: identify a conservation question before a larger
 engineering integration hides it.
+
+---
+
+## 18. 2026-08-11: the ALE-RD conservation defect resolved into two mechanisms
+
+- Author: `Claude Code Opus 5`, auditing Codex's first fluid slice (section 17)
+  at Zhenyu's request.
+- Changes: `src/hydro/residual_distribution_solver.c` gains one experimental
+  compile flag, `RD_ALE_SPLIT_MESH_VELOCITY`. Codex's slice is otherwise
+  untouched.
+- Result: the defect of section 17.3 is **two** superposed mechanisms. Codex's
+  hypothesis is correct and now fixed; it is however the **subdominant** term.
+  The dominant one is the median-dual topology defect predicted in section 7.
+
+### 18.1 Why the endpoint ledger should balance, and where it does not
+
+Write the endpoint change as
+
+```
+dQ = sum_i m_new,i U_i^{n+1} - sum_i m_old,i U_i^n
+   = sum_i m_new,i dU_i + sum_i (m_new - m_old)_i U_i^n.
+```
+
+The second term is exactly computable. With the 2-D area identity
+`A_new - A_old = dt A_mid div sigma_h`,
+
+```
+sum_i (m_new - m_old)_i U_i^n = sum_T (A_new - A_old) Ubar_T = dt * integral U_h div sigma_h.   (1)
+```
+
+The mesh-velocity part of the flux, using the shifted `K` and the state the
+residual actually multiplies, is
+
+```
+sum_T phi_tilde^T |mesh part = - integral sigma_h . grad (that state).                          (2)
+```
+
+If (1) and (2) use the same interpolant their sum is
+`dt * integral div(U_h sigma_h) = 0` on a periodic domain, and the endpoint
+ledger is exactly conserved. **Conservation therefore hinges on the two terms
+sharing one interpolant.**
+
+### 18.2 The code fact
+
+`Phi[k]` is assembled as `Kmatrix[...][kfull] * U_hat[p][j]`, and `U_hat` is
+**not** the conservative nodal state. It is the parameter-vector linearisation
+
+```
+U_hat[.][j] = (dU/dZ)|_{Z_avg} Z_j,
+```
+
+which differs from `U_fluid[j]` at second order in `Z_j - Z_avg`. That
+linearisation is exactly what makes the physical part
+`sum_j K_j U_hat_j = boundary integral of F` hold, so it must stay. But the
+mesh-velocity part rides on the same `U_hat` because the shift is fused into
+the eigenvalues, `Lambda = u.n +- c - sigma.n`, so (2) uses `U_hat` while (1)
+uses `U`. **Codex's hypothesis in 17.3 is confirmed at the level of the source,
+not merely inferred from the numbers.** An earlier guess of mine that the
+residual multiplies `U_fluid` was wrong.
+
+### 18.3 The timestep sweep says the leading term is not this
+
+A smooth periodic non-uniform initial condition was built for this test,
+`IC_smooth_random48` and `IC_smooth_glass48`: `rho = 1 + 0.3 sin(kx) cos(ky)`,
+uniform pressure, `v = (0.6 + 0.2 sin(ky), 0.4 + 0.2 sin(kx))`. Gresho is a poor
+probe here because its azimuthal velocity is piecewise linear, so `grad^2 U` is
+singular at `r = 0.2` and `r = 0.4`, which is exactly where the interpolation
+mechanism is largest.
+
+Regularised, `TimeMax = 0.02`, `n = 48`:
+
+| CFL | steps | flips | `d(mass)` | `d(px)` |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.05 | 184 | 797 | -1.551e-5 | -1.032e-5 |
+| 0.10 | 92 | 797 | -1.544e-5 | -1.012e-5 |
+| 0.20 | 46 | 798 | -1.635e-5 | -1.077e-5 |
+| 0.40 | 24 | 787 | -1.198e-5 | -0.933e-5 |
+
+**Over an eightfold range of `dt` the accumulated defect is unchanged**, so it is
+not a time-quadrature error. The flip count per unit time is also unchanged,
+797/797/798/787, which is the section 10.5 result reappearing. The defect tracks
+the flips, not the timestep.
+
+### 18.4 The discriminating experiment: a flip-free non-uniform run
+
+Regularisation off, smooth state, `TimeMax = 0.005`, `CourantFac = 0.1`:
+
+| initial condition | steps | flips | `d(mass)` | `d(px)` | `d(E)` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| glass | 16 | **0** | -3.05e-10 | -3.93e-8 | -2.36e-8 |
+| random | 32 | **12** | -1.13e-6 | -2.33e-6 | -9.04e-7 |
+
+Per step the mass defect is 1.9e-11 with no flips against 3.5e-8 with flips, a
+factor of about 1800. **The dominant mechanism is topological.** It is the
+defect derived in section 7 and measured there and in sections 9 and 10 as the
+proxy `sum_i dm_i U_i`; this is the first time it appears in the fluid
+solution rather than in a geometry diagnostic. Its `dt` independence follows
+from the `dt` independence of the flip rate, which is why 18.3 looks the way it
+does.
+
+A smaller non-topological defect survives at zero flips, visibly in momentum and
+energy. That is the interpolation term.
+
+### 18.5 The split, and the measurement that closes 17.3
+
+`RD_ALE_SPLIT_MESH_VELOCITY` assembles the mesh-velocity part of the element
+residual on the conservative nodal state while the physical part keeps `U_hat`:
+
+```
+correction = - (1/2) sum_j |n_j| (sigma_bar . n_hat_j) (U_fluid[j] - U_hat[.][j]),
+```
+
+added to the element total `Phi` and distributed to the three vertices with
+weight `1/3`, the row sum of the N mass matrix. It is conservative by
+construction and vanishes identically for a uniform state, so no free-stream or
+DGCL property is disturbed.
+
+| case | flips | `d(mass)` | `d(px)` | `d(py)` | `d(E)` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| glass, original | 0 | -3.05e-10 | -3.93e-8 | -5.46e-10 | -2.36e-8 |
+| **glass, split** | 0 | **-3.74e-13** | **-2.27e-13** | **-1.50e-13** | **-1.04e-12** |
+| random, original | 12 | -1.13e-6 | -2.33e-6 | -4.00e-7 | -9.04e-7 |
+| random, split | 12 | -1.13e-6 | -2.24e-6 | -4.01e-7 | -8.50e-7 |
+
+**With no flips the split takes the defect to round-off**, improving momentum by
+a factor of 170000 and mass by 800. **With flips it changes essentially
+nothing**, as it must, because the topology defect is a different mechanism.
+
+The two error sources are therefore cleanly separated, and section 17.3's
+question is answered: the interpolation mismatch is real, is exactly Codex's
+diagnosis, and is now fixed; what remains is the topology defect that section 7
+predicted.
+
+### 18.6 A note on the assertion suite
+
+The first version of the split placed its application loop inside the enclosing
+component loop and reused `k`, terminating that loop after the first component.
+The existing `rd_check_conservation` assertion A2 caught it on the first
+timestep with a printout naming the failing component and the exact residual
+imbalance. That is worth recording as evidence that the static-era assertion
+suite is still doing useful work on the ALE path.
+
+### 18.7 What this changes about the plan
+
+- Section 17.4's gates 1 and 2 address the interpolation term. It is now
+  measured and fixed, so those gates can be reduced to a regression check that
+  the flip-free case stays at round-off.
+- **Gate 3, the no-flip interval, is the one that mattered** and is done here.
+  Its outcome promotes the topology defect from a predicted geometry effect to
+  the leading fluid-level error.
+- **Endpoint conservation cannot become a hard round-off gate while flips
+  occur**, because the topology defect is `O(h^4)` per patch and not zero. The
+  honest gate is: round-off on any flip-free interval, and a reported,
+  resolution-converging defect otherwise. Section 9.3 measured that convergence
+  offline as roughly `h^3.5`; it should now be measured in the fluid.
+- The split should not be adopted as default on one test case. It needs the
+  uniform-state, static-collapse and free-stream gates re-run, all of which it
+  should pass trivially since the correction vanishes for uniform states.
+- The topology question returns to the options of section 7: accept a
+  converging defect, or implement the conservative topology operator whose
+  antisymmetric-flux form is given there.

@@ -57,6 +57,7 @@
 #RD_RK2_COHERENT_BETA_STAR     # experiment: use beta(U*) for every stage-2 spatial/F1 term; explicitly redistribute Phi(U^n)
 #RD_RK2_RATE_CONSISTENT_HEUN    # experiment: equal-bin LDA+F1 semi-discrete operator advanced by Heun (four element sweeps)
 #RD_ALE_GEOMETRY_DIAGNOSTICS    # Stage-0 moving-mesh geometry audit; diagnostic only, currently 2-D/equal-step/one-rank
+#RD_ALE_SPLIT_MESH_VELOCITY       # Experimental: assemble the mesh-velocity residual on U rather than the Roe linearisation
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

@@ -2071,6 +2071,9 @@ void compute_residuals(tessellation *T)
       double Lambda[3][4], Lambda_plus[3][4], Lambda_minus[3][4];
       double Value1, Value2, Value3, Value4, Value12, Value123;
       double Kmatrix[4][4][3][3];  // Kmatrix[4][4][j=0,1,2(vertices)][p=0(K+),1(K-),2(K)]
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
+      double rd_ale_mesh_velocity_correction[4] = {0.0, 0.0, 0.0, 0.0};
+#endif
       int kfull = 2, kplus = 0, kminus = 1;
 
       // moving mesh
@@ -2173,6 +2176,33 @@ void compute_residuals(tessellation *T)
       for(k = 0; k < 4; k++)
         {
           Phi[k] = 0.0;
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
+          /* Experimental: assemble the mesh-velocity part of the element
+           * residual on the conservative nodal state rather than on the
+           * parameter-vector linearisation.
+           *
+           * The endpoint ledger balances the geometric term
+           * sum_i (m_new - m_old)_i U_i^n = dt * integral U_h div sigma_h
+           * against the mesh-velocity part of the flux,
+           * -dt * integral sigma_h . grad U_h. The two cancel through the
+           * divergence theorem only if both use the same interpolant. The
+           * physical flux must keep U_hat, because the conservative Roe
+           * linearisation is what makes sum_j K_j U_hat_j equal to the exact
+           * boundary integral of F; the mesh-velocity part must not. The
+           * difference is corrected here, added to the element total so that
+           * the sum_i phi_i = phi^T assertion still holds, and distributed
+           * below with the lumped weight 1/3, which is the row sum of the N
+           * mass matrix. It vanishes identically for a uniform state, so no
+           * free-stream or DGCL property is disturbed. */
+          rd_ale_mesh_velocity_correction[k] = 0.0;
+          for(j = 0; j < 3; j++)
+            {
+              double sigma_dot_n = Velvertex_avg[0] * N_X[j] + Velvertex_avg[1] * N_Y[j];
+              rd_ale_mesh_velocity_correction[k] -= 0.5 * Mag[j] * sigma_dot_n * (U_fluid[j][k] - U_hat[k][j]);
+            }
+          Phi[k] += rd_ale_mesh_velocity_correction[k];
+#endif
+
           for(j = 0; j < 3; j++)
             {
               Phi[k] += Kmatrix[k][0][j][kfull] * U_hat[0][j] + Kmatrix[k][1][j][kfull] * U_hat[1][j] +
@@ -2446,6 +2476,14 @@ void compute_residuals(tessellation *T)
 
           N_roundoff_scale = dmax(N_roundoff_scale, equation_scale);
         }
+
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
+      /* Outside the component loop, and with its own indices: reusing k or j
+       * here would terminate the enclosing loop early. */
+      for(int corr_k = 0; corr_k < 4; corr_k++)
+        for(int corr_j = 0; corr_j < 3; corr_j++)
+          Flux_RD[corr_k][corr_j] += rd_ale_mesh_velocity_correction[corr_k] / 3.0;
+#endif
 
 #ifdef N_SCHEME
       rd_check_conservation(Flux_RD, Phi, N_roundoff_scale + phi_scale, thistask_triangles[i], "N");
