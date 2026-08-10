@@ -114,6 +114,10 @@ void run(void)
 
       mesh_setup_exchange();
 
+#ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
+      rd_ale_geometry_after_mesh(&Mesh);
+#endif
+
 #ifdef RD_OUTPUT_DIAGNOSTICS
       char triangulation_name[1024];
       sprintf(triangulation_name, "%s/triangulation_sync0_%03d", All.OutputDir, RestartSnapNum);
@@ -315,6 +319,10 @@ void run(void)
 
       create_mesh();
       mesh_setup_exchange();
+
+#ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
+      rd_ale_geometry_after_mesh(&Mesh);
+#endif
 
 #ifdef RD_OUTPUT_DIAGNOSTICS
       if(loop_test == 0 && All.TotNumPart == TimeBinsHydro.GlobalNActiveParticles)

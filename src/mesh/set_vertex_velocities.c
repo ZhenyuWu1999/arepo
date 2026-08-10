@@ -115,6 +115,13 @@ void set_vertex_velocities(void)
         }
     } /* for loop of active particles */
 
+#ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
+  /* Snapshot the quasi-Lagrangian velocity before the optional centroid/face
+   * regularisation is added.  The matching call below records only the
+   * correction introduced by the second loop. */
+  rd_ale_geometry_velocity_begin();
+#endif
+
   for(idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
     {
       i = TimeBinsHydro.ActiveParticleList[idx];
@@ -249,6 +256,10 @@ void set_vertex_velocities(void)
           SphP[i].VelVertex[j] = 0; /* vertex velocities for unused dimensions set to zero */
         }
     } /* for loop of active particles */
+
+#ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
+  rd_ale_geometry_velocity_end();
+#endif
 
 #ifdef OUTPUT_VERTEX_VELOCITY_DIVERGENCE
   voronoi_exchange_primitive_variables();

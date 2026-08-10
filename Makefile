@@ -284,6 +284,10 @@ ifeq (RESIDUAL_DISTRIBUTION,$(findstring RESIDUAL_DISTRIBUTION,$(CONFIGVARS)))
 OBJS    += hydro/residual_distribution_solver.o
 endif
 
+ifeq (RD_ALE_GEOMETRY_DIAGNOSTICS,$(findstring RD_ALE_GEOMETRY_DIAGNOSTICS,$(CONFIGVARS)))
+OBJS    += mesh/rd_ale_geometry_diagnostics.o
+endif
+
 ifeq (MYIBARRIER,$(findstring MYIBARRIER,$(CONFIGVARS)))
 OBJS    += mpi_utils/myIBarrier.o
 INCL    += mpi_utils/myIBarrier.h
@@ -361,6 +365,14 @@ endif
 ifneq (HAVE_HDF5,$(findstring HAVE_HDF5,$(CONFIGVARS)))
 HDF5_INCL =
 HDF5_LIB =
+endif
+
+# LAPACKE is used only by the residual-distribution linear solves.  Keeping it
+# on an FV-only Stage-0 geometry build makes otherwise valid compute nodes fail
+# at link time even though no LAPACK symbol is referenced.
+ifneq (RESIDUAL_DISTRIBUTION,$(findstring RESIDUAL_DISTRIBUTION,$(CONFIGVARS)))
+LAPACK_INCL =
+LAPACK_LIB =
 endif
 
 ifneq (IMPOSE_PINNING,$(findstring IMPOSE_PINNING,$(CONFIGVARS)))

@@ -41,6 +41,7 @@
 #RD_HIERARCHICAL_TEST_PATTERN  # Test only: refine the x < BoxSize/2 vertex bins by one level
 #RD_HIER_TEST_SPLIT_FRAC=0.5   # Test only: fraction of BoxSize_X below which the test pattern refines (default 0.5)
 #RD_DIAG_THETA                 # Diagnostic only: histogram of the B blending parameter
+#RD_DIAG_THETA_MAP             # Diagnostic only: final-step element map of Theta and B-minus-LDA correction
 #RD_B_FROZEN_THETA             # B blend: freeze Theta from stage-0 data so the map is dt-smooth
 #RD_B_SPATIAL_THETA            # B blend: steady-form indicator (Arpaia eq. 42) instead of the whole residual
 #LDA_SCHEME                    # Low Diffusion A scheme for residual distribution
@@ -53,6 +54,7 @@
 #RD_RK2_COHERENT_BETA_N        # experiment: freeze beta(U^n) across every stage-2 spatial/F1 term
 #RD_RK2_COHERENT_BETA_STAR     # experiment: use beta(U*) for every stage-2 spatial/F1 term; explicitly redistribute Phi(U^n)
 #RD_RK2_RATE_CONSISTENT_HEUN    # experiment: equal-bin LDA+F1 semi-discrete operator advanced by Heun (four element sweeps)
+#RD_ALE_GEOMETRY_DIAGNOSTICS    # Stage-0 moving-mesh geometry audit; diagnostic only, currently 2-D/equal-step/one-rank
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

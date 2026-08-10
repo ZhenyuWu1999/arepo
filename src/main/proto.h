@@ -514,6 +514,11 @@ void sample_solution_isothermal3d(double S, struct state *st_L, struct state *st
 void apply_flux_list(void);
 int flux_list_data_compare(const void *a, const void *b);
 void set_vertex_velocities(void);
+#ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
+void rd_ale_geometry_after_mesh(tessellation *T);
+void rd_ale_geometry_velocity_begin(void);
+void rd_ale_geometry_velocity_end(void);
+#endif
 int scalar_init(MyFloat *addr, MyFloat *addr_mass, int type);
 void compute_interface_fluxes(tessellation *T);
 void update_primitive_variables(void);
