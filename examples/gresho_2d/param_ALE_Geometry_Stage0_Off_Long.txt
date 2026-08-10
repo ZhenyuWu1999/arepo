@@ -1,9 +1,9 @@
 % Gresho moving-mesh geometry control with mesh regularisation disabled.
 
-InitCondFile                          /home/zwu/arepo_rd/arepo/examples/gresho_2d/IC_gresho_v0_random48
+InitCondFile                          ./IC_gresho_v0_random48
 ICFormat                              3
 
-OutputDir                             /home/zwu/arepo_rd/arepo/output_ALE_geometry_stage0_off_long/
+OutputDir                             ../../output_ALE_geometry_stage0_off_long/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

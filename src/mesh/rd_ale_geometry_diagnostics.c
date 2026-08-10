@@ -662,8 +662,9 @@ void rd_ale_geometry_after_mesh(tessellation *T)
         if(fabs(dm) > tolerance)
           dm_touched++;
 
-        /* The old snapshot's primary position is the unambiguous reference:
-         * it was recorded before the rebuild and needs no image resolution. */
+        /* The old snapshot's primary position gives an unambiguous per-ID
+         * reference. A patch-coherent image choice is still required before
+         * the periodic first-moment identity can be used as a hard gate. */
         dm_first_moment[0] += dm * RdAleOld.nodes[old_node].pos[0];
         dm_first_moment[1] += dm * RdAleOld.nodes[old_node].pos[1];
 
@@ -706,7 +707,8 @@ void rd_ale_geometry_after_mesh(tessellation *T)
   fflush(RdAleFile);
 
   mpi_printf("RD-ALE-GEOM: step=%d replaced_edges=%d/%d D=(%.3e,%.3e) cum=(%.3e,%.3e) minA/mean=%.3e "
-             "minangle=%.3e inverted=%d nonpos_Sbar=%d reg_rms=%.3e sum_dm=%.3e touched=%d\n",
+             "minangle=%.3e inverted=%d nonpos_Sbar=%d reg_rms=%.3e sum_dm=%.3e touched=%d "
+             "first_moment=(%.3e,%.3e) pullback_err=%.3e\n",
              All.NumCurrentTiStep, removed_edges, added_edges, defect[0], defect[1], RdAleCumulativeDefect[0],
              RdAleCumulativeDefect[1], min_new_area / mean_area, min_angle_new, inverted_old, nonpositive_arpaia,
              RdAleRegularisationRms, dm_signed_sum, dm_touched, dm_first_moment[0], dm_first_moment[1],

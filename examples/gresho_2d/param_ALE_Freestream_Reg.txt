@@ -1,9 +1,9 @@
 % Gresho moving-mesh geometry run with AREPO face-angle regularisation.
 
-InitCondFile                          /home/zwu/arepo_rd/arepo/examples/gresho_2d/IC_freestream_random48
+InitCondFile                          ./IC_freestream_random48
 ICFormat                              3
 
-OutputDir                             /home/zwu/arepo_rd/arepo/output_ALE_freestream_reg/
+OutputDir                             ../../output_ALE_freestream_reg/
 SnapshotFileBase                      snap
 SnapFormat                            3
 NumFilesPerSnapshot                   1

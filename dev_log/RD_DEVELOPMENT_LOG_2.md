@@ -2593,7 +2593,7 @@ for DGCL validation.
 
 ---
 
-## 15. 2026-08-11: the first moment inside AREPO, and the drift reconstruction verified
+## 15. 2026-08-10: the first moment inside AREPO, and the drift reconstruction verified
 
 - Author: `Claude Code Opus 5`, closing items T1 and T2 agreed with Zhenyu after
   Codex's audit in section 14, and performing the editorial pass recorded in the
@@ -2622,15 +2622,17 @@ of my errors:
 - **Reproducibility and the general fingerprint hole.** Both accepted and open,
   carried as P3 and P4 in the plan agreed with Zhenyu.
 
-One partial pushback. Section 14.2 asks that the claim "a random walk is the
-correct model" be downgraded. The `h^3.5` accumulated order rests on two
-resolutions and should indeed be downgraded to a two-point measurement. But the
-serial correlation is direct evidence, not inference: over 400 steps of
-Lagrangian motion the lag-1 autocorrelation of `D_n` was -0.024, -0.021, +0.000
-and -0.019, and uncorrelated increments are the defining property of a random
-walk. The accurate statement is "no drift detected and the increments are
-serially uncorrelated, which is what a random walk requires", which is stronger
-than mere compatibility and weaker than a proof.
+One qualification remains. Section 14.2 asks that the claim "a random walk is
+the correct model" be downgraded. The `h^3.5` accumulated order rests on two
+resolutions and is only a two-point measurement. Over 400 steps of Lagrangian
+motion the lag-1 autocorrelations of `D_n` were -0.024, -0.021, +0.000 and
+-0.019. This is direct evidence of no lag-1 correlation, but it does not by
+itself establish independent or identically distributed increments, absence
+of higher-lag correlation, or stationarity. The supported wording is therefore
+"no drift is detected and the increments are consistent with random-walk-like
+accumulation". `O(h^4)` remains the local smooth-patch statement; a stochastic
+model and accumulated spatial order require a fixed-physical-time resolution
+ensemble on healthy meshes.
 
 ### 15.2 The first moment is now measured in AREPO
 
@@ -2654,17 +2656,20 @@ binary rather than continuous, and it is reported rather than asserted.
 | `\|sum dm_i x_i\|`, max | 2.6e-17 | 2.8e-4 |
 | steps above 1e-12 | **0 of 1024** | **37 of 265** |
 
-**On 228 of the 265 steps that contain real flips, the first-moment identity
-holds to round-off inside AREPO.** The remaining 37 are exactly the
-boundary-straddling artifact predicted above: their magnitude, 2.8e-4, matches
+Of the 265 steps, 257 contain at least one changed edge. **On 220 of those 257
+flip-containing steps the first-moment identity holds to round-off inside
+AREPO.** The eight no-flip steps are also at round-off, giving 228 of 265 total.
+The remaining 37 are consistent with the boundary-straddling artifact predicted
+above: their magnitude, 2.8e-4, matches
 `L h^2 = 1 x (1/48)^2 = 4.3e-4` to the expected order. Section 9.1's offline
 result therefore now has an in-code counterpart, and Codex's correction is
 answered rather than merely acknowledged.
 
-Making the remaining 37 steps into a hard gate needs patch assembly in C, which
-is 14.2's suggestion and is not done. It is not on the critical path: the
-identity is confirmed offline for cascades, and in AREPO on 86 per cent of flip
-steps.
+Making the remaining 37 steps into a hard gate, or proving that each is a
+boundary event, needs patch assembly with a coherent periodic image in C. That
+is not done and is not on the critical path: the identity is confirmed offline
+for cascades, and the primary-coordinate diagnostic is at round-off on 86 per
+cent of the flip-containing AREPO steps.
 
 ### 15.3 The drift reconstruction is verified, not assumed
 
@@ -2696,27 +2701,159 @@ Zhenyu's decision to bring the ALE-RD fluid slice forward, and Codex's section
 14 plan for it, are agreed. Of the prerequisites settled with Zhenyu, T1 and T2
 are done here. The remainder, in risk order:
 
-1. **P1.** The uncommitted B-scheme diagnostic work in
-   `residual_distribution_solver.c` must land or be explicitly quarantined
-   first. The ALE slice edits the same file; concurrent edits guarantee the
-   collision that section 11-14's renumbering has just had to repair in the log.
-2. **P3.** Absolute paths out of the parameter files, and a committed IC
-   generator or recorded IC checksums, before the fluid campaign produces
-   numbers anyone will cite.
-3. **P4.** Generalise the fingerprint fix: refuse a build when a relevant
-   untracked source exists, or hash it.
-4. **T3.** Freeze the shared geometry object of section 14.4 so that the
-   diagnostic and the solver cannot drift apart.
+1. **P1, closed in `8f04faa`.** The B-scheme element-map diagnostic and its
+   documentation have landed independently. The ALE slice now starts without
+   an overlapping tracked edit in `residual_distribution_solver.c`.
+2. **T3/T4, specified in section 16.** Freeze both the shared geometry object
+   and the state/mass/rebase lifecycle before editing the solver. These are the
+   actual implementation prerequisites.
+3. **P3, closed in section 16.** The Stage-0 parameters use paths relative to
+   their working directory and the three local IC identities are recorded.
+4. **P4, closed in section 16.** The managed builder refuses relevant untracked
+   source/build inputs before compilation and checks again before publication.
 
 Three additions to section 14.5's experiment order:
 
-- the `sigma = 0` static collapse must be **bit-identical** to the current
-  static result, not merely consistent with it; that is the only clean proof
-  that the new geometry path is inert in the static limit;
-- the round-off cross-check of section 8.8, between the explicitly assembled
-  `phi_ALE` form and the rewritten form, belongs in the first slice rather than
-  later. It is the only decidable test of the parameter-vector discrete
-  identity and it is cheap once a flux exists;
+- with identical element ordering, the `sigma = 0` geometry coefficients and
+  element residual must be bit-identical to the current static expressions.
+  The end-to-end particle-ID solution and conserved totals need only agree to
+  round-off, because a rebuild may change triangle and summation order;
+- the section 8.8 cross-check belongs in the first slice, but it has two
+  distinct tolerances. Two assemblies using the same `U_h` interpolant must
+  agree to round-off. The production Roe `Zhat_h` path versus an arithmetic-`U`
+  geometric term has a real interpolation defect; record its magnitude and
+  resolution scaling rather than treating it as a DGCL failure;
 - section 10.5 measured the two candidate formulations' mass coefficients as
   differing by about one per cent at production CFL, so starting from the
   Arpaia midpoint pair alone is safe and the compile-time switch can wait.
+
+## 16. 2026-08-10: final cleanup and frozen interface for the first ALE-RD slice
+
+- Author: `Codex`, after reviewing Claude's section 15 additions at Zhenyu's
+  request.
+- Solver change: none. The Stage-0 terminal diagnostic, provenance tooling,
+  portable parameter paths and implementation contract are cleaned here.
+
+### 16.1 Corrections closed
+
+The preceding section now distinguishes total steps from flip-containing
+steps, treats the 37 large first moments as boundary-compatible rather than
+proved boundary patches, and downgrades the stochastic language to what the
+measured lag-1 correlations support. The terminal `mpi_printf` now has format
+slots for all three quantities already written to the CSV.
+
+The production residual cross-check also follows the Chapter 4 distinction:
+same-interpolant assemblies are a round-off identity test; the Roe-`Zhat_h`
+versus arithmetic-`U` path is a measured interpolation defect. Static collapse
+is bitwise only at the element level under an identical traversal, and
+round-off by particle ID for an end-to-end rebuild.
+
+The Stage-0 parameter paths are relative to the parameter directory and
+`ALE_STAGE0_ICS.sha256` records the three local HDF5 identities. The normal
+`run_case.sh` path sets that directory as the run working directory. The ICs
+remain local data rather than Git objects.
+
+`build_case.sh` now refuses untracked inputs under `src/` and the root build
+control files, both before compilation and before artifact publication. The
+explicit Config is independently copied and hashed, so it may still be supplied
+from another path. This closes the stale-source hole without rejecting local
+ICs, plots or run output.
+
+### 16.2 Frozen interface for the first Arpaia ALE-RD slice
+
+The first implementation is deliberately restricted to
+`RD_ALE_EQUALSTEP`: two dimensions, periodic boundaries, equal timesteps, one
+MPI rank, and no refinement, gravity or MHD. It uses the post-rebuild Delaunay
+connectivity throughout the step and does not retain triangle history across a
+flip.
+
+At the opening synchronization point, before any rebuilt area overwrites the
+old divisor, save by persistent particle ID:
+
+```
+U_old[i], m_old[i], x_old_primary[i], sigma[i].
+```
+
+`U_old` is the intensive nodal state. It must never be reconstructed by
+dividing an unre-based old `Q` by a new dual area. `sigma` is frozen for the
+linear drift interval used by this slice.
+
+After the AREPO rebuild, one common helper constructs every owned new-
+connectivity element. Its production object contains:
+
+```
+vertex particle IDs and local indices,
+x_old[3], x_mid[3], x_new[3], sigma[3],
+A_old, A_mid, A_new, delta_T,
+midpoint normals,
+M_arpaia = A_mid,
+D_arpaia = A_mid + (A_new - A_old)/2.
+```
+
+The periodic images come from the coherent `DP[]` triangle at the new time;
+the old and midpoint images are pulled back with the same vertex velocity.
+Both the Stage-0 diagnostic and the solver must call this helper rather than
+copying its formulas. The nodal endpoint mass and modified Arpaia divisor are
+
+```
+m_new[i] = sum_{T contains i} A_new(T)/3,
+m_bar[i] = sum_{T contains i} D_arpaia(T)/3.
+```
+
+The RK accumulator for this slice is explicitly an `m_bar` accumulator. It may
+be represented either as direct increments
+
+```
+Delta U_i = -dt R_i / m_bar[i]
+```
+
+or as temporary `Q_bar = m_bar U`; it is not the physical endpoint `Q`.
+Immediately after obtaining `U_new`, rebase the AREPO storage exactly once:
+
+```
+Q_endpoint[i] = m_new[i] U_new[i],     DualArea[i] = m_new[i].
+```
+
+Only this matched endpoint pair may enter `update_primitive_variables()`. The
+conservation audit is not equality of the temporary and endpoint ledgers. It is
+the declared ALE balance
+
+```
+sum_i (m_new[i] U_new[i] - m_old[i] U_old[i])
+  + dt sum_T Phi_ALE(T) = 0,
+```
+
+with periodic boundary cancellation and the separately reported topology
+quadrature defect. A uniform-state test additionally requires every particle's
+`U_new` to equal `U_old` to round-off under non-rigid motion and real flips.
+
+The first acceptance sequence is therefore fixed:
+
+1. static element coefficients/residuals with `A_old=A_mid=A_new` and
+   `sigma=0`;
+2. non-rigid uniform state with regularisation and flips;
+3. matched-`U_h` explicit-versus-rewritten residual identity;
+4. production `Zhat_h`--versus--`U_h` defect measurement;
+5. endpoint conservation before Gresho or Yee.
+
+Patch assembly for the periodic first-moment diagnostic, Campoli, LDA/B, MPI
+and hierarchical timesteps are not prerequisites for this first correctness
+slice.
+
+### 16.3 Validation
+
+- `git diff --check`: pass.
+- `bash -n build_case.sh`: pass.
+- all three entries in `ALE_STAGE0_ICS.sha256`: pass.
+- all tracked Stage-0 parameter files resolve an existing local IC from their
+  parameter directory and contain no `/home/zwu` path.
+- Stage-0 diagnostic build: pass, artifact
+  `8f04faafa192-ebf4e30865122aec` (dirty-source validation build).
+- B total-frozen element-map build: pass, artifact
+  `8f04faafa192-8bfb2120260d48fb` (dirty-source validation build).
+- negative provenance test: a temporary untracked file under `src/` is listed
+  by name and refused with exit status 5; the probe file was then removed.
+
+The validation builds deliberately used the local system LAPACKE allowance.
+The Stage-0 binary does not link LAPACKE; the B binary does and is a compile
+check only, not a compute-node campaign artifact.

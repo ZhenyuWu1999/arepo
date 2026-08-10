@@ -60,6 +60,11 @@ sanitize_label() {
   printf '%s\n' "${sanitized}"
 }
 
+list_untracked_build_inputs() {
+  git ls-files --others --exclude-standard -- \
+    src Makefile Template-Config.sh Template-Makefile.systype Makefile.systype
+}
+
 sha256_file() {
   sha256sum "${1}" | awk '{print $1}'
 }
@@ -200,6 +205,14 @@ echo "Build lock acquired."
 
 ensure_linear_algebra_environment
 
+UNTRACKED_BUILD_INPUTS="$(list_untracked_build_inputs)"
+if [[ -n "${UNTRACKED_BUILD_INPUTS}" ]]; then
+  echo "Untracked source/build inputs are present and absent from the build fingerprint:" >&2
+  printf '%s\n' "${UNTRACKED_BUILD_INPUTS}" >&2
+  echo "Track, ignore, or remove these files before building." >&2
+  exit 5
+fi
+
 TEMP_BUILD_DIR="$(mktemp -d "${AREPO_REPO_ROOT}/.build-case.${BUILD_NAME}.XXXXXX")"
 CONFIG_SNAPSHOT="${TEMP_BUILD_DIR}/Config.input"
 cp "${CONFIG_PATH}" "${CONFIG_SNAPSHOT}"
@@ -284,6 +297,13 @@ else
 fi
 if [[ "${POST_BUILD_DIFF_SHA256}" != "${SOURCE_DIFF_SHA256}" ]]; then
   echo "Tracked source changed while the build was running; refusing to publish mixed provenance." >&2
+  exit 8
+fi
+
+POST_BUILD_UNTRACKED_INPUTS="$(list_untracked_build_inputs)"
+if [[ -n "${POST_BUILD_UNTRACKED_INPUTS}" ]]; then
+  echo "An untracked source/build input appeared while the build was running; refusing mixed provenance:" >&2
+  printf '%s\n' "${POST_BUILD_UNTRACKED_INPUTS}" >&2
   exit 8
 fi
 
