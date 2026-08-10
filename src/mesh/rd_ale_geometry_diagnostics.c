@@ -74,6 +74,7 @@ struct rd_ale_node
 {
   MyIDType id;
   double mass;
+  double pos[2]; /*!< primary generator position at the time of the snapshot */
 };
 
 struct rd_ale_snapshot
@@ -261,8 +262,10 @@ static void rd_ale_build_snapshot(const tessellation *T, struct rd_ale_snapshot 
   snapshot->nnode = NumGas;
   for(int i = 0; i < NumGas; i++)
     {
-      snapshot->nodes[i].id   = P[i].ID;
-      snapshot->nodes[i].mass = 0.0;
+      snapshot->nodes[i].id     = P[i].ID;
+      snapshot->nodes[i].mass   = 0.0;
+      snapshot->nodes[i].pos[0] = P[i].Pos[0];
+      snapshot->nodes[i].pos[1] = P[i].Pos[1];
     }
   qsort(snapshot->nodes, (size_t)snapshot->nnode, sizeof(*snapshot->nodes), rd_ale_node_compare);
 
@@ -410,7 +413,8 @@ static void rd_ale_open_output(void)
             "min_arpaia_mass,min_campoli_mass,min_old_area_over_mean,min_mid_area_over_mean,min_new_area_over_mean,"
             "min_angle_new,max_centroid_offset_r,rms_centroid_offset_r,quasi_lagrangian_velocity_rms,mesh_velocity_rms,"
             "regularisation_velocity_rms,regularisation_velocity_max,regularisation_active_fraction,"
-            "dm_signed_sum,dm_abs_sum,dm_abs_max,dm_touched_nodes\n");
+            "dm_signed_sum,dm_abs_sum,dm_abs_max,dm_touched_nodes,"
+            "dm_first_moment_x,dm_first_moment_y,max_pullback_position_error\n");
 }
 
 void rd_ale_geometry_velocity_begin(void)
@@ -497,8 +501,10 @@ void rd_ale_geometry_after_mesh(tessellation *T)
     terminate_program("RD ALE Stage 0 could not allocate the pulled-back nodal mass");
   for(int i = 0; i < NumGas; i++)
     {
-      pulled_nodes[i].id   = P[i].ID;
-      pulled_nodes[i].mass = 0.0;
+      pulled_nodes[i].id     = P[i].ID;
+      pulled_nodes[i].mass   = 0.0;
+      pulled_nodes[i].pos[0] = rd_ale_wrap(P[i].Pos[0] - drift_dt * SphP[i].VelVertex[0], boxSize_X);
+      pulled_nodes[i].pos[1] = rd_ale_wrap(P[i].Pos[1] - drift_dt * SphP[i].VelVertex[1], boxSize_Y);
     }
   qsort(pulled_nodes, (size_t)NumGas, sizeof(*pulled_nodes), rd_ale_node_compare);
 
@@ -614,11 +620,27 @@ void rd_ale_geometry_after_mesh(tessellation *T)
   double centroid_rms = (NumGas > 0) ? sqrt(centroid_sum2 / NumGas) : 0.0;
   double mesh_velocity_rms = (NumGas > 0) ? sqrt(mesh_velocity_sum2 / NumGas) : 0.0;
 
-  /* Per-generator topology defect dm_i = mhat_i^n - m_i^n. Both moment
-   * identities of the development log are tested here: the signed sum must
-   * vanish, and dm_i must be supported only on generators whose incident
-   * element set actually changed. */
+  /* Per-generator topology defect dm_i = mhat_i^n - m_i^n.
+   *
+   * Two things are measured here. The zeroth moment sum_i dm_i must vanish to
+   * round-off, because both triangulations tile the same domain. The first
+   * moment sum_i dm_i x_i must vanish as well, by the P^1 linear-reproduction
+   * argument of the development log, but only when it is evaluated with
+   * positions that are consistent across a flip patch. The stored primary
+   * positions are used for exactly that reason. A patch that straddles the
+   * periodic boundary has its nodes on opposite sides of the box, so its
+   * contribution is displaced by a lattice vector and the first moment then
+   * carries a term of order boxsize * h^2. The diagnostic is therefore binary
+   * in practice: round-off when no straddling patch flipped, and a value some
+   * ten orders larger when one did. It is reported, not asserted.
+   *
+   * The reconstruction x^n = x^{n+1} - dt * VelVertex is also checked here
+   * against the position actually recorded at the previous synchronisation
+   * point, which is the first direct test of that identity inside AREPO
+   * rather than an assumption about the drift. */
   double dm_signed_sum = 0.0, dm_abs_sum = 0.0, dm_abs_max = 0.0;
+  double dm_first_moment[2] = {0.0, 0.0};
+  double pullback_position_error = 0.0;
   int dm_touched = 0;
   {
     double mass_scale = (NumGas > 0) ? (boxSize_X * boxSize_Y / NumGas) : 1.0;
@@ -639,6 +661,17 @@ void rd_ale_geometry_after_mesh(tessellation *T)
           dm_abs_max = fabs(dm);
         if(fabs(dm) > tolerance)
           dm_touched++;
+
+        /* The old snapshot's primary position is the unambiguous reference:
+         * it was recorded before the rebuild and needs no image resolution. */
+        dm_first_moment[0] += dm * RdAleOld.nodes[old_node].pos[0];
+        dm_first_moment[1] += dm * RdAleOld.nodes[old_node].pos[1];
+
+        double error_x = fabs(nearest_x(pulled_nodes[node].pos[0] - RdAleOld.nodes[old_node].pos[0]));
+        double error_y = fabs(nearest_y(pulled_nodes[node].pos[1] - RdAleOld.nodes[old_node].pos[1]));
+        double error   = (error_x > error_y) ? error_x : error_y;
+        if(error > pullback_position_error)
+          pullback_position_error = error;
       }
   }
 
@@ -660,7 +693,7 @@ void rd_ale_geometry_after_mesh(tessellation *T)
           "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
           "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%d,%d,%d,"
           "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
-          "%.17g,%.17g,%.17g,%d\n",
+          "%.17g,%.17g,%.17g,%d,%.17g,%.17g,%.17g\n",
           All.NumCurrentTiStep, All.Time, All.TimeStep, drift_dt, ntriangle, removed_edges, added_edges,
           RdAleOld.area, pulled_area, midpoint_area, current.area,
           (pulled_area - box_area) / box_area, (midpoint_area - box_area) / box_area, (current.area - box_area) / box_area,
@@ -668,14 +701,16 @@ void rd_ale_geometry_after_mesh(tessellation *T)
           inverted_old, nonpositive_mid, nonpositive_arpaia, min_arpaia, min_campoli,
           min_old_area / mean_area, min_mid_area / mean_area, min_new_area / mean_area, min_angle_new,
           centroid_max, centroid_rms, RdAleQuasiLagrangianRms, mesh_velocity_rms, RdAleRegularisationRms, RdAleRegularisationMax,
-          RdAleRegularisationActiveFraction, dm_signed_sum, dm_abs_sum, dm_abs_max, dm_touched);
+          RdAleRegularisationActiveFraction, dm_signed_sum, dm_abs_sum, dm_abs_max, dm_touched, dm_first_moment[0], dm_first_moment[1],
+          pullback_position_error);
   fflush(RdAleFile);
 
   mpi_printf("RD-ALE-GEOM: step=%d replaced_edges=%d/%d D=(%.3e,%.3e) cum=(%.3e,%.3e) minA/mean=%.3e "
              "minangle=%.3e inverted=%d nonpos_Sbar=%d reg_rms=%.3e sum_dm=%.3e touched=%d\n",
              All.NumCurrentTiStep, removed_edges, added_edges, defect[0], defect[1], RdAleCumulativeDefect[0],
              RdAleCumulativeDefect[1], min_new_area / mean_area, min_angle_new, inverted_old, nonpositive_arpaia,
-             RdAleRegularisationRms, dm_signed_sum, dm_touched);
+             RdAleRegularisationRms, dm_signed_sum, dm_touched, dm_first_moment[0], dm_first_moment[1],
+             pullback_position_error);
 
   free(campoli_mass);
   free(arpaia_mass);

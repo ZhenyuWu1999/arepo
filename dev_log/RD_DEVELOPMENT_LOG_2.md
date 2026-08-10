@@ -1832,7 +1832,27 @@ Not done:
 
 ---
 
-## 8. 2026-08-06 (later): write the ALE-RD mathematics before changing the solver
+---
+
+> **Editorial note, 2026-08-11 (Claude).** Sections 11 to 14 were written by
+> Codex concurrently with sections 7 to 10, and both authors numbered from 8.
+> The file therefore carried two sections 8, two 9 and two 10; Codex's section
+> 14.2 noticed the collision at section 10 only. The duplicates are resolved
+> here by renumbering Codex's four sections to 11-14 **without moving any text**,
+> so the reading order still matches the order in which each author wrote. Their
+> dates consequently interleave with sections 7-10 rather than following them,
+> and section 11 is dated earlier than section 7. Cross-references inside the
+> renumbered sections were updated only where they pointed at Codex's own
+> sections; references to sections 6, 7, 9.3-9.4 and 10 point at Claude's and
+> are unchanged.
+>
+> **Attribution correction.** Commit `c742da4`, whose author line names Claude,
+> also contains Codex's sections 11, 12 and 13. They were swept in because the
+> whole log file was staged after checking only the diff statistics, not the
+> diff itself, while Codex was editing the same file. The history is left as it
+> stands and the error is recorded here instead. Sections 11-14 are Codex's work.
+
+## 11. 2026-08-06 (later): write the ALE-RD mathematics before changing the solver
 
 - Decision: Zhenyu, following the section 6/7 discussion.
 - Draft written by: Codex.
@@ -1844,7 +1864,7 @@ Not done:
 - Validation: `pdflatex -interaction=nonstopmode -halt-on-error master.tex`
   completed and produced the thesis PDF with the new Chapter 4 and figure.
 
-### 8.1 Why the sequence changes
+### 11.1 Why the sequence changes
 
 Static implementation work could be checked directly against the equations in
 thesis Chapter 3. Moving-mesh discussions had instead begun to choose storage,
@@ -1866,7 +1886,7 @@ An individual `Q_i` is not treated as material in a median-dual finite-volume
 cell. The global sum `sum_i m_i U_i` remains the discrete integral of the P1
 field and is the relevant conservation quantity.
 
-### 8.2 Mathematics now drafted
+### 11.2 Mathematics now drafted
 
 Chapter 4 now contains, using Chapter 3 notation:
 
@@ -1889,7 +1909,7 @@ The endpoint-mass formulation is intentionally labelled a working
 specification. Its algebraic equivalence to the modified-midpoint-mass form of
 Arpaia, Ricchiuto & Abgrall must be checked before it is treated as final.
 
-### 8.3 Direct `Delta U` is clean, but not universal
+### 11.3 Direct `Delta U` is clean, but not universal
 
 For static N/lumped RD,
 
@@ -1919,7 +1939,7 @@ an integrated residual numerator which is converted to `Delta U` only when the
 relevant interval closes. This preserves the useful additive/MPI-ledger
 property without assigning finite-volume meaning to `Q`.
 
-### 8.4 What the new timeline establishes
+### 11.4 What the new timeline establishes
 
 The new figure uses the patch `J,K,L,M` and the flip `KL -> JM`:
 
@@ -1940,7 +1960,7 @@ contribution but before its closing contribution, while the new elements have
 no corresponding predictor history. Direct `Delta U` solves the spatial state
 transfer but not this interrupted time quadrature.
 
-### 8.5 Geometric activity contract
+### 11.5 Geometric activity contract
 
 Inactive does not mean stationary. Every vertex of a due triangle needs
 
@@ -1957,7 +1977,7 @@ The triangle mesh velocity is the P1 interpolant of all three nodal velocities.
 The current element-average `Velvertex_avg` may shift characteristic speeds,
 but it is not enough to construct the geometric source or DGCL.
 
-### 8.6 Work blocked on mathematical review, not code
+### 11.6 Work blocked on mathematical review, not code
 
 Before solver changes, review must settle:
 
@@ -1973,7 +1993,7 @@ Before solver changes, review must settle:
 Until these are explicit, implementation estimates such as "one-line rebase"
 or "no topology treatment" are hypotheses rather than specifications.
 
-## 9. 2026-08-10: mesh-only reference tests for the common ALE geometry
+## 12. 2026-08-10: mesh-only reference tests for the common ALE geometry
 
 - Author: `Codex`, following Zhenyu's decision to test the geometry before
   changing the AREPO solver.
@@ -1983,7 +2003,7 @@ or "no topology treatment" are hypotheses rather than specifications.
   `/home/zwu/Hydro_data_analysis/Analysis/moving_mesh/ale_feasibility.py`.
 - **No AREPO solver source was changed in this entry.**
 
-### 9.1 Common geometry tested
+### 12.1 Common geometry tested
 
 The test constructs the Delaunay triangulation only at the new point positions.
 For every triangle of that post-rebuild connectivity it evaluates the virtual
@@ -2021,7 +2041,7 @@ cancellation required by endpoint N/lumped. These are hard pass/fail checks;
 an inverted pulled-back triangle is counted as a geometric hazard instead of
 being confused with an algebraic failure.
 
-### 9.2 Results
+### 12.2 Results
 
 The 30-step run
 
@@ -2052,7 +2072,7 @@ passed all **754** algebraic checks.
   jittered mesh changed no triangle key. The maximum difference among
   `A_old`, `A_mid`, `A_new` and `delta_T` was `1.21e-15`.
 
-### 9.3 Correction: the earlier KH pulled-back inversions were false positives
+### 12.3 Correction: the earlier KH pulled-back inversions were false positives
 
 The original `ale_feasibility.py::old_position_validity` separately wrapped
 the old coordinates and then applied the periodic image offsets selected by the
@@ -2075,7 +2095,7 @@ and KH at CFL 0.3 and 0.8. The maximum old-geometry tiling defect was
 are therefore withdrawn; they measured a periodic-unwrapping bug, not a
 failure of pulled-back-new connectivity.
 
-### 9.4 What this establishes, and what it does not
+### 12.4 What this establishes, and what it does not
 
 The mesh-only reference now supports one common geometry layer for both scalar
 pairs without constructing an old or midpoint Delaunay mesh. It tests exactly
@@ -2094,7 +2114,7 @@ large-displacement meshes, hierarchical timesteps, or 3-D. Fluid tests should
 follow in the order uniform state, Yee plus boost, Gresho plus boost, and only
 then shock/shear cases.
 
-## 10. 2026-08-10: Stage 0 in AREPO, regularisation, and the next test order
+## 13. 2026-08-10: Stage 0 in AREPO, regularisation, and the next test order
 
 - Author: `Codex`, following Zhenyu's decision to exercise the real AREPO mesh
   before changing the RD fluid update.
@@ -2104,7 +2124,7 @@ then shock/shear cases.
   one MPI rank.  Ordinary AREPO finite-volume hydrodynamics supplies the
   physical state and mesh motion; the new code observes geometry only.
 
-### 10.1 Diagnostic-only C layer
+### 13.1 Diagnostic-only C layer
 
 The compile-time option `RD_ALE_GEOMETRY_DIAGNOSTICS` adds
 `src/mesh/rd_ale_geometry_diagnostics.c`.  It is called after the initial mesh
@@ -2139,7 +2159,7 @@ file).  The Makefile and submission scripts were corrected without running a
 build on the login node.  These failures occurred outside the diagnostic
 algebra.  The short and long compute-node runs then completed.
 
-### 10.2 Algebraic gate on the real rebuild
+### 13.2 Algebraic gate on the real rebuild
 
 The short Gresho smoke run reached `t=0.05` in 137 global steps.  On the real
 AREPO triangulations and periodic images it gave:
@@ -2154,7 +2174,7 @@ Thus the Python common-geometry construction has survived its first direct C
 translation and actual AREPO topology changes.  This is a geometry result, not
 yet a free-stream test of the RD update.
 
-### 10.3 Long Gresho regularisation on/off comparison
+### 13.3 Long Gresho regularisation on/off comparison
 
 Both cases start from the same irregular `48 x 48` Gresho particle set and run
 the actual FV problem to the same physical time `t=0.5`.
@@ -2187,7 +2207,7 @@ the continuous space-time trajectory of the pulled-back new connectivity, not
 in the Delaunay rebuild itself.  A positive summed Arpaia nodal divisor does
 not rescue an individually inverted element.
 
-### 10.4 Interpretation of regularisation and topology noise
+### 13.4 Interpretation of regularisation and topology noise
 
 The earlier expectation that regularisation should reduce the flip rate is
 withdrawn.  In this run the two cases have essentially the same number of
@@ -2206,7 +2226,7 @@ one realisation is not evidence for a universal stochastic law.  The standing
 diagnostic therefore remains the complete increment time series, its mean,
 variance, lag correlation, signed sum and sum of absolute values.
 
-### 10.5 What mesh velocity Stage 0 is actually testing
+### 13.5 What mesh velocity Stage 0 is actually testing
 
 For ordinary pure hydrodynamics the present public AREPO path uses
 
@@ -2255,7 +2275,7 @@ No choice between these predictors is needed to continue the geometry tests.
 They should be retained as explicitly labelled experimental modes rather than
 silently identifying the FV estimator with the RD spatial operator.
 
-### 10.6 Prioritised test plan and handoff
+### 13.6 Prioritised test plan and handoff
 
 The next tests are ordered by dependency.  Items 1--4 remain diagnostic-only
 and can be performed before any ALE-RD fluid update.  Zhenyu intends to hand
@@ -2321,3 +2341,382 @@ The immediate stop condition is therefore clear: Claude can complete items
 1--4 without changing `residual_distribution_solver.c`.  An ALE-RD fluid test
 should not be started until item 5 has a reviewed common-geometry interface and
 a uniform-state/DGCL acceptance test.
+
+## 14. 2026-08-10: audit of the extended Stage 0 campaign, and decision to advance the fluid prototype
+
+- Reviewer: `Codex`, at Zhenyu's request after Claude's free-stream, nodal
+  ledger, CFL and glass/random tests in section 10 above.
+- Decision: Zhenyu proposes bringing the real ALE-RD fluid prototype forward,
+  so that subsequent mesh-motion experiments measure their effect on the RD
+  solution rather than geometry alone.  The review agrees, subject to the
+  deliberately narrow vertical slice in section 14.4.
+- No solver or diagnostic source is changed in this entry.  The unrelated
+  uncommitted B-scheme diagnostic work in
+  `residual_distribution_solver.c` must not be folded accidentally into the
+  ALE implementation.
+- This section supersedes the final sequencing sentence of section 13.6: the
+  entire FV-only matrix in items 1--4 is no longer a prerequisite for beginning
+  the uniform-state ALE-RD gate.
+
+### 14.1 Stage 0 results accepted by the review
+
+The following results survive code and output inspection and are sufficient to
+close the question whether the common geometry can be evaluated on a real
+AREPO rebuild:
+
+1. The independent area and velocity expressions for
+   `delta_T = (A_old+A_new)/2-A_mid` agree to approximately `7e-18` under real
+   quasi-Lagrangian motion, regularisation and topology changes.
+2. The rigid free-stream, regularisation-off run has no changed edge and keeps
+   every quantity that must vanish at round-off.  This validates the Stage 0
+   instrument and its periodic pulled-back construction.
+3. The CFL sweep supports `delta_T = O(dt^2)`.  At fixed physical end time the
+   observed flip rate, the largest nodal topology jump and the accumulated
+   smooth-probe defect change little across the tested CFL range.  This is
+   evidence that the latter quantities are primarily spatial/topological, not
+   a time-quadrature error.
+4. Regularisation keeps the actual point set and the pulled-back space-time
+   triangles healthy.  It is inert on the relaxed `glass48` free stream, while
+   the same option drives a large initial relaxation transient on `random48`.
+   Delaunay optimality cannot repair a badly distributed generator set by
+   itself.
+5. `rd_ale_geometry_diagnostics.c`, its Configs and parameter files are now
+   tracked in commit `24fb409`, so the immediate stale-artifact risk described
+   before that commit no longer applies to this source.
+6. The change in `build_case.sh` that requires MKL/LAPACKE only for a Config
+   containing `RESIDUAL_DISTRIBUTION` is correct for the present source tree:
+   the only LAPACKE calls are in `residual_distribution_solver.c`.
+
+These are geometry and infrastructure results.  They do not establish
+free-stream preservation, conservation or convergence of an ALE-RD fluid
+update, because no such update exists yet.
+
+### 14.2 Corrections and qualifications to Claude's section 10
+
+The technical campaign is sound overall, but the following statements must be
+corrected before its text is treated as a final report.
+
+**The nodal ledger does not yet test the first moment.**  The C diagnostic
+correctly constructs
+
+```
+dm_i = mhat_i^n - m_i^n
+```
+
+by particle ID and records `sum dm_i`, `sum |dm_i|`, `max |dm_i|` and the number
+of touched nodes.  It does not compute
+
+```
+sum_i dm_i x_i
+```
+
+and it does not assemble changed patches or compare the touched-node set with
+the changed edge/star set.  The comment at
+`rd_ale_geometry_diagnostics.c:617` therefore overstates the implemented
+checks.  What has been confirmed inside AREPO is the zeroth-moment sum and the
+availability of every individual `dm_i`; the first-moment identity remains the
+offline Python result.
+
+**The accumulation language remains too strong.**  The data show no
+statistically significant signed drift in the runs examined and are compatible
+with weakly correlated or random-walk-like accumulation.  One realisation and
+two principal spatial resolutions cannot establish a universal stochastic
+model.  In particular, the statements in sections 9.3--9.4 that the
+fixed-time accumulated defect has order `h^3.5` and that a random walk is
+"the correct model" must be downgraded.  `O(h^4)` is the supported local
+smooth-patch statement; the accumulated order requires a controlled
+fixed-physical-time resolution ensemble on healthy meshes.
+
+**Two numerical summaries are inaccurate.**  Directly summing the long Gresho
+CSVs gives
+
+```
+regularisation on:  4525 removed edges / 0.5 = 9050 per unit time
+regularisation off: 4415 removed edges / 0.5 = 8830 per unit time,
+```
+
+not 9043 and 8847.  The final minimum-area ratio improves by about `36x`, and
+the worst value by about `132x`; the phrase "about a thousand times healthier
+by minimum area" is not supported by the table.  The qualitative conclusion
+is unchanged: regularisation prevents severe slivers and pulled-back
+inversions without materially reducing the physical-time flip rate.
+
+**The glass recommendation is problem dependent.**  A relaxed glass is the
+right baseline for the present periodic, nearly uniform-resolution tests and
+avoids measuring an artificial relaxation transient.  A general production
+run with non-uniform target mass or resolution requires a generator set
+relaxed against that target measure, not necessarily a uniform glass.
+
+**The committed test description is not yet portable.**  The parameter files
+contain absolute `/home/zwu/...` paths and depend on HDF5 initial conditions
+that are neither tracked nor regenerated by a committed script.  The numerical
+outputs can be audited on the current machine, but another checkout cannot
+reproduce them from the commit alone.  Replace absolute paths and provide an IC
+generator or a documented immutable IC checksum before calling the campaign a
+reproducible test suite.
+
+**The generic fingerprint hole remains.**  Tracking this particular new C file
+fixed its fingerprint, but `build_case.sh` still hashes `git diff HEAD` and
+ignores untracked files.  A future untracked source, Config include or generated
+header can again be invisible.  The robust policy is to reject a build when a
+relevant untracked file exists, or include such files in the fingerprint and
+artifact manifest.
+
+**The log needs an editorial pass.**  It currently contains two sections
+numbered 10 with overlapping Stage 0 summaries and slightly different tables.
+They are retained for development provenance here, but should later be merged
+without erasing the chronology.
+
+None of these corrections invalidates the element geometry or blocks the
+restricted ALE-RD prototype.
+
+### 14.3 Why the fluid prototype should now move forward
+
+Further FV-only runs cannot answer the main remaining questions:
+
+- whether topology quadrature defects actually enter density, momentum and
+  energy at a measurable level;
+- whether regularisation decreases solution error by maintaining good
+  elements or increases it through additional mesh noise;
+- whether moving LDA/F1 retains the static scheme's smooth-flow order;
+- whether the complete RD update, rather than geometry alone, remains
+  Galilean invariant;
+- whether the AREPO FV pressure predictor in `sigma` has any measurable effect
+  on an RD solution.
+
+Those questions require a fluid update.  It is therefore inefficient to make
+the full FV-only Yee/Gresho/KH and pressure-predictor matrix a gate.  The
+pressure predictor is not part of the DGCL: `sigma` is arbitrary provided the
+same displacement velocity enters the point drift, reconstructed geometry and
+ALE residual.  The first prototype may retain AREPO's existing FV-LSF pressure
+predictor and regularisation, and compare no-acceleration and RD-native
+predictors only after the RD update runs.
+
+### 14.4 Restricted ALE-RD vertical slice
+
+Introduce one explicit experimental compile path, provisionally
+`RD_ALE_EQUALSTEP`, with hard guards:
+
+```
+TWODIMS
+periodic boundaries
+FORCE_EQUAL_TIMESTEPS
+one MPI rank
+no refinement/derefinement
+no hierarchical timesteps
+no gravity or MHD
+```
+
+Do not implement it by merely removing the current
+`VORONOI_STATIC_MESH` error.  Four static assumptions must be replaced:
+
+1. `rd_accumulate_dual_area()` currently accumulates only the rebuilt new
+   triangle area.
+2. `rd_rk2_save_stage0()` currently reconstructs `U^n` by dividing the carried
+   old `Q` by that newly accumulated area, which is the `O(1)` storage error
+   identified in section 7.
+3. `tri_normals_list` currently contains new-mesh normals and areas, and the
+   same values enter both spatial stages and every F1/lumped temporal term.
+4. The existing `Velvertex_avg` shift already supplies the ALE characteristic
+   displacement in `K`, but it supplies only the geometrically
+   non-conservative residual `phi_tilde`; it does not by itself supply the
+   moving mass coefficients.
+
+Build one production geometry object per owned post-rebuild element, sharing
+the Stage 0 construction:
+
+```
+x_old, x_mid, x_new, sigma_i,
+A_old, A_mid, A_new, delta_T,
+midpoint normals,
+pulled-old, modified-midpoint and new nodal masses.
+```
+
+The states entering this object are keyed by persistent particle IDs and use
+the periodic image already resolved by `DP[].x`.  The stage-zero intensive
+state must be taken from the carried nodal `U^n` (or equivalently obtained by an
+explicit rebase), never by dividing unre-based old `Q` by a new divisor.
+
+The recommended implementation order has two short vertical slices:
+
+1. **Correctness slice: Arpaia midpoint N/lumped.**  It uses midpoint normals
+   and element mass together with the modified midpoint nodal divisor.  It
+   avoids the separate endpoint N geometric-source branch and gives the
+   cleanest non-rigid uniform-state DGCL test.
+2. **Research slice: LDA/F1 on the same common geometry.**  Add the midpoint
+   Arpaia scalar pair and the endpoint/Campoli pair as labelled compile-time
+   alternatives.  The endpoint divisor is the ordinary new median dual and
+   maps naturally to the present `Q=mU` storage; its F1 coefficient is
+   `(A_old+A_new)/2`.  The Arpaia coefficient is `A_mid` and its divisor is the
+   modified midpoint dual.  Their difference `delta_T` remains a standing
+   diagnostic.  Do not add B, shocks or hierarchy in this slice.
+
+Every temporary stage accumulator must state which divisor it uses.  Before
+the ordinary `update_primitive_variables()` call, `P.Mass`, momentum and energy
+must once again represent the declared endpoint `Q`, and `DualArea` must be the
+matching divisor.  Global conservation must be audited before and after any
+rebase; preserving nodal `U` alone is not a substitute for that audit.
+
+### 14.5 Revised experiment order
+
+The new order is:
+
+1. **Static collapse:** `sigma=0` must reproduce the existing static N result
+   before topology or regularisation is used.
+2. **Non-rigid uniform state:** use regularisation on an irregular periodic
+   point set to obtain real deformation and flips while keeping the Euler state
+   uniform.  Require particle-wise `U=U_0`, the scheme's declared global
+   conserved totals, element DGCL, positive pulled/midpoint geometry and
+   positive nodal divisor to round-off.
+3. **Uniform boost pair:** repeat the successful uniform gate with a constant
+   boost and compare by particle ID and relative geometry.
+4. **Short Gresho on a relaxed mesh:** compare moving RD, static RD and AREPO FV
+   using the same generators.  This is the first direct measurement of the
+   effect of real regularisation and topology on the RD solution.
+5. **Yee, boost 0 and 1:** perform a small resolution sequence before a large
+   campaign.  This is the first order and Galilean-invariance gate for moving
+   LDA/F1.
+6. **Only then vary mesh policy:** compare
+   `sigma=v+v_reg`, AREPO's FV-LSF half-acceleration predictor, and an
+   RD-native pressure-gradient predictor.  The criterion is solution and mesh
+   convergence, not identical trajectories.
+7. **Discontinuities and long shear later:** contact/Sod, KH, B, MPI,
+   hierarchy, refinement, 3-D and gravity stay outside the first vertical
+   slice.
+
+The practical change from section 13.6 is therefore limited but important:
+stop expanding Stage 0 after reproducibility cleanup, connect the already
+validated common geometry to a uniform-state ALE-RD update, and bring Gresho
+and Yee forward immediately after that gate.  This exposes the actual
+moving-mesh behaviour sooner without using complex fluid tests as a substitute
+for DGCL validation.
+
+---
+
+## 15. 2026-08-11: the first moment inside AREPO, and the drift reconstruction verified
+
+- Author: `Claude Code Opus 5`, closing items T1 and T2 agreed with Zhenyu after
+  Codex's audit in section 14, and performing the editorial pass recorded in the
+  note before section 11.
+- Changes: `src/mesh/rd_ale_geometry_diagnostics.c` only. No solver source.
+
+### 15.1 Codex's corrections, accepted and adjudicated
+
+Section 14.2 is upheld on every numerical point, and two of its corrections are
+of my errors:
+
+- **The first moment was not implemented.** The comment claiming that "both
+  moment identities are tested here" overstated what the code did. Corrected in
+  15.2, both in the comment and in the code.
+- **"About a thousand times healthier by minimum area" is wrong.** Recomputing:
+  the final minimum-area ratio improves by **36x** and the worst value by
+  **132x**. My figure came from dividing the regularised run's *final* value by
+  the unregularised run's *worst* value, which is not a comparison. Codex's
+  numbers are right; section 10.2's phrasing should be read as corrected here.
+- **The flip rates were 9050 and 8830 per unit time**, not 9043 and 8847. Mine
+  were computed from a rounded mean times the step count rather than by summing
+  the column. Codex is right; the conclusion is unaffected.
+- **The glass recommendation is problem dependent.** Accepted. A relaxed glass
+  is right for these periodic near-uniform tests; a production run with a
+  non-uniform target resolution needs generators relaxed against *that* measure.
+- **Reproducibility and the general fingerprint hole.** Both accepted and open,
+  carried as P3 and P4 in the plan agreed with Zhenyu.
+
+One partial pushback. Section 14.2 asks that the claim "a random walk is the
+correct model" be downgraded. The `h^3.5` accumulated order rests on two
+resolutions and should indeed be downgraded to a two-point measurement. But the
+serial correlation is direct evidence, not inference: over 400 steps of
+Lagrangian motion the lag-1 autocorrelation of `D_n` was -0.024, -0.021, +0.000
+and -0.019, and uncorrelated increments are the defining property of a random
+walk. The accurate statement is "no drift detected and the increments are
+serially uncorrelated, which is what a random walk requires", which is stronger
+than mere compatibility and weaker than a proof.
+
+### 15.2 The first moment is now measured in AREPO
+
+Added to the instrument: each snapshot node carries its primary position, and
+the comparison reports `dm_first_moment_x`, `dm_first_moment_y` and
+`max_pullback_position_error`.
+
+The first moment is evaluated against the **stored** old primary positions,
+which need no image resolution because they were recorded before the rebuild.
+A flip patch that straddles the periodic boundary has its nodes on opposite
+sides of the box, so its contribution is displaced by a lattice vector and the
+sum then carries a term of order `boxsize * h^2`. The diagnostic is therefore
+binary rather than continuous, and it is reported rather than asserted.
+
+| | free stream, regularisation off | Gresho, regularisation on, CFL 0.3 |
+| --- | ---: | ---: |
+| steps | 1024 | 265 |
+| edge flips, total | 0 | 1642 |
+| `\|sum dm_i\|`, max | 2.9e-17 | 5.4e-17 |
+| **`\|sum dm_i x_i\|`, median** | **4.9e-18** | **1.0e-17** |
+| `\|sum dm_i x_i\|`, max | 2.6e-17 | 2.8e-4 |
+| steps above 1e-12 | **0 of 1024** | **37 of 265** |
+
+**On 228 of the 265 steps that contain real flips, the first-moment identity
+holds to round-off inside AREPO.** The remaining 37 are exactly the
+boundary-straddling artifact predicted above: their magnitude, 2.8e-4, matches
+`L h^2 = 1 x (1/48)^2 = 4.3e-4` to the expected order. Section 9.1's offline
+result therefore now has an in-code counterpart, and Codex's correction is
+answered rather than merely acknowledged.
+
+Making the remaining 37 steps into a hard gate needs patch assembly in C, which
+is 14.2's suggestion and is not done. It is not on the critical path: the
+identity is confirmed offline for cascades, and in AREPO on 86 per cent of flip
+steps.
+
+### 15.3 The drift reconstruction is verified, not assumed
+
+`x^n = x^{n+1} - dt * VelVertex` has been assumed since section 3.2(b) on the
+grounds that `predict.c:383` is exactly linear. The new
+`max_pullback_position_error` compares the reconstruction against the position
+actually recorded at the previous synchronisation point, by particle ID:
+
+```
+free stream, regularisation off, 1024 steps : 1.110e-16
+Gresho, regularisation on,        265 steps : 1.110e-16
+```
+
+**Round-off, including with regularisation active and topology changing.** The
+identity on which the whole pulled-back construction rests is now measured
+inside AREPO rather than argued from the source.
+
+### 15.4 A side confirmation of the fingerprint fix
+
+Rebuilding after this change produced artifact ids
+`c742da4b77e5-e9b503aba2cb9994` and `c742da4b77e5-803c71ec9c938969`, different
+from the previous build. Before commit `24fb409` placed the diagnostic source
+under version control, an equivalent edit left the id unchanged (section 10.7).
+The specific hole is closed; the general one described in 14.2 is not.
+
+### 15.5 Where this leaves the fluid prototype
+
+Zhenyu's decision to bring the ALE-RD fluid slice forward, and Codex's section
+14 plan for it, are agreed. Of the prerequisites settled with Zhenyu, T1 and T2
+are done here. The remainder, in risk order:
+
+1. **P1.** The uncommitted B-scheme diagnostic work in
+   `residual_distribution_solver.c` must land or be explicitly quarantined
+   first. The ALE slice edits the same file; concurrent edits guarantee the
+   collision that section 11-14's renumbering has just had to repair in the log.
+2. **P3.** Absolute paths out of the parameter files, and a committed IC
+   generator or recorded IC checksums, before the fluid campaign produces
+   numbers anyone will cite.
+3. **P4.** Generalise the fingerprint fix: refuse a build when a relevant
+   untracked source exists, or hash it.
+4. **T3.** Freeze the shared geometry object of section 14.4 so that the
+   diagnostic and the solver cannot drift apart.
+
+Three additions to section 14.5's experiment order:
+
+- the `sigma = 0` static collapse must be **bit-identical** to the current
+  static result, not merely consistent with it; that is the only clean proof
+  that the new geometry path is inert in the static limit;
+- the round-off cross-check of section 8.8, between the explicitly assembled
+  `phi_ALE` form and the rewritten form, belongs in the first slice rather than
+  later. It is the only decidable test of the parameter-vector discrete
+  identity and it is cheap once a flux exists;
+- section 10.5 measured the two candidate formulations' mass coefficients as
+  differing by about one per cent at production CFL, so starting from the
+  Arpaia midpoint pair alone is safe and the compile-time switch can wait.
