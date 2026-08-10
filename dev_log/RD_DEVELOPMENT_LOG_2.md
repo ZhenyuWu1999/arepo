@@ -2857,3 +2857,149 @@ slice.
 The validation builds deliberately used the local system LAPACKE allowance.
 The Stage-0 binary does not link LAPACKE; the B binary does and is a compile
 check only, not a compute-node campaign artifact.
+
+## 17. 2026-08-10: the first fluid-coupled ALE-RD slice and its first blocking result
+
+The deliberately restricted Arpaia midpoint/N slice described in Section 16
+has now been connected to the real AREPO mesh-motion and RD update path. This
+is the first test in this project in which mesh motion changes the coefficients
+used by the fluid residual rather than being observed by a geometry-only
+diagnostic.
+
+### 17.1 Implemented lifecycle
+
+The build switch is `RD_ALE_EQUALSTEP`. The present prototype requires 2D
+periodic geometry, equal timesteps, one MPI rank, `RD_RK2_TOTAL_RESIDUAL`, and
+the N distribution; unsupported combinations fail at compile or run time. It
+does not yet claim support for hierarchical timesteps, refinement, MHD,
+gravity, passive scalars or other RD distributions.
+
+After the AREPO mesh rebuild, the production solver and the Stage-0 diagnostic
+call the same geometry helper. On the new connectivity it pulls every vertex
+back from `x_new` with the frozen mesh velocity, constructs old, midpoint and
+new element geometry, and supplies
+
+```
+A_old, A_mid, A_new,
+delta_T = (A_old + A_new)/2 - A_mid,
+D_arpaia = A_mid + (A_new - A_old)/2,
+midpoint normals.
+```
+
+Before replacing the old dual-area divisor, the solver saves
+`U_old = Q_old/m_old`. It assembles
+
+```
+m_new[i] = sum_T A_new(T)/3,
+m_bar[i] = sum_T D_arpaia(T)/3,
+```
+
+rebases the temporary accumulator to `Q_bar=m_bar U_old`, and runs the existing
+two-stage N total-residual update with midpoint normals and the midpoint lumped
+mass `A_mid/3`. It then recovers `U_new=Q_bar/m_bar` and performs the endpoint
+storage rebase `Q_new=m_new U_new`, `DualArea=m_new`. Thus the temporary Arpaia
+ledger and the physical endpoint ledger are explicitly distinguished.
+
+Every step checks positive old/midpoint/new triangle area, positive `m_bar`,
+periodic area coverage, and the exact two-dimensional area identity. A
+test-only zero-mesh-velocity switch exercises precisely the moving-mesh call
+path while requiring its coefficients to collapse bitwise to the static ones.
+
+### 17.2 Compute-node campaign
+
+All cases below reached `TimeMax=0.02` without an inverted triangle,
+non-positive modified divisor or fluid positivity failure.
+
+| case | steps / flips | principal result |
+| --- | ---: | --- |
+| uniform, forced `sigma=0` | 64 / 0 | static coefficients bitwise identical at all 4610 triangles per step; `max |Delta U|=4.44e-16`; endpoint conservation exactly zero |
+| uniform, rigid Lagrangian translation | 64 / 0 | `max |Delta U|=1.33e-15`; endpoint conservation `1.33e-15` |
+| uniform, regularisation on | 33 / 788 | real deformation and flips; `max |Delta U|=1.33e-15`; endpoint conservation `8.44e-15`; final state differs from the initial state only at round-off |
+| Gresho, forced `sigma=0` | 128 / 0 | static moving-path control is stable; global changes `(mass,px,py,E)=(0,6.94e-18,0,-1.78e-15)` |
+| Gresho, regularisation on | 70 / 1036 | stable with flips on every step, but endpoint conservation is **not** at round-off |
+
+For all moving cases the element area identity is at round-off; the largest
+observed defect was about `5.9e-18`. The static RD configuration also compiles
+from the same source, so sharing the geometry object has not broken the
+non-ALE build.
+
+Representative Slurm jobs were `10382438` (stationary uniform), `10382439`
+(regularised uniform), `10382446` (stationary Gresho), `10382447`
+(regularised Gresho with ledger split), and `10382448` (static RD compile
+regression). Reproducible binaries are retained under `build_artifacts/`, in
+particular
+
+```
+ale-rd-n-zero-mesh/ffeca740c8bf-c7ec2a1b78562bf6/Arepo
+ale-rd-n-regularized/ffeca740c8bf-df121ee0b4664487/Arepo
+rd-static-regression/ffeca740c8bf-681c66c492fd885a/Arepo
+```
+
+The corresponding IC files remain local run inputs and are covered by the
+tracked `ALE_STAGE0_ICS.sha256` manifest; run output is not part of this
+commit.
+
+### 17.3 The regularised Gresho conservation defect
+
+The final regularised Gresho snapshot changed its global endpoint ledger by
+
+```
+Delta(mass, px, py, E)
+  = (-2.5059849e-6, -2.0924436e-5, -4.7642059e-5, +6.5222761e-9).
+```
+
+The largest single-step endpoint defect was `4.99312e-5`. This is much larger
+than round-off and therefore the Gresho case is a diagnostic smoke run, not an
+accepted ALE-RD result.
+
+To localise the defect, the code now prints three distinct changes:
+
+```
+temporary_change = sum Q_bar(after update) - sum Q_old(physical),
+rebase_change    = sum Q_endpoint - sum Q_bar(after update),
+endpoint_change  = sum Q_endpoint - sum Q_old(physical).
+```
+
+Over this run, the component-wise maxima were
+
+| ledger change | mass | px | py | energy |
+| --- | ---: | ---: | ---: | ---: |
+| temporary | `1.263453e-6` | `2.084930e-5` | `4.993151e-5` | `4.419537e-5` |
+| rebase | `3.111423e-10` | `9.990617e-9` | `5.823788e-9` | `5.451558e-8` |
+| endpoint | `1.263379e-6` | `2.085005e-5` | `4.993120e-5` | `4.424252e-5` |
+
+Therefore the final `m_bar -> m_new` storage rebase is not the leading source.
+The defect is already present in the modified-mass update. The uniform-state
+result shows that the discrete geometric conservation law itself is working;
+the non-uniform conservation identity is the unresolved part.
+
+The leading hypothesis is the interpolation distinction already recorded in
+Chapter 4: the production spatial residual uses Roe `Zhat_h`, whereas the
+geometric/mass cancellation is written for an arithmetic nodal `U_h`.
+Arpaia's same-interpolant algebra does not by itself establish exact endpoint
+conservation for that mixed choice. This is a diagnosis to test, not yet a
+conclusion. Since the regularised Gresho run flipped on every step, these data
+also cannot yet separate continuous-deformation error from a topology-change
+contribution.
+
+### 17.4 Revised next acceptance gates
+
+The implementation is far enough advanced to expose the real fluid-level
+question, but not far enough for long Gresho/Yee accuracy campaigns. The next
+tests are now:
+
+1. assemble the explicit and rewritten ALE residual with the same arithmetic
+   `U_h` interpolation and require a round-off identity element by element;
+2. replace only that interpolation by the production Roe `Zhat_h` path and
+   measure the predicted `Z`--`U` defect separately;
+3. construct a non-rigid but no-flip interval to distinguish continuous mesh
+   deformation from topology change;
+4. make endpoint conservation a hard acceptance gate before comparing Gresho,
+   boosted Gresho, Yee or mesh-velocity policies;
+5. only after these gates, extend beyond the current one-rank/equal-step/N
+   prototype.
+
+The first ALE-RD slice has therefore passed its static-collapse, geometry and
+free-stream gates. Its first non-uniform moving-fluid run has done the useful
+thing a prototype should do: identify a conservation question before a larger
+engineering integration hides it.

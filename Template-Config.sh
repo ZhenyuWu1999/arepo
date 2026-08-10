@@ -42,6 +42,8 @@
 #RD_HIER_TEST_SPLIT_FRAC=0.5   # Test only: fraction of BoxSize_X below which the test pattern refines (default 0.5)
 #RD_DIAG_THETA                 # Diagnostic only: histogram of the B blending parameter
 #RD_DIAG_THETA_MAP             # Diagnostic only: final-step element map of Theta and B-minus-LDA correction
+#RD_ALE_EQUALSTEP              # Experimental 2D periodic one-rank Arpaia ALE-RD path
+#RD_ALE_TEST_ZERO_MESH_VELOCITY # Test-only stationary mesh policy for RD_ALE_EQUALSTEP
 #RD_B_FROZEN_THETA             # B blend: freeze Theta from stage-0 data so the map is dt-smooth
 #RD_B_SPATIAL_THETA            # B blend: steady-form indicator (Arpaia eq. 42) instead of the whole residual
 #LDA_SCHEME                    # Low Diffusion A scheme for residual distribution

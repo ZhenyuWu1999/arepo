@@ -257,6 +257,20 @@ void set_vertex_velocities(void)
         }
     } /* for loop of active particles */
 
+#ifdef RD_ALE_TEST_ZERO_MESH_VELOCITY
+#ifndef RD_ALE_EQUALSTEP
+#error "RD_ALE_TEST_ZERO_MESH_VELOCITY is only a test policy for RD_ALE_EQUALSTEP."
+#endif
+  for(idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
+    {
+      i = TimeBinsHydro.ActiveParticleList[idx];
+      if(i < 0)
+        continue;
+      for(j = 0; j < 3; j++)
+        SphP[i].VelVertex[j] = 0.0;
+    }
+#endif
+
 #ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
   rd_ale_geometry_velocity_end();
 #endif

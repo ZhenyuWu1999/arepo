@@ -29,6 +29,7 @@
 #include "../main/allvars.h"
 #include "../main/proto.h"
 #include "../mesh/mesh.h"
+#include "../mesh/rd_ale_geometry.h"
 #include "../mesh/voronoi/voronoi.h"
 
 #ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
@@ -526,23 +527,22 @@ void rd_ale_geometry_after_mesh(tessellation *T)
       if(!rd_ale_triangle_is_physical(T, triangle) || !rd_ale_triangle_claimed(T, triangle))
         continue;
 
-      double xnew[3], ynew[3], xmid[3], ymid[3], xold[3], yold[3], velocity[3][2];
+      double xnew[3][2], velocity[3][2];
 
       for(int vertex = 0; vertex < 3; vertex++)
         {
           const point *dp = &T->DP[T->DT[triangle].p[vertex]];
           rd_ale_point_velocity(dp, velocity[vertex]);
-          xnew[vertex] = dp->x;
-          ynew[vertex] = dp->y;
-          xmid[vertex] = xnew[vertex] - 0.5 * drift_dt * velocity[vertex][0];
-          ymid[vertex] = ynew[vertex] - 0.5 * drift_dt * velocity[vertex][1];
-          xold[vertex] = xnew[vertex] - drift_dt * velocity[vertex][0];
-          yold[vertex] = ynew[vertex] - drift_dt * velocity[vertex][1];
+          xnew[vertex][0] = dp->x;
+          xnew[vertex][1] = dp->y;
         }
 
-      double area_old = rd_ale_signed_area(xold, yold);
-      double area_mid = rd_ale_signed_area(xmid, ymid);
-      double area_new = rd_ale_signed_area(xnew, ynew);
+      struct rd_ale_triangle_geometry geometry;
+      rd_ale_triangle_geometry_build(xnew, velocity, drift_dt, &geometry);
+
+      double area_old = geometry.normals[RD_ALE_OLD].area;
+      double area_mid = geometry.normals[RD_ALE_MID].area;
+      double area_new = geometry.normals[RD_ALE_NEW].area;
 
       pulled_area += area_old;
       midpoint_area += area_mid;
@@ -557,16 +557,18 @@ void rd_ale_geometry_after_mesh(tessellation *T)
       if(area_mid <= 0.0)
         nonpositive_mid++;
 
-      double angle = rd_ale_minimum_angle(xnew, ynew);
+      double angle = rd_ale_minimum_angle((double[3]){xnew[0][0], xnew[1][0], xnew[2][0]},
+                                          (double[3]){xnew[0][1], xnew[1][1], xnew[2][1]});
       if(angle < min_angle_new)
         min_angle_new = angle;
 
       for(int probe = 0; probe < RD_ALE_NPROBE; probe++)
-        pulled_probe[probe] += area_old * (rd_ale_probe(probe, xold[0], yold[0]) + rd_ale_probe(probe, xold[1], yold[1]) +
-                                            rd_ale_probe(probe, xold[2], yold[2])) /
+        pulled_probe[probe] += area_old * (rd_ale_probe(probe, geometry.x[RD_ALE_OLD][0][0], geometry.x[RD_ALE_OLD][0][1]) +
+                                            rd_ale_probe(probe, geometry.x[RD_ALE_OLD][1][0], geometry.x[RD_ALE_OLD][1][1]) +
+                                            rd_ale_probe(probe, geometry.x[RD_ALE_OLD][2][0], geometry.x[RD_ALE_OLD][2][1])) /
                                3.0;
 
-      double delta_from_area = 0.5 * (area_old + area_new) - area_mid;
+      double delta_from_area = geometry.delta_area;
       double dv10x = velocity[1][0] - velocity[0][0];
       double dv10y = velocity[1][1] - velocity[0][1];
       double dv20x = velocity[2][0] - velocity[0][0];
@@ -579,7 +581,7 @@ void rd_ale_geometry_after_mesh(tessellation *T)
       if(delta_ratio > max_delta_over_area)
         max_delta_over_area = delta_ratio;
 
-      double arpaia_contribution = area_mid + 0.5 * (area_new - area_old);
+      double arpaia_contribution = geometry.arpaia_divisor;
       for(int vertex = 0; vertex < 3; vertex++)
         {
           const point *dp = &T->DP[T->DT[triangle].p[vertex]];

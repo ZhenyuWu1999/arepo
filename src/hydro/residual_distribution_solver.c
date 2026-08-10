@@ -11,6 +11,7 @@
 #include "../main/cpp_functions.h"
 #include "../main/proto.h"
 #include "../mesh/mesh.h"
+#include "../mesh/rd_ale_geometry.h"
 #include "../mesh/voronoi/voronoi.h"
 /* The LU diagonal-pivot spread is only a cheap trigger for switching to the
  * more reliable SVD solver.  It is not a numerical-rank decision. */
@@ -55,12 +56,28 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "The current residual-distribution solver is implemented only for TWODIMS."
 #endif
 
-#if !defined(VORONOI_STATIC_MESH)
-#error "The current residual-distribution baseline requires VORONOI_STATIC_MESH."
+#if !defined(VORONOI_STATIC_MESH) && !defined(RD_ALE_EQUALSTEP)
+#error "Moving-mesh RD requires the restricted RD_ALE_EQUALSTEP prototype."
 #endif
 
 #if !defined(FORCE_EQUAL_TIMESTEPS) && !defined(RD_HIERARCHICAL_TIMESTEPS)
 #error "The current residual-distribution baseline requires FORCE_EQUAL_TIMESTEPS."
+#endif
+
+#ifdef RD_ALE_EQUALSTEP
+#if defined(VORONOI_STATIC_MESH) || !defined(FORCE_EQUAL_TIMESTEPS) || !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(N_SCHEME)
+#error "RD_ALE_EQUALSTEP v1 requires moving-mesh, equal-step, total-residual N/lumped RD."
+#endif
+#if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || defined(MHD) || \
+    defined(PASSIVE_SCALARS)
+#error "RD_ALE_EQUALSTEP v1 excludes hierarchy, refinement, MHD and passive scalars."
+#endif
+#if defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE)
+#error "RD_ALE_EQUALSTEP v1 excludes gravity."
+#endif
+#if defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
+#error "RD_ALE_EQUALSTEP v1 requires periodic boundaries."
+#endif
 #endif
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
@@ -755,6 +772,15 @@ struct rd_element_set
   int *element;
   char *active;
   struct triangle_normals *normals;
+#ifdef RD_ALE_EQUALSTEP
+  struct rd_ale_triangle_geometry *ale_geometry;
+  double *ale_endpoint_area;
+  double *ale_divisor;
+  double(*ale_uold)[4];
+  double ale_old_total[4];
+  double ale_dt;
+  int ale_uniform_initial;
+#endif
   int n;
   int n_active;
 };
@@ -871,6 +897,16 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
   set->n       = n;
   set->element = (int *)mymalloc_movable(&set->element, "RD_elements", set->n * sizeof(int));
   set->active  = (char *)mymalloc_movable(&set->active, "RD_element_active", set->n * sizeof(char));
+#ifdef RD_ALE_EQUALSTEP
+  set->ale_geometry = NULL;
+  set->ale_endpoint_area = NULL;
+  set->ale_divisor = NULL;
+  set->ale_uold = NULL;
+  set->ale_dt = 0.0;
+  set->ale_uniform_initial = 0;
+  for(int component = 0; component < 4; component++)
+    set->ale_old_total[component] = 0.0;
+#endif
 
   for(i = 0, n = 0; i < Ndt; i++)
     if(rd_triangle_is_physical(T, i) && rd_simplex_claimed(T, i, use_min_bin_owner))
@@ -924,10 +960,287 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
 
 static void rd_free_element_set(struct rd_element_set *set)
 {
+#ifdef RD_ALE_EQUALSTEP
+  if(set->ale_uold != NULL)
+    myfree(set->ale_uold);
+  if(set->ale_divisor != NULL)
+    myfree(set->ale_divisor);
+  if(set->ale_endpoint_area != NULL)
+    myfree(set->ale_endpoint_area);
+  if(set->ale_geometry != NULL)
+    myfree_movable(set->ale_geometry);
+#endif
   myfree_movable(set->normals);
   myfree_movable(set->active);
   myfree_movable(set->element);
 }
+
+#ifdef RD_ALE_EQUALSTEP
+static int rd_ale_local_point_index(const point *dp)
+{
+  if(dp->task != ThisTask)
+    terminate_program("RD_ALE_EQUALSTEP v1 encountered a remote vertex despite its one-rank guard");
+
+  int index = dp->index;
+  if(index >= NumGas)
+    index -= NumGas;
+  if(index < 0 || index >= NumGas)
+    terminate_program("RD_ALE_EQUALSTEP could not map a periodic image to its primary generator");
+  return index;
+}
+
+static void rd_ale_q_from_particle(int i, double q[4])
+{
+  q[0] = P[i].Mass;
+  q[1] = SphP[i].Momentum[0];
+  q[2] = SphP[i].Momentum[1];
+  q[3] = SphP[i].Energy;
+}
+
+static void rd_ale_set_particle_q(int i, double area, const double u[4])
+{
+  P[i].Mass = area * u[0];
+  SphP[i].Momentum[0] = area * u[1];
+  SphP[i].Momentum[1] = area * u[2];
+  SphP[i].Energy = area * u[3];
+
+  /* The first prototype excludes a dynamically relevant third momentum, but
+   * preserve a zero/non-zero passive value through the storage rebase. */
+  if(SphP[i].DualArea > 0.0)
+    SphP[i].Momentum[2] *= area / SphP[i].DualArea;
+}
+
+/*! Construct the post-rebuild new-connectivity geometry and switch the
+ *  temporary AREPO storage from endpoint Q=m_old U_old to Qbar=mbar U_old. */
+static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
+{
+  if(NTask != 1)
+    terminate_program("RD_ALE_EQUALSTEP v1 is deliberately restricted to one MPI rank");
+  if(All.ComovingIntegrationOn)
+    terminate_program("RD_ALE_EQUALSTEP v1 excludes comoving integration");
+
+  integertime drift_ticks = All.Ti_Current - All.Previous_Ti_Current;
+  set->ale_dt = drift_ticks * All.Timebase_interval;
+  if(!(set->ale_dt > 0.0) || !isfinite(set->ale_dt))
+    terminate_program("RD_ALE_EQUALSTEP received a non-positive drift interval");
+
+  set->ale_geometry = (struct rd_ale_triangle_geometry *)mymalloc_movable(
+      &set->ale_geometry, "RD_ALEGeometry", set->n * sizeof(*set->ale_geometry));
+  set->ale_endpoint_area = (double *)mymalloc("RD_ALEEndpointArea", NumGas * sizeof(*set->ale_endpoint_area));
+  set->ale_divisor = (double *)mymalloc("RD_ALEDivisor", NumGas * sizeof(*set->ale_divisor));
+  set->ale_uold = (double(*)[4])mymalloc("RD_ALEUOld", NumGas * sizeof(*set->ale_uold));
+  memset(set->ale_endpoint_area, 0, NumGas * sizeof(*set->ale_endpoint_area));
+  memset(set->ale_divisor, 0, NumGas * sizeof(*set->ale_divisor));
+
+  double umin[4] = {DBL_MAX, DBL_MAX, DBL_MAX, DBL_MAX};
+  double umax[4] = {-DBL_MAX, -DBL_MAX, -DBL_MAX, -DBL_MAX};
+
+  for(int i = 0; i < NumGas; i++)
+    {
+      double old_area = SphP[i].DualArea;
+      if(!(old_area > 0.0) || !isfinite(old_area))
+        terminate_program("RD_ALE_EQUALSTEP lost the old endpoint median-dual area");
+
+      double q[4];
+      rd_ale_q_from_particle(i, q);
+      for(int component = 0; component < 4; component++)
+        {
+          set->ale_uold[i][component] = q[component] / old_area;
+          set->ale_old_total[component] += q[component];
+          umin[component] = dmin(umin[component], set->ale_uold[i][component]);
+          umax[component] = dmax(umax[component], set->ale_uold[i][component]);
+        }
+    }
+
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+  double max_delta_identity = 0.0;
+  double min_old_area = DBL_MAX, min_mid_area = DBL_MAX, min_new_area = DBL_MAX;
+  double max_static_geometry_difference = 0.0;
+  int stationary_geometry = 1, static_geometry_bit_mismatches = 0;
+
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      int triangle = set->element[slot];
+      double xnew[3][2], velocity[3][2];
+      int triangle_stationary = 1;
+
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          const point *dp = &DP[DT[triangle].p[vertex]];
+          int index = rd_ale_local_point_index(dp);
+          xnew[vertex][0] = dp->x;
+          xnew[vertex][1] = dp->y;
+          velocity[vertex][0] = SphP[index].VelVertex[0];
+          velocity[vertex][1] = SphP[index].VelVertex[1];
+          if(velocity[vertex][0] != 0.0 || velocity[vertex][1] != 0.0)
+            stationary_geometry = triangle_stationary = 0;
+        }
+
+      struct rd_ale_triangle_geometry *geometry = &set->ale_geometry[slot];
+      rd_ale_triangle_geometry_build(xnew, velocity, set->ale_dt, geometry);
+
+      double area_old = geometry->normals[RD_ALE_OLD].area;
+      double area_mid = geometry->normals[RD_ALE_MID].area;
+      double area_new = geometry->normals[RD_ALE_NEW].area;
+      min_old_area = dmin(min_old_area, area_old);
+      min_mid_area = dmin(min_mid_area, area_mid);
+      min_new_area = dmin(min_new_area, area_new);
+
+      if(!(area_old > 0.0) || !(area_mid > 0.0) || !(area_new > 0.0))
+        {
+          printf("RD-ALE invalid element: triangle=%d Aold=%.17g Amid=%.17g Anew=%.17g dt=%.17g\n", triangle,
+                 area_old, area_mid, area_new, set->ale_dt);
+          terminate_program("RD_ALE_EQUALSTEP found an inverted pulled-back or midpoint triangle");
+        }
+      for(int vertex = 0; vertex < 3; vertex++)
+        if(!(geometry->normals[RD_ALE_MID].mag[vertex] > 0.0))
+          terminate_program("RD_ALE_EQUALSTEP found a zero midpoint edge");
+
+      if(triangle_stationary)
+        {
+          int triangle_static_mismatch = set->normals[slot].area != geometry->normals[RD_ALE_MID].area;
+          max_static_geometry_difference =
+              dmax(max_static_geometry_difference,
+                   fabs(set->normals[slot].area - geometry->normals[RD_ALE_MID].area));
+          for(int vertex = 0; vertex < 3; vertex++)
+            {
+              triangle_static_mismatch |= set->normals[slot].mag[vertex] != geometry->normals[RD_ALE_MID].mag[vertex];
+              max_static_geometry_difference =
+                  dmax(max_static_geometry_difference,
+                       fabs(set->normals[slot].mag[vertex] - geometry->normals[RD_ALE_MID].mag[vertex]));
+              for(int axis = 0; axis < 2; axis++)
+                {
+                  triangle_static_mismatch |=
+                      set->normals[slot].normal[vertex][axis] != geometry->normals[RD_ALE_MID].normal[vertex][axis];
+                  max_static_geometry_difference =
+                      dmax(max_static_geometry_difference,
+                           fabs(set->normals[slot].normal[vertex][axis] - geometry->normals[RD_ALE_MID].normal[vertex][axis]));
+                }
+            }
+          static_geometry_bit_mismatches += triangle_static_mismatch;
+        }
+      set->normals[slot] = geometry->normals[RD_ALE_MID];
+
+      double dv10x = velocity[1][0] - velocity[0][0];
+      double dv10y = velocity[1][1] - velocity[0][1];
+      double dv20x = velocity[2][0] - velocity[0][0];
+      double dv20y = velocity[2][1] - velocity[0][1];
+      double delta_velocity = 0.125 * set->ale_dt * set->ale_dt * (dv10x * dv20y - dv10y * dv20x);
+      max_delta_identity = dmax(max_delta_identity, fabs(geometry->delta_area - delta_velocity));
+
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
+          set->ale_endpoint_area[index] += area_new / 3.0;
+          set->ale_divisor[index] += geometry->arpaia_divisor / 3.0;
+        }
+    }
+
+  double endpoint_coverage = 0.0, divisor_coverage = 0.0;
+  int nonpositive_divisors = 0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      endpoint_coverage += set->ale_endpoint_area[i];
+      divisor_coverage += set->ale_divisor[i];
+      if(!(set->ale_divisor[i] > 0.0) || !isfinite(set->ale_divisor[i]))
+        nonpositive_divisors++;
+    }
+
+  double box_area = boxSize_X * boxSize_Y;
+  double coverage_tolerance = 1.0e-10 * box_area;
+  if(fabs(endpoint_coverage - box_area) > coverage_tolerance || fabs(divisor_coverage - box_area) > coverage_tolerance)
+    {
+      printf("RD-ALE coverage failure: endpoint=%.17g divisor=%.17g box=%.17g\n", endpoint_coverage, divisor_coverage,
+             box_area);
+      terminate_program("RD_ALE_EQUALSTEP geometry does not cover the periodic box");
+    }
+  if(nonpositive_divisors > 0)
+    terminate_program("RD_ALE_EQUALSTEP found a non-positive modified Arpaia nodal divisor");
+  if(stationary_geometry && static_geometry_bit_mismatches != 0)
+    terminate_program("RD_ALE_EQUALSTEP sigma=0 geometry did not collapse bitwise to the static coefficients");
+
+  set->ale_uniform_initial = 1;
+  for(int component = 0; component < 4; component++)
+    {
+      double scale = dmax(1.0, dmax(fabs(umin[component]), fabs(umax[component])));
+      if(umax[component] - umin[component] > 4096.0 * DBL_EPSILON * scale)
+        set->ale_uniform_initial = 0;
+    }
+
+  for(int i = 0; i < NumGas; i++)
+    {
+      rd_ale_set_particle_q(i, set->ale_divisor[i], set->ale_uold[i]);
+      SphP[i].DualArea = set->ale_divisor[i];
+    }
+
+  mpi_printf("RD-ALE-PREP time=%.8g dt=%.8g elements=%d minA=[%.3e,%.3e,%.3e] "
+             "coverage=[%.17g,%.17g] delta_identity=%.3e uniform=%d stationary=%d static_bit_mismatch=%d "
+             "static_max_diff=%.3e\n",
+             All.Time, set->ale_dt, set->n, min_old_area, min_mid_area, min_new_area, endpoint_coverage,
+             divisor_coverage, max_delta_identity, set->ale_uniform_initial, stationary_geometry,
+             static_geometry_bit_mismatches, max_static_geometry_difference);
+}
+
+/*! Convert the temporary modified-midpoint ledger back to endpoint Q=m_new U
+ *  and audit the declared physical endpoint totals. */
+static void rd_ale_finish_step(struct rd_element_set *set)
+{
+  double temporary_total[4] = {0.0, 0.0, 0.0, 0.0};
+  double new_total[4] = {0.0, 0.0, 0.0, 0.0};
+  double max_uniform_error = 0.0, max_uniform_scale = 1.0;
+
+  for(int i = 0; i < NumGas; i++)
+    {
+      double qbar[4], unew[4];
+      rd_ale_q_from_particle(i, qbar);
+      for(int component = 0; component < 4; component++)
+        {
+          temporary_total[component] += qbar[component];
+          unew[component] = qbar[component] / set->ale_divisor[i];
+          max_uniform_error = dmax(max_uniform_error, fabs(unew[component] - set->ale_uold[i][component]));
+          max_uniform_scale = dmax(max_uniform_scale, fabs(set->ale_uold[i][component]));
+        }
+
+      rd_ale_set_particle_q(i, set->ale_endpoint_area[i], unew);
+      SphP[i].DualArea = set->ale_endpoint_area[i];
+
+      double qnew[4];
+      rd_ale_q_from_particle(i, qnew);
+      for(int component = 0; component < 4; component++)
+        new_total[component] += qnew[component];
+    }
+
+  double max_conservation_defect = 0.0, conservation_scale = 1.0;
+  double temporary_change[4], rebase_change[4], endpoint_change[4];
+  for(int component = 0; component < 4; component++)
+    {
+      temporary_change[component] = temporary_total[component] - set->ale_old_total[component];
+      rebase_change[component] = new_total[component] - temporary_total[component];
+      endpoint_change[component] = new_total[component] - set->ale_old_total[component];
+      max_conservation_defect = dmax(max_conservation_defect, fabs(endpoint_change[component]));
+      conservation_scale = dmax(conservation_scale, fabs(set->ale_old_total[component]));
+    }
+
+  if(set->ale_uniform_initial)
+    {
+      double state_tolerance = 32768.0 * DBL_EPSILON * max_uniform_scale;
+      double conservation_tolerance = 32768.0 * DBL_EPSILON * conservation_scale;
+      if(max_uniform_error > state_tolerance)
+        terminate_program("RD_ALE_EQUALSTEP failed particle-wise free-stream preservation");
+      if(max_conservation_defect > conservation_tolerance)
+        terminate_program("RD_ALE_EQUALSTEP failed uniform-state endpoint conservation");
+    }
+
+  mpi_printf("RD-ALE-FINISH time=%.8g uniform=%d max_dU=%.3e endpoint_cons=%.3e "
+             "temporary_change=[%.6e,%.6e,%.6e,%.6e] rebase_change=[%.6e,%.6e,%.6e,%.6e] "
+             "endpoint_change=[%.6e,%.6e,%.6e,%.6e] totals=[%.17g,%.17g,%.17g,%.17g]\n",
+             All.Time, set->ale_uniform_initial, max_uniform_error, max_conservation_defect, temporary_change[0],
+             temporary_change[1], temporary_change[2], temporary_change[3], rebase_change[0], rebase_change[1],
+             rebase_change[2], rebase_change[3], endpoint_change[0], endpoint_change[1], endpoint_change[2],
+             endpoint_change[3], new_total[0], new_total[1], new_total[2], new_total[3]);
+}
+#endif /* RD_ALE_EQUALSTEP */
 
 /*! \brief Accumulate the median dual area over the complete physical set.
  *
@@ -1263,7 +1576,9 @@ void compute_residuals(tessellation *T)
    * stays a property of the tessellation. */
   struct rd_element_set set;
   rd_build_element_set(T, &set, 1);
-#ifndef RD_HIERARCHICAL_TIMESTEPS
+#ifdef RD_ALE_EQUALSTEP
+  rd_ale_prepare_step(T, &set);
+#elif !defined(RD_HIERARCHICAL_TIMESTEPS)
   rd_accumulate_dual_area(T, &set);
 #else
   /* Static RD control areas are initialized once from the all-active mesh and
@@ -1441,6 +1756,11 @@ void compute_residuals(tessellation *T)
 
       double full_triangle_dt = (((integertime)1) << timebin_this_triangle) * All.Timebase_interval;
       double triangle_dt      = full_triangle_dt;
+
+#ifdef RD_ALE_EQUALSTEP
+      if(fabs(full_triangle_dt - set.ale_dt) > 64.0 * DBL_EPSILON * dmax(full_triangle_dt, set.ale_dt))
+        terminate_program("RD_ALE_EQUALSTEP residual interval differs from the mesh drift interval");
+#endif
 
 #ifdef RD_RK2_RATE_CONSISTENT_HEUN
       /* Spatial/mass weights for k=2v-S^-1Mv and the Heun average. */
@@ -2765,6 +3085,10 @@ void compute_residuals(tessellation *T)
 
   FluxRD_list = NULL; /* freed inside the stage loop */
 #endif /* RD_RK2_INTERNAL_LOOP */
+
+#ifdef RD_ALE_EQUALSTEP
+  rd_ale_finish_step(&set);
+#endif
 
 #ifdef RD_RT_FIXED_BOUNDARY
   {

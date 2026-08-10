@@ -288,6 +288,11 @@ ifeq (RD_ALE_GEOMETRY_DIAGNOSTICS,$(findstring RD_ALE_GEOMETRY_DIAGNOSTICS,$(CON
 OBJS    += mesh/rd_ale_geometry_diagnostics.o
 endif
 
+ifneq (,$(filter RESIDUAL_DISTRIBUTION RD_ALE_GEOMETRY_DIAGNOSTICS,$(CONFIGVARS)))
+OBJS    += mesh/rd_ale_geometry.o
+INCL    += mesh/rd_ale_geometry.h
+endif
+
 ifeq (MYIBARRIER,$(findstring MYIBARRIER,$(CONFIGVARS)))
 OBJS    += mpi_utils/myIBarrier.o
 INCL    += mpi_utils/myIBarrier.h
