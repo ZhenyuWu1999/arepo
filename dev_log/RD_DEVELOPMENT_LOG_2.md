@@ -3164,3 +3164,106 @@ suite is still doing useful work on the ALE path.
 - The topology question returns to the options of section 7: accept a
   converging defect, or implement the conservative topology operator whose
   antisymmetric-flux form is given there.
+
+---
+
+## 19. 2026-08-11: split regression gates, and the topology defect's convergence in the fluid
+
+- Author: `Claude Code Opus 5`. No source change; these are runs of the section
+  18 code.
+
+### 19.1 The three regression gates for `RD_ALE_SPLIT_MESH_VELOCITY`
+
+Section 18.7 required the split to be re-gated before it could be considered for
+adoption, since it had been validated on one test case.
+
+**A. Static collapse, `sigma = 0`.** Split against unsplit, same initial
+condition, compared particle by particle after sorting by ID:
+
+```
+max|dMass| = 0        max|dVelocity| = 0        max|dInternalEnergy| = 0
+bitwise identical     : true
+```
+
+Exactly as the construction requires: with `sigma_bar = 0` the correction is
+identically zero, so the static path is untouched to the last bit.
+
+**B. Uniform state with regularisation**, 788 edge flips over the run:
+
+```
+max|dv| = 5.77e-15    max|du_therm| = 7.77e-15
+d(mass, px, py, E) = (0, 0, 0, +4.44e-16)
+```
+
+Mass and both momentum components are conserved **exactly**, energy to one unit
+in the last place. Free-stream preservation survives 788 flips. This is the
+expected behaviour: the correction is proportional to
+`sum_j (sigma_bar . n_j)(U_j - U_hat_j)`, and for a uniform state the bracket is
+a constant vector while `sum_j n_j = 0`, so the correction vanishes without any
+appeal to `U_hat = U` — which is false even for a uniform state, since `U_hat`
+is the derivative of a quadratic map and carries a factor of two.
+
+**C. Rigid free stream** is covered by the section 18.5 glass row, which is the
+same configuration with zero flips and reached round-off.
+
+The split therefore passes every gate that the unsplit path passed, and takes
+the flip-free non-uniform case to round-off, which the unsplit path did not.
+
+### 19.2 The topology defect converges rapidly in `h`
+
+With the split enabled the interpolation term is removed, so what remains in a
+flipping run is the topology defect alone. A matched pair of jittered lattices
+was generated at `n = 48` and `n = 96` with the same relative jitter and the same
+smooth state, run with regularisation to `t = 0.01`. `MaxSizeTimestep` binds
+before the Courant condition in both, so **both runs take 16 steps at the same
+`dt`** and the comparison isolates `h`.
+
+| `n` | steps | flips | `d(mass)` | `d(px)` | `d(E)` |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 48 | 16 | 55 | -8.798e-7 | -3.192e-7 | 5.728e-8 |
+| 96 | 16 | 220 | +3.711e-8 | +2.233e-8 | 5.317e-8 |
+
+| | mass | px | py | energy |
+| --- | ---: | ---: | ---: | ---: |
+| ratio 48/96 | 23.7 | 14.3 | 78.8 | 1.08 |
+| implied order | **4.57** | **3.84** | 6.30 | **0.11** |
+
+Mass and momentum converge at roughly fourth order while the flip count
+quadruples, which is consistent with the `O(h^4)`-per-patch estimate of
+section 7.3 and with the `h^3.5` accumulated behaviour measured offline in
+section 9.3. **The topology defect is controllable by spatial resolution**, and
+at `n = 96` it is already at the `4e-8` level over this interval.
+
+### 19.3 An unexplained energy floor
+
+Energy does **not** converge: `5.73e-8` at `n = 48` against `5.32e-8` at
+`n = 96`, a ratio of 1.08. Mass falls by 24 over the same refinement, so at
+`n = 96` the energy defect exceeds the mass defect and is evidently a different,
+non-topological, non-converging contribution at about `5e-8` absolute, or `3e-8`
+relative to the total energy of about 1.8.
+
+This is not round-off, which would be `1e-16`, and it is not the interpolation
+term, which the split removes and which gate B shows reaching `4e-16` on a
+uniform state. There is no energy floor active: `MinEgySpec` is zero in these
+parameter files. It is recorded here as an open item rather than explained.
+Candidates worth eliminating in order: the `Q_bar -> Q_new` endpoint rebase
+acting differently on the energy component, the primitive recovery in
+`update_primitive_variables`, and any energy-specific handling in the RK2
+corrector's positivity path. A cheap first discriminator is to repeat the pair
+with `sigma = 0` forced, where the topology and geometry terms both vanish: if
+the `5e-8` energy defect survives there, it is not an ALE effect at all.
+
+### 19.4 Status
+
+The section 17 slice, with the section 18 split, now has:
+
+- bitwise static collapse;
+- exact free-stream preservation through hundreds of flips;
+- round-off endpoint conservation on flip-free non-uniform intervals;
+- a topology defect that converges at roughly fourth order in `h`;
+- one unexplained non-converging energy defect at `5e-8`.
+
+The first four are what the phase needed in order to move from geometry to
+accuracy. The fifth should be closed before any convergence campaign, because a
+non-converging energy error would contaminate an order measurement long before
+it becomes visible in the solution.
