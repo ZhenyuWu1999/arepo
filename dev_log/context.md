@@ -9,7 +9,26 @@ This directory (/home/zwu/arepo_rd) contains the public version of the state-of-
 
 https://academic.oup.com/mnras/article/518/3/4401/6847219 is the published paper by our group, first author is Ben Morton, and I'm a co-author.
 
-/home/zwu/MyThesis/Zhenyu-PhDThesis is the draft of my thesis in preparation. Chapter 1 introduces the background of the hydro solvers. Chapter 3 is a brief introduction to the mathematics of the RD solver and the hydro tests done by me. Chapter 4 is the implementation of RD in AREPO (still empty now). I mainly use overleaf to modify the thesis and sync it to github. Unless requested, do not modify the local files here.
+/home/zwu/MyThesis/Zhenyu-PhDThesis is the draft of my thesis in preparation. Chapter 1 introduces the background of the hydro solvers. Chapter 3 is a brief introduction to the mathematics of the RD solver and the hydro tests done by me. I mainly use Overleaf to modify the thesis and sync it to GitHub.
+
+### thesis editing boundary
+
+- **Do not modify Chapters 1--3 unless I explicitly request a change to those
+  chapters.** They are existing thesis material, not a general scratch space for
+  the moving-mesh development. Reading and citing their notation is encouraged;
+  rewriting, reorganising, or opportunistic cleanup is not.
+- **Chapter 4 is currently a mathematical working draft, not polished or final
+  thesis prose.** Its present purpose is to formulate and discuss moving-mesh
+  ALE-RD, DGCL, changing Delaunay topology, and hierarchical-timestep questions
+  before the engineering implementation is chosen. Equations, alternatives,
+  objections, and explicitly unresolved points may be recorded there.
+- Do not silently promote Chapter 4's current formulas into settled design or
+  formal thesis claims. Distinguish derivations that have been established from
+  proposed formulations that still require review by Zhenyu, Claude, or Kimi.
+- Outside an explicitly requested Chapter 4 mathematics update, do not modify
+  the local thesis files. In particular, do not polish Chapter 4 into formal
+  narrative or propagate its draft statements into Chapters 1--3 without an
+  explicit instruction.
 
 https://team.inria.fr/cardamom/files/2019/10/deconinck-ricchiuto2017.pdf is a very useful review paper on residual distribution, written by the core mathematicians working in the CFD field.
 
@@ -175,4 +194,3 @@ Do not use the repository-root `Arepo`, `build/arepoconfig.h`, or
 `Config.current.build` for validation runs. They are legacy mutable files and
 need not describe the same build. The immutable artifact manifest and checksum
 are authoritative.
-
