@@ -454,6 +454,28 @@ static void rd_record_theta(int which, double theta)
 }
 #endif
 
+#ifdef RD_DIAG_THETA_MAP
+/* Final-step, element-local B diagnostic.  This deliberately records only
+ * quantities already computed by the corrector: it does not participate in
+ * the residual or alter the update.  One file per MPI task avoids a gather
+ * proportional to the number of triangles. */
+static FILE *rd_theta_map_open(void)
+{
+  char filename[MAXLEN_PATH + 64];
+  snprintf(filename, sizeof(filename), "%srd_theta_map_task%03d.csv", All.OutputDir, ThisTask);
+
+  FILE *stream = fopen(filename, "w");
+  if(stream == NULL)
+    terminate_program("could not open RD theta-map diagnostic output");
+
+  fprintf(stream,
+          "triangle_slot,triangle_index,id0,id1,id2,cx,cy,area,"
+          "theta_rho,theta_px,theta_py,theta_energy,"
+          "nlda_gap_rho,nlda_gap_energy,b_blend_rho,b_blend_energy\n");
+  return stream;
+}
+#endif
+
 static void rd_reset_solver_statistics(void)
 {
   RD_stat_elements        = 0;
@@ -1370,6 +1392,12 @@ void compute_residuals(tessellation *T)
 #endif
 
       rd_record_dt_extrapolation(0.0); /* no Taylor extrapolation on this path */
+#endif
+
+#if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+  FILE *rd_theta_map_fp = NULL;
+  if(rd_stage == 1 && fabs(All.Time - All.TimeMax) <= 16.0 * DBL_EPSILON * dmax(1.0, fabs(All.TimeMax)))
+    rd_theta_map_fp = rd_theta_map_open();
 #endif
 
   N_FluxRD_export     = 0;
@@ -2340,6 +2368,10 @@ void compute_residuals(tessellation *T)
            * spatial-only B blend above remains the predictor distribution; it
            * is intentionally overwritten here for the corrector. */
           double T_f1[4][3], T_lumped[4][3];
+#ifdef RD_DIAG_THETA_MAP
+          double theta_map[4] = {0.0, 0.0, 0.0, 0.0};
+          double nlda_gap_map[4] = {0.0, 0.0, 0.0, 0.0};
+#endif
 
           for(k = 0; k < 4; k++)
             for(j = 0; j < 3; j++)
@@ -2427,9 +2459,19 @@ void compute_residuals(tessellation *T)
 #ifdef RD_DIAG_THETA
               rd_record_theta(1, theta);
 #endif
+#ifdef RD_DIAG_THETA_MAP
+              theta_map[k] = theta;
+#endif
 
               for(j = 0; j < 3; j++)
                 {
+#ifdef RD_DIAG_THETA_MAP
+                  double n_branch = T_lumped[k][j] +
+                                    0.5 * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]);
+                  double lda_branch = T_f1[k][j] +
+                                      0.5 * (rd_b_flux_lda_stage0[i][k][j] + Flux_LDA[k][j]);
+                  nlda_gap_map[k] += fabs(n_branch - lda_branch);
+#endif
                   T_time[k][j]  = theta * T_lumped[k][j] + (1.0 - theta) * T_f1[k][j];
                   Flux_RD[k][j] =
                       theta * (rd_b_flux_n_stage0[i][k][j] + Flux_N[k][j]) +
@@ -2438,6 +2480,38 @@ void compute_residuals(tessellation *T)
                   rk2_scale += fabs(T_time[k][j]) + 0.5 * fabs(Flux_RD[k][j]);
                 }
             }
+#ifdef RD_DIAG_THETA_MAP
+          if(rd_theta_map_fp != NULL)
+            {
+              int diag_pt[3];
+              double cx = 0.0, cy = 0.0;
+              for(j = 0; j < 3; j++)
+                {
+                  diag_pt[j] = DT[thistask_triangles[i]].p[j];
+                  cx += DP[diag_pt[j]].x / 3.0;
+                  cy += DP[diag_pt[j]].y / 3.0;
+                }
+              cx = fmod(cx, boxSize_X);
+              cy = fmod(cy, boxSize_Y);
+              if(cx < 0.0)
+                cx += boxSize_X;
+              if(cy < 0.0)
+                cy += boxSize_Y;
+
+              fprintf(rd_theta_map_fp,
+                      "%d,%d,%llu,%llu,%llu,%.17g,%.17g,%.17g,"
+                      "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g\n",
+                      i, thistask_triangles[i],
+                      (unsigned long long)DP[diag_pt[0]].ID,
+                      (unsigned long long)DP[diag_pt[1]].ID,
+                      (unsigned long long)DP[diag_pt[2]].ID,
+                      cx, cy, tri_normals_list[i].area,
+                      theta_map[0], theta_map[1], theta_map[2], theta_map[3],
+                      triangle_dt * nlda_gap_map[0], triangle_dt * nlda_gap_map[3],
+                      triangle_dt * theta_map[0] * nlda_gap_map[0],
+                      triangle_dt * theta_map[3] * nlda_gap_map[3]);
+            }
+#endif
 #else /* N_SCHEME: the lumped mass IS the thesis choice m^N = (|T|/3) delta_ij */
           for(k = 0; k < 4; k++)
             for(j = 0; j < 3; j++)
@@ -2625,6 +2699,11 @@ void compute_residuals(tessellation *T)
         }
 #endif  // TWO_DIMS
     }   // for loop of triangles, i= 0~ Ndt_thistask
+
+#if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+  if(rd_theta_map_fp != NULL)
+    fclose(rd_theta_map_fp);
+#endif
 
   apply_FluxRD_list();
 

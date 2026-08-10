@@ -19,6 +19,7 @@ RD_DEBUG_ASSERTS                         # invariant assertions + solver statist
 RD_RK2_TOTAL_RESIDUAL                    # two-stage GL+F1 total-residual RK2
 RD_B_FROZEN_THETA                        # Theta variant: whole residual, frozen (left endpoint)
 RD_DIAG_THETA                            # histogram both indicators
+RD_DIAG_THETA_MAP                        # final-step element map; diagnostics only
 
 #--------------------------------------- Time integration options
 TREE_BASED_TIMESTEPS                     # non-local timestep criterion (take 'signal speed' into account)
@@ -35,6 +36,5 @@ HAVE_HDF5                                # needed when HDF5 I/O support is desir
 
 #--------------------------------------- Testing and Debugging options
 DEBUG                                    # enables core-dumps
-
 
 

@@ -200,6 +200,102 @@ coefficients acted on the two halves of one residual. The repair stores
 predictor and suppresses the shortcut, so that a single `Theta` multiplies the
 complete `R`.
 
+### 4.5 The local blend correction, not mean `Theta`, predicts the error
+
+A final-corrector element map on the tiled glass (`n=48,96`, `boost=0,1`)
+settled the counter-intuitive mean-`Theta` result. For density, the diagnostic
+records
+
+    C_T = dt Theta_T sum_i |R_i^N - R_i^LDA| / |T|
+
+and compares it with the mean analytic density error at the triangle vertices.
+`Theta_rho` alone has essentially no positive rank correlation with error:
+Spearman coefficients are `+0.061,-0.244` at boost zero and
+`-0.244,-0.239` at boost one for `n=48,96`. In contrast, `C_T` has Spearman
+coefficients `0.943,0.940` and `0.915,0.928`, respectively. Thus the relevant
+quantity in
+
+    R^B - R^LDA = Theta (R^N - R^LDA)
+
+is the complete product, not the unweighted mean of its first factor.
+
+The spatial concentration also differs by regime. The vortex core (`r<1`)
+contains only about 3.1 per cent of the triangles. It receives 9.5 and 8.8 per
+cent of the density blend correction at boost zero, but 21.4 and 21.3 per cent
+at boost one. The top 10 per cent of triangles ranked by local error receive
+39.4 and 35.9 per cent of the correction at boost zero versus 42.2 and 45.7 per
+cent at boost one. The increasing concentration under refinement in the
+advected case is consistent with its observed drift toward first order.
+
+This is a final-step correlation with a cumulative solution error, so it is
+evidence rather than a causality proof. It does, however, rule out mean
+`Theta` as an adequate accuracy diagnostic and explains how boost zero can
+have the larger mean indicator but the smaller error.
+
+### 4.6 AREPO shock-sensor source audit and scope decision
+
+Two different mechanisms exist in the local AREPO sources and should not be
+conflated.
+
+The present RD repository contains only
+`NO_RECONSTRUCTION_AT_STRONG_SHOCKS` in
+`src/hydro/finite_volume_solver.c`. On an FV face it disables MUSCL spatial
+reconstruction when the larger pressure exceeds the smaller by a factor 100.
+This is a blunt emergency flattening rule, not a smooth `O(h)` sensor and not
+directly meaningful for an element residual with three vertices.
+
+The development tree `/home/zwu/arepo_dev/arepo` contains Kevin Schaal's full
+AREPO shock finder (`src/shock_finder/`, about 5650 lines; Schaal et al. 2015,
+2016). Its local shock-zone prefilter requires compression,
+
+    div(v) < 0,
+
+aligned temperature and density gradients,
+
+    grad(T) dot grad(rho) > 0,
+
+and a pressure/temperature/entropy jump consistent with a configurable minimum
+Mach number (default `MachMin=1.3`). The full module then traces rays across
+Voronoi neighbours, communicates them across MPI ranks, locates pre- and
+post-shock states, and computes Mach number, surface area and dissipated energy.
+In continuous mode it runs at the end of every local timestep and has special
+full/active-mesh and time-bin handling.
+
+That module is a diagnostic and subgrid-physics service, not the FV
+reconstruction limiter and not a B coefficient. Porting it wholesale would
+bring ray storage, MPI migration, output fields, runtime parameters and mesh
+policy into RD without solving the mathematical `Theta=O(h)` requirement.
+It is therefore not an appropriate thesis-path dependency.
+
+The useful reusable idea is only the **local shock-zone predicate**. A future
+experiment could build an element sensor `s_T` from the three vertex states and
+already available AREPO gradients, then use
+
+    Theta_eff = s_T Theta_B,
+
+with `s_T -> 0` at least as `O(h)` in smooth flow and `s_T -> 1` in a shock
+zone. Any elementwise `Theta_eff` preserves conservation, but positivity and
+monotonicity do not follow: a false negative exposes LDA at a shock. A one-ring
+shock buffer and an a-posteriori admissibility fallback to N/B would therefore
+be part of a credible implementation. A pressure-based sensor also deliberately
+does not detect a pure contact and cannot repair the parameter-vector contact
+defect.
+
+Focused-engineering estimates from the current code are:
+
+| scope | estimate | result quality |
+| --- | ---: | --- |
+| binary local sensor prototype on equal-bin B | 2--4 working days | diagnostic only; no general guarantee |
+| thesis-quality sensor with smooth-order, Sod/contact/KH, MPI and hierarchy gates | 2--4 weeks | defensible new B variant |
+| wholesale Schaal shock-finder port and coupling | 4--8 weeks | unnecessary diagnostic infrastructure |
+
+The cost is therefore large relative to the present thesis critical path. The
+recommended decision is to record the selective sensor as future work, keep
+the accepted frozen-total B as the documented production candidate, and move
+next to B hierarchical timesteps. A sensor should be revisited only after the
+static hierarchy and moving-mesh architecture are stable, so that it is not
+validated twice against two changing time/geometry implementations.
+
 ---
 
 ## 5. Literature provenance, and the ambiguity the literature leaves open
@@ -362,10 +458,11 @@ currently a compile-time error. Three questions have to be answered, and two of
 them turn out to be already settled by the structure.
 
 **(a) Does the blend disturb the hierarchy conservation proof? No.** That proof
-concerns `Phi^T` and the cancellation of shared-edge contributions between
-neighbouring elements. `Theta` acts only on the *distribution* of an element
-residual, and conservation of the blend holds elementwise for any `Theta`
-(Section 2). The blend is therefore orthogonal to Construction A.
+concerns the sum of element total residuals and the nodal conserved ledgers;
+RD does not exchange a separate FV-like flux across each shared edge.
+`Theta` acts only on the *distribution* of an element residual, and
+conservation of the blend holds elementwise for any `Theta` (Section 2). The
+blend is therefore orthogonal to Construction A.
 
 **(b) Is `Theta` well defined for a cross-bin element? Yes.** Under the
 vertex-star freezing rule an element evaluates its residual from a coherent
@@ -373,27 +470,99 @@ triple -- frozen `U^sync` at frozen vertices, stage state at live ones -- so
 `R` and `R_i^N` are exactly the quantities the element actually distributes,
 and `Theta` follows from them with no new ambiguity.
 
-**(c) When is it evaluated? This one is forced, and it forces the choice of
-Section 5.** In the two-call hierarchy the predictor call deposits
-`-h_T phi_i^(0)/2` into the vertex ledgers immediately. If a single `Theta` is
-to multiply the complete residual, it must therefore be known at the **opening**
-call. The unfrozen quadrature needs `Phi(U*)`, which does not exist until the
-closing call, by which time the first half has already been deposited.
+**(c) When is it evaluated? Frozen is necessary but not by itself sufficient.**
+In the two-call hierarchy the predictor call currently deposits
+`-h_T phi_i^(0)/2` into the vertex ledgers immediately. The unfrozen
+quadrature needs `Phi(U*)`, which does not exist until the closing call, so it
+cannot multiply that opening contribution coherently.
 
-There are only two ways out: use the frozen quadrature, which is computable at
-the open; or defer the entire deposit to the closing call, which requires
-storing per-element stage-0 residuals across an open interval and migrating
-them under domain decomposition. The equal-bin coherent repair already does the
-latter, but at equal bins the interval is one step and the storage is transient;
-in a hierarchy a coarse element's interval spans many fine steps and several
-possible domain decompositions.
+The frozen-total numerator nevertheless contains the temporal target
 
-**Conclusion: frozen `Theta` is the natural, and much the simpler, choice for
-the hierarchy.** This is an argument from the code structure rather than from
-accuracy, and it is worth recording as such -- but it does mean that if the
-equal-bin acceptance campaign prefers the unfrozen variant, the two regimes
-will disagree, and that disagreement should be an explicit decision rather than
-a silent divergence.
+    T_target = (|T|/3h_T) sum_j dU_j,
+
+and each `dU_j` is complete only after the whole vertex star has been assembled
+and exchanged. It is therefore **not known when the first individual triangle
+is visited in the opening sweep**. The earlier shorthand "frozen is computable
+at the open" means computable within the opening *call after star assembly*,
+not in the present one-pass deposit loop.
+
+A correct implementation must consequently use one of three architectures:
+
+1. a two-pass opening call: assemble/exchange the complete nodal predictor,
+   then revisit elements to compute frozen-total `Theta` and the opening
+   ledger;
+2. make the present spatial-B opening deposit provisional, then apply an exact
+   closing correction using persisted stage-0 N/LDA branch data;
+3. defer the complete B deposit to closing and persist/migrate all required
+   stage-0 element history.
+
+Option 1 is the cleanest static-mesh prototype, but the fixed `Theta` or the
+stage-0 branch data still has to survive a coarse interval and domain
+decomposition. Frozen remains much simpler than unfrozen and is selected by
+the equal-bin acceptance tests, but lifting the compile guard is a small
+multirate data-lifetime project rather than a local formula insertion.
+
+### 8.1 Reserved fallback: a bounded spatial-Theta hierarchy experiment
+
+If hierarchical B is later needed mainly for feature coverage, the
+**spatial-Theta** variant has a substantially cheaper construction. Define at
+the opening state
+
+    Theta_T^n = min(1, |Phi_T(U^n)| / sum_i |phi_i^N(U^n)|),
+
+then hold this coefficient over the element subinterval and distribute
+
+    T_i^B = Theta_T^n T_i^lumped + (1-Theta_T^n) T_i^F1,
+
+    R_i^B = T_i^B
+            + 0.5 phi_i^B(U^n; Theta_T^n)
+            + 0.5 phi_i^B(U*; Theta_T^n).
+
+Unlike frozen-total `Theta`, `Theta_T^n` needs neither `T_target` nor a
+star-complete predictor increment. It is available on the first opening visit.
+The opening call may immediately deposit the old spatial half. At closing, the
+same coefficient can be recomputed from the still-unsynchronised committed
+`U^n` vertex states before applying `dU`; on the static mesh the canonical
+three vertex IDs reconstruct the same physical triangle after domain
+decomposition. This avoids persistent element-local N/LDA branch history.
+
+Conservation remains elementwise because both temporal branches sum to the
+same `T_target`, both spatial branches sum to their element residual, and a
+convex blend preserves each sum. This construction must nevertheless retain
+one opening coefficient over all three terms. Using `Theta(U^n)` for the old
+half and `Theta(U*)` for the new half would define a different stagewise
+limited method and would not collapse to the existing equal-bin frozen-spatial
+control.
+
+This route is reserved as an **experimental compatibility variant**, not a
+replacement for accepted frozen-total B. Its measured quality is weak:
+
+- advected glass Yee gives joint orders `0.898,0.864`, slightly below N at the
+  highest measured pair;
+- triangular Sod gives order about `0.56`, against about `0.80` for
+  frozen-total B;
+- the spatial indicator remains `O(1)` in smooth flow and has no second-order
+  guarantee.
+
+If resumed, the work is a bounded spike:
+
+1. implement only static-mesh, hierarchical, frozen-spatial B;
+2. require exact equal-bin collapse to `RD_B_SPATIAL_THETA +
+   RD_B_FROZEN_THETA`;
+3. run two-level Yee with alternative interface placement;
+4. run Sod crossing the bin interface and the coarse-island geometry;
+5. require positivity, round-off conservation and one/four-rank particle-ID
+   agreement;
+6. stop immediately if recomputation does not reproduce the opening
+   coefficient after rebuild or if the hierarchy enlarges the existing
+   spatial-B error pathologically.
+
+Estimated focused effort is `3--6` working days. The deliverable would be
+labelled `experimental spatial-Theta B hierarchy`; it would add a supported
+execution mode but would not improve B accuracy. The current project decision
+is **not to run this spike now**: moving-mesh N, then LDA, has priority. This
+section exists so the cheaper construction is not lost if later thesis or
+review requirements demand a hierarchical B entry.
 
 Not new to B, but still open in the hierarchy: N's positivity holds under a
 CFL condition, and a cross-bin element evaluates with stale states whose wave
@@ -416,6 +585,8 @@ so it inherits that question.
 - `RD_B_FROZEN_THETA` -- the Section 5 choice, a compile-time switch with the
   unfrozen quadrature as the `#else` branch;
 - `RD_DIAG_THETA` -- the histogram of both indicators that produced Section 3.
+- `RD_DIAG_THETA_MAP` -- the final-corrector element map used in Section 4.5;
+  it records already computed quantities and does not alter the update.
 
 Every B configuration in `examples/` that uses RK2 currently defines
 `RD_B_FROZEN_THETA`; the unfrozen path is retained as the control.
