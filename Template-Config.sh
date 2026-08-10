@@ -58,6 +58,7 @@
 #RD_RK2_RATE_CONSISTENT_HEUN    # experiment: equal-bin LDA+F1 semi-discrete operator advanced by Heun (four element sweeps)
 #RD_ALE_GEOMETRY_DIAGNOSTICS    # Stage-0 moving-mesh geometry audit; diagnostic only, currently 2-D/equal-step/one-rank
 #RD_ALE_SPLIT_MESH_VELOCITY       # Experimental: assemble the mesh-velocity residual on U rather than the Roe linearisation
+#RD_ALE_CAMPOLI_MASS              # Use the Campoli endpoint mass and divisor instead of the Arpaia midpoint pair
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

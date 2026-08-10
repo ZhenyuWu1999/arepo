@@ -3678,3 +3678,102 @@ produce. Section 4's minimum defensible thesis deliverable was joint `(dx, dt)`
 convergence on the moving Yee and Gresho; this is the complementary half, and
 arguably the more persuasive one, because it is the property a static mesh
 cannot have at any resolution.
+
+---
+
+## 24. 2026-08-11: Arpaia against Campoli, verified inside the fluid solver
+
+- Author: `Claude Code Opus 5`. New compile switch `RD_ALE_CAMPOLI_MASS`.
+- This closes the comparison proposed in section 14.4 and derived in
+  section 8.7, and it is done before the boost sequence because the
+  mathematical form should be settled before accuracy numbers are produced
+  against it.
+
+### 24.1 What was implemented
+
+Section 8.7 showed the two published forms are one scheme, related by adding
+
+```
+delta_T = (A_old + A_new)/2 - A_mid = (dt^2/8) (sigma_1 - sigma_0) x (sigma_2 - sigma_0)
+```
+
+to **both** the element mass coefficient and the nodal divisor:
+
+| | element mass | nodal divisor |
+| --- | --- | --- |
+| Arpaia et al. (2015), Prop. 4.1 | `A_mid` | `sum_T [A_mid + (A_new-A_old)/2]/3` |
+| Campoli et al. (2017), sect. 2.2 | `(A_old+A_new)/2` | `sum_T A_new/3`, the plain new median dual |
+
+The prototype implemented only the first. Adding the second needed the element
+`area` to be decoupled from the element `normals`, because both forms evaluate
+the flux on `T^{n+1/2}` and differ only in the mass. That decoupling is safe:
+auditing every use of `tri_normals_list[i].area` shows it feeds only the lumped
+and F1 temporal mass and is never the `|T|` of a gradient reconstruction. The
+change is about twenty lines behind `RD_ALE_CAMPOLI_MASS`.
+
+### 24.2 Three verifications
+
+**1. At `sigma = 0` the two forms must be the same scheme**, because `delta_T`
+is proportional to differences of the vertex velocities and vanishes for
+uniform `sigma`. Measured, LDA, same initial condition:
+
+```
+max|dMass| = 0    max|dVelocity| = 0    max|dInternalEnergy| = 0
+bitwise identical : true
+```
+
+**2. Both must preserve a uniform state.** With regularisation active:
+
+```
+Arpaia : d(mass, px, py, E) = 0, 0, 0, +4.441e-16
+Campoli: d(mass, px, py, E) = 0, 0, 0, +4.441e-16
+```
+
+Identical, and exact in the first three components.
+
+**3. On a non-uniform moving flow the two must differ by `O(delta_T)`, hence by
+`O(dt^2)`.** Same initial condition, three timesteps:
+
+| `dt_max` | `max\|dVelocity\|` between the forms | `max\|dMass\|` | ratio per halving |
+| ---: | ---: | ---: | ---: |
+| 1.0e-3 | 2.2154e-10 | 1.8749e-13 | |
+| 5.0e-4 | 5.3235e-11 | 4.2510e-14 | **4.16** |
+| 2.5e-4 | 1.3051e-11 | 1.0164e-14 | **4.08** |
+
+**The difference falls by a factor of four per halving of the timestep**, which
+is the `dt^2` of the closed form. Section 8.7's algebra is therefore confirmed
+numerically through the complete fluid solver, not only in the geometry
+diagnostic of section 10.5.
+
+### 24.3 The forms are closer than `delta_T` alone suggests
+
+Section 10.5 measured `max delta_T/|T|` at about `1e-2` at production CFL, yet
+the two schemes' solutions here differ by `2e-10` in velocity, eight orders
+smaller. The reason is structural and worth recording: `delta_T` is added to
+the mass coefficient **and** to the divisor, and the nodal update balances one
+against the other, so the leading contribution cancels. What survives scales as
+`delta_T` still, hence the clean `dt^2`, but with a very small prefactor.
+
+**The choice of form is therefore numerically immaterial at any timestep of
+practical interest**, which is the strongest possible version of section 8.7's
+conclusion.
+
+### 24.4 Recommendation
+
+Keep **Arpaia as the default**. It is the form with a published second-order,
+conservation and DGCL analysis attached to it, and the prototype has been gated
+on it throughout sections 17 to 23. Keep `RD_ALE_CAMPOLI_MASS` as a verification
+path, in the same role `RD_ALWAYS_PSEUDOINVERSE` now occupies after
+section 21.3: a reference implementation used to confirm the production one, not
+a production alternative.
+
+One asymmetry favours Campoli and should be remembered if the Arpaia divisor
+ever misbehaves: its divisor is the plain new median dual and is positive
+whenever the mesh is, whereas the Arpaia modified divisor can in principle go
+non-positive under strong compression, which is the caveat Arpaia et al. state
+themselves. Sections 10.5 and 21 measured that it never fires, up to CFL 3, but
+if it ever does, the Campoli divisor is the immediate fallback and now exists.
+
+The mathematical form of the moving-mesh scheme is, with this, settled. The
+boost sequence and resolution study of section 23.4 can proceed against a form
+that will not be revisited.

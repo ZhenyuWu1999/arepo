@@ -1125,6 +1125,27 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
         }
       set->normals[slot] = geometry->normals[RD_ALE_MID];
 
+      /* The element geometry used by the residual is split in two: the normals
+       * and their magnitudes are the midpoint ones in both candidate
+       * formulations, because both evaluate the flux on T^{n+1/2}, while the
+       * `area` field feeds only the lumped and F1 temporal mass -- it is never
+       * used as the |T| of a gradient reconstruction, which is what makes this
+       * decoupling safe.
+       *
+       * Log section 8.7 shows the two published forms differ by
+       *     delta_T = (A_old + A_new)/2 - A_mid
+       * added to both the element mass coefficient and the nodal divisor:
+       *
+       *   Arpaia et al. (2015), Proposition 4.1:  A_mid          and |Sbar^{n+1/2}|
+       *   Campoli et al. (2017), section 2.2:     (A_old+A_new)/2 and the new median dual
+       *
+       * They are therefore one scheme with a second-order-small modification of
+       * two scalars, and selecting between them here is the numerical check of
+       * that algebra inside the fluid solver. */
+#ifdef RD_ALE_CAMPOLI_MASS
+      set->normals[slot].area = 0.5 * (area_old + area_new);
+#endif
+
       double dv10x = velocity[1][0] - velocity[0][0];
       double dv10y = velocity[1][1] - velocity[0][1];
       double dv20x = velocity[2][0] - velocity[0][0];
@@ -1136,7 +1157,11 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
         {
           int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
           set->ale_endpoint_area[index] += area_new / 3.0;
+#ifdef RD_ALE_CAMPOLI_MASS
+          set->ale_divisor[index] += area_new / 3.0;
+#else
           set->ale_divisor[index] += geometry->arpaia_divisor / 3.0;
+#endif
         }
     }
 
