@@ -3597,3 +3597,84 @@ directory. Batch logs are under `_slurm_logs/`.
 
 P4, the general build-fingerprint hole for untracked sources, remains open and
 is now the only outstanding item from section 14.2.
+
+---
+
+## 23. 2026-08-11: Galilean invariance — the first result the moving mesh was built for
+
+- Author: `Claude Code Opus 5`, at Zhenyu's request. No source change.
+- Figure: `Hydro_data_analysis/Data_MMRD_debug/gresho_galilean_boost.png`.
+
+### 23.1 The test
+
+The Gresho vortex of `IC_gresho_v0_random48` has peak `v_phi = 1.0` at
+`r = 0.2` and sound speed about 2.9. Adding a uniform `v_x = 3` is a Galilean
+boost of three times the vortex's own peak velocity, bulk Mach 1.0, generated
+by `create_mmrd_ics.py` so the boosted and unboosted initial conditions share
+their generators exactly. Four runs to `t = 1`, `n = 48`, LDA, CFL 0.3:
+static mesh and moving mesh, each at boost 0 and boost 3. The parameter files
+are identical apart from the two mesh-regularisation entries, which a
+`VORONOI_STATIC_MESH` build refuses to read, and the statistics output
+interval.
+
+Profiles are compared after removing the bulk translation and the advected
+vortex centre, against the exact `v_phi(r)`.
+
+### 23.2 Result
+
+| case | `L1` against exact | scatter, `0.15 < r < 0.25` |
+| --- | ---: | ---: |
+| static, boost 0 | 0.01200 | 0.03653 |
+| **static, boost 3** | **0.16965** | **0.09176** |
+| moving, boost 0 | 0.00848 | 0.03120 |
+| **moving, boost 3** | **0.00858** | **0.03189** |
+
+**Boosting degrades the static mesh by a factor of 14 in `L1`, and the moving
+mesh by 1.2 per cent.** The boosted moving-mesh result is twenty times more
+accurate than the boosted static one. The figure shows why: at boost 3 the
+static-mesh vortex has been smeared from a peak of 1.0 down to about 0.4 with
+scatter across the whole profile, while the moving-mesh profile at boost 3 is
+visually indistinguishable from its own boost-0 panel.
+
+A secondary result worth keeping: **the moving mesh is already better
+unboosted**, `L1` 0.00848 against 0.01200, a thirty per cent improvement with
+no boost at all.
+
+### 23.3 What "invariant" does and does not mean here
+
+The moving-mesh solution is not bitwise invariant: comparing the two runs
+particle by particle gives `mean |v_phi(3) - v_phi(0)| = 0.037`, against 0.169
+for the static pair. Exact invariance is not expected and would be the wrong
+thing to test for. The generators follow different trajectories in the two
+runs, the regularisation therefore acts differently, and the Delaunay
+connectivity differs. What is invariant is the **accuracy** of the solution,
+which is the physically meaningful statement and the one the table makes:
+`L1` is unchanged to 1.2 per cent while the static scheme loses an order of
+magnitude.
+
+### 23.4 Caveats before this goes in the thesis
+
+- One resolution, one boost, one final time. A boost sequence, say 0, 1, 3, 10,
+  and a resolution pair would make the claim quantitative rather than
+  illustrative.
+- The `L1` for the static boosted case is dominated by a genuine physical
+  failure, not by scatter alone: the vortex has lost amplitude. Reporting both
+  `L1` and the peak `v_phi` would separate diffusion from noise.
+- Both runs use the same LDA distribution and the same regularisation policy
+  where it applies, so the comparison isolates the mesh motion, but it does not
+  isolate the mesh-velocity policy of section 22.1. The
+  `sigma = v + v_reg` against alternative predictors comparison of section 14.5
+  item 6 is still outstanding.
+
+Nothing here depends on the topology defect of sections 18 to 20: at `L1` of
+`8.5e-3` the fourth-order-convergent conservation error of `1e-7` is five
+orders below the solution error and cannot be influencing this result.
+
+### 23.5 Status
+
+This is the first result in the moving-mesh phase that is a physics result
+rather than a verification result, and it is the one the phase existed to
+produce. Section 4's minimum defensible thesis deliverable was joint `(dx, dt)`
+convergence on the moving Yee and Gresho; this is the complementary half, and
+arguably the more persuasive one, because it is the property a static mesh
+cannot have at any resolution.

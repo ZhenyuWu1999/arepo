@@ -53,6 +53,12 @@ BASE_SEED = 20260811
 # free stream: uniform state carried at an angle that is not lattice aligned
 FS_RHO, FS_PRESSURE, FS_VELOCITY = 1.0, 1.0, (1.0, 0.5)
 
+# Galilean-invariance test: the Gresho vortex carried at three times its own
+# peak azimuthal velocity, which is bulk Mach 1.0 against this vortex's sound
+# speed. A static mesh must advect the vortex across cells and scatters the
+# profile; a mesh moving with the flow should reproduce the unboosted result.
+GRESHO_BOOST = 3.0
+
 
 def smooth_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """A C-infinity periodic state.
@@ -159,6 +165,20 @@ def generate() -> list[Path]:
             write_ic(path, xy, rho, vx, vy, 1.0)
             written.append(path)
             print(f"  wrote {path.name} (ensemble member {member}, seed {seed})")
+
+    for family in ("random48", "glass48"):
+        base = HERE / f"IC_gresho_v0_{family}.hdf5"
+        target = HERE / f"IC_gresho_boost{GRESHO_BOOST:g}_{family}.hdf5"
+        if base.exists():
+            shutil.copyfile(base, target)
+            with h5py.File(target, "r+") as f:
+                velocities = np.asarray(f["PartType0/Velocities"][:])
+                velocities[:, 0] += GRESHO_BOOST
+                f["PartType0/Velocities"][:] = velocities
+            written.append(target)
+            print(f"  wrote {target.name} (Gresho boosted by {GRESHO_BOOST:g} in x)")
+        else:
+            print(f"  skip {target.name}: base {base.name} is absent; run create.py first")
 
     for family in ("random48", "glass48"):
         base = HERE / f"IC_gresho_v0_{family}.hdf5"
