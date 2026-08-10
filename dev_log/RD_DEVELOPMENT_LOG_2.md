@@ -236,14 +236,13 @@ deferred by decision, not by obstruction.
 
 ### 3.3 Risk 1, topology change: measured, and largely dissolved
 
-> **Superseded on 2026-08-06.** The measurements below remain valid, including
-> the inversion rates and signed-area tiling defects. The inference that a
-> positive pulled-back new triangulation needs no remap/topology machinery does
-> not remain valid for the median-dual nodal ledger. It proves continuous
-> element geometry from the pulled-back new mesh to the new mesh, but omits the
-> finite nodal-area difference between the actual old median partition and the
-> pulled-back new one. See section 6 and
-> `dev_log/RD_moving_mesh_DGCL_mathematical_audit.md` sections 5.1--5.4.
+> **Superseded on 2026-08-06 and corrected on 2026-08-10.** The topology-change
+> rates below remain valid, but the non-zero KH inversion rates do not. They
+> came from applying new periodic image offsets to separately wrapped old
+> coordinates. Continuous backward trajectories give zero inversions in all
+> listed Yee and KH cases; see section 9.3. Independently, the inference that a
+> positive pulled-back new triangulation removes the median-dual topology
+> quadrature defect remains false for the reason established in section 7.
 
 The concern was that AREPO's Delaunay connectivity changes between `t^n` and
 `t^{n+1}`, so the element `K^n` required by the ALE residual may not exist.
@@ -261,8 +260,8 @@ of the new connectivity is **inverted** at the old positions, which happens when
 the quadrilateral was non-convex at `t^n` or when flips cascade within one step.
 Detection is free: the sign of `|T^n|`.
 
-**Measurement** (glass IC, Lagrangian vertex motion, periodic Delaunay, 30
-steps):
+**Historical measurement, with the KH inversion rows withdrawn** (glass IC,
+Lagrangian vertex motion, periodic Delaunay, 30 steps):
 
 | problem | CFL | elements inverted at `t^n` | worst step | signed-area tiling defect |
 | --- | ---: | ---: | ---: | ---: |
@@ -290,13 +289,12 @@ Three conclusions:
    elements up to CFL 0.8. The whole M1/M2 accuracy programme (Yee, Gresho,
    free-stream, DGCL, convergence) can therefore be run with the plain
    new-connectivity construction and no topology machinery at all.
-3. **Under shear, 0.14 to 0.70 per cent of elements per step need a fallback.**
-   Note that the **signed**-area sum stays exactly the box area even on steps
-   containing inverted elements: the negative areas cancel the doubly covered
-   region. So conservation survives a flip; what an inverted element breaks is
-   the sign of the normals, hence upwinding and positivity. This is a stability
-   problem, not a conservation problem, which is the easier of the two to
-   contain.
+3. **The earlier claim that 0.14 to 0.70 per cent of shear elements need a
+   fallback is withdrawn.** With continuous periodic unwrapping the corrected
+   30-step survey found zero inverted elements for KH at CFL 0.3 and 0.8 at
+   both `n=48` and `n=96`. The signed-area counter remains a required defensive
+   diagnostic for larger displacement or pathological meshes, but these data
+   no longer provide evidence that a routine shear fallback is needed.
 
 ### 3.4 Risk 2, the Lagrangian limit: real, bounded, and it exposes a code defect
 
@@ -486,11 +484,11 @@ publishable result lands first:
    convergence — **this is the minimum defensible thesis deliverable, and it is
    reachable without any flip treatment**;
 3. enable regularisation; re-verify free stream and DGCL;
-4. Sod and a shear case, where the `|T^n| <= 0` counter becomes non-zero. The
-   minimum acceptable fallback is to demote inverted elements to N/lumped for
-   that step and account for them; the Colombo--Re continuous-deformation
-   interpretation is the principled alternative and is only worth implementing
-   if the demotion measurably damages the solution;
+4. Sod and a shear case, while monitoring the `|T^n| <= 0` counter. The
+   corrected offline survey does not make it non-zero, so no fallback is on the
+   critical path. If a genuine inversion is later observed, demotion to
+   N/lumped and the Colombo--Re continuous-deformation interpretation remain
+   candidate responses which must be assessed from that actual case;
 5. 1-vs-4 rank invariance through repeated rebuilds.
 
 **M2 gate:** free-stream, DGCL and conservation hold across at least one real
@@ -1540,3 +1538,124 @@ Before solver changes, review must settle:
 
 Until these are explicit, implementation estimates such as "one-line rebase"
 or "no topology treatment" are hypotheses rather than specifications.
+
+## 9. 2026-08-10: mesh-only reference tests for the common ALE geometry
+
+- Author: `Codex`, following Zhenyu's decision to test the geometry before
+  changing the AREPO solver.
+- New reference test:
+  `/home/zwu/Hydro_data_analysis/Analysis/moving_mesh/ale_geometry_identities.py`.
+- Corrected feasibility tool:
+  `/home/zwu/Hydro_data_analysis/Analysis/moving_mesh/ale_feasibility.py`.
+- **No AREPO solver source was changed in this entry.**
+
+### 9.1 Common geometry tested
+
+The test constructs the Delaunay triangulation only at the new point positions.
+For every triangle of that post-rebuild connectivity it evaluates the virtual
+configurations
+
+```
+x_old = x_new - dt sigma
+x_mid = x_new - (dt/2) sigma
+x_new
+```
+
+and returns `A_old`, `A_mid`, `A_new`, the midpoint boundary mesh flux, and
+
+```
+delta_T = (A_old + A_new)/2 - A_mid.
+```
+
+Both candidate scalar pairs are generated from the same data:
+
+```
+Arpaia: M_T = A_mid,                 D_T = A_mid + (A_new-A_old)/2
+Campoli: M_T = (A_old+A_new)/2,      D_T = A_new
+```
+
+The test requires, element by element,
+
+```
+A_new-A_old = dt integral_boundary(T_mid) sigma_h.n ds
+M_C-M_A = D_C-D_A = delta_T
+delta_T = (dt^2/8) (sigma_1-sigma_0) cross (sigma_2-sigma_0)
+```
+
+to round-off. It also tests the explicit centre-distributed geometric
+cancellation required by endpoint N/lumped. These are hard pass/fail checks;
+an inverted pulled-back triangle is counted as a geometric hazard instead of
+being confused with an algebraic failure.
+
+### 9.2 Results
+
+The 30-step run
+
+```
+python Analysis/moving_mesh/ale_geometry_identities.py --steps 30
+```
+
+passed all **754** algebraic checks.
+
+- Four analytic single-triangle motions (translation, expansion, shear and a
+  general affine motion) gave a maximum DGCL residual of `2.1e-16`.
+- Rigid translation gave `delta_T = 0` exactly. The other motions agreed with
+  the analytic cross-product formula to round-off.
+- The square edge-flip patch reproduced the median-mass jump
+  `(1/3,1/6,1/3,1/6) <-> (1/6,1/3,1/6,1/3)`. Its zeroth and first moment
+  defects were exactly zero. Carrying unre-based `Q` produced a large nodal
+  state jump in the deliberately arbitrary test state, while
+  `Q <- Q m_new/m_old` preserved every `U_i` to round-off.
+- Scaling the patch through six factors of two gave the quadratic-state flip
+  defect orders `(4,4,4,4,4)` exactly.
+- Periodic jittered `n=24` and SWIFT-glass `n=48` meshes were evolved for 30
+  steps under both Yee and KH prescribed velocities. Topology changed hundreds
+  of times in every case. The largest element DGCL residual was `6.87e-16`,
+  the largest `delta_T` identity error was `8.85e-16`, new and modified-dual
+  area coverage differed from the box by at most `1.42e-14`, and no modified
+  nodal divisor was non-positive.
+- Adding the constant velocity `(0.73,-0.41)` to every generator on the
+  jittered mesh changed no triangle key. The maximum difference among
+  `A_old`, `A_mid`, `A_new` and `delta_T` was `1.21e-15`.
+
+### 9.3 Correction: the earlier KH pulled-back inversions were false positives
+
+The original `ale_feasibility.py::old_position_validity` separately wrapped
+the old coordinates and then applied the periodic image offsets selected by the
+new triangulation. When a generator crossed a periodic boundary, this moved its
+old image by one full box length relative to the other two vertices and created
+a spurious negative signed area.
+
+The corrected construction starts from the unwrapped new triangle and follows
+the continuous trajectory backward:
+
+```
+new_points = wrapped_new[indices] + new_image_offsets
+old_points = new_points - dt velocity[indices].
+```
+
+After this correction, 30-step surveys at `n=48` and `n=96` found **zero**
+pulled-back inversions and zero near-degenerate triangles for Yee at CFL 0.8
+and KH at CFL 0.3 and 0.8. The maximum old-geometry tiling defect was
+`2.22e-16`. The earlier non-zero KH inversion counts in the feasibility output
+are therefore withdrawn; they measured a periodic-unwrapping bug, not a
+failure of pulled-back-new connectivity.
+
+### 9.4 What this establishes, and what it does not
+
+The mesh-only reference now supports one common geometry layer for both scalar
+pairs without constructing an old or midpoint Delaunay mesh. It tests exactly
+the quantities a later C structure must expose:
+
+```
+A_old, A_mid, A_new, midpoint normals, sigma_i, delta_T,
+new median dual, modified midpoint dual, inversion/positivity counters.
+```
+
+This is sufficient to begin a C geometry implementation when desired, with
+Python-versus-C comparison by sorted particle IDs and triangle keys as the next
+gate. It does **not** yet test the Roe-parameter-vector interpolation defect,
+Euler conservation, a uniform-state solver update, MPI ownership, pathological
+large-displacement meshes, hierarchical timesteps, or 3-D. Fluid tests should
+follow in the order uniform state, Yee plus boost, Gresho plus boost, and only
+then shock/shear cases.
