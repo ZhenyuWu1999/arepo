@@ -3209,6 +3209,13 @@ same configuration with zero flips and reached round-off.
 The split therefore passes every gate that the unsplit path passed, and takes
 the flip-free non-uniform case to round-off, which the unsplit path did not.
 
+> **Corrected in section 20.** The two-point "orders" in 19.2 are not a
+> convergence measurement, because the defect is a fluctuating quantity whose
+> sign changes between the two runs, and the "energy floor" of 19.3 does not
+> exist: a four-seed ensemble in section 20.4 shows energy converging at the
+> same order as everything else. Read 19.2 and 19.3 only as the raw
+> single-realisation data.
+
 ### 19.2 The topology defect converges rapidly in `h`
 
 With the split enabled the interpolation term is removed, so what remains in a
@@ -3267,3 +3274,124 @@ The first four are what the phase needed in order to move from geometry to
 accuracy. The fifth should be closed before any convergence campaign, because a
 non-converging energy error would contaminate an order measurement long before
 it becomes visible in the solution.
+
+---
+
+## 20. 2026-08-11: the defect is entirely ALE-topological, and it converges at fourth order
+
+- Author: `Claude Code Opus 5`. No source change; runs of the section 18 code.
+- This section **corrects two conclusions of section 19**.
+
+### 20.1 The `sigma = 0` discriminator: the defect is ALE-specific
+
+Section 19.3 proposed forcing `sigma = 0` to separate an ALE cause from an
+unrelated one. Same initial conditions, same times, same binary but with
+`RD_ALE_TEST_ZERO_MESH_VELOCITY`:
+
+| case | flips | `d(mass)` | `d(px)` | `d(py)` | `d(E)` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| moving, n=48 | 55 | -8.798e-7 | -3.192e-7 | -2.864e-7 | +5.728e-8 |
+| moving, n=96 | 220 | +3.711e-8 | +2.233e-8 | -3.633e-9 | +5.317e-8 |
+| **`sigma=0`, n=48** | **0** | **0.000e+0** | -1.110e-16 | +5.551e-17 | -2.220e-16 |
+| **`sigma=0`, n=96** | **0** | +2.220e-16 | 0.000e+0 | +5.551e-17 | 0.000e+0 |
+
+With the mesh frozen every component is conserved to round-off or exactly.
+**The entire defect, energy included, is an ALE effect**; nothing in the RD
+solver, the primitive recovery or the RK2 positivity path contributes.
+
+### 20.2 With the split on, the defect is independent of the timestep
+
+Fixed initial condition and end time, varying only `MaxSizeTimestep`:
+
+| `dt_max` | steps | flips | `d(mass)` | `d(px)` | `d(E)` |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1.0e-3 | 16 | 55 | -8.798e-7 | -3.192e-7 | +5.728e-8 |
+| 5.0e-4 | 32 | 55 | -8.697e-7 | -3.185e-7 | +5.775e-8 |
+| 2.5e-4 | 64 | 55 | -8.704e-7 | -3.188e-7 | +5.776e-8 |
+
+The flip count is **identical** at 55, so this is a controlled comparison of the
+same physical evolution at three timesteps, and every component agrees to
+within one per cent. The defect is therefore not a time-quadrature error, which
+rules out the `O(dt^2)`-per-step stage-mismatch term as well as the
+interpolation term the split already removed. What remains is topology.
+
+### 20.3 Correction: section 19's orders were not a convergence measurement
+
+Section 19.2 reported orders of 4.57 and 3.84 for mass and momentum from a
+single pair of runs, and section 19.3 reported a non-converging "energy floor"
+from the same pair. Both readings are wrong, for one reason.
+
+Extending the pair in time exposes it:
+
+| `TimeMax` | steps | flips | `d(mass)` | `d(px)` | `d(E)` |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.01 | 16 | 55 | -8.798e-7 | -3.192e-7 | +5.728e-8 |
+| 0.02 | 32 | 103 | -2.566e-6 | -1.294e-6 | +4.727e-8 |
+| 0.04 | 64 | 198 | -2.102e-6 | -5.687e-7 | +1.374e-6 |
+
+The defect is not monotone in time. Looking back at 19.2 with that in mind, the
+mass and `px` defects **change sign** between `n = 48` and `n = 96`. A quantity
+that changes sign under refinement is a sample of a fluctuating variable, not a
+converging error, so a ratio of two such samples is not an order. The energy
+"floor" was the same artifact seen from the other side: two samples that
+happened to be close.
+
+Codex's section 14.2 warned about exactly this — "one realisation and two
+principal spatial resolutions cannot establish a universal stochastic model" —
+and section 19 repeated the mistake it was warning about. The correct
+instrument is an ensemble.
+
+### 20.4 The ensemble: all four components converge at fourth order
+
+Four jitter seeds at each resolution, identical smooth state, identical times,
+regularisation on, split on:
+
+| `n` | flips per seed | | RMS `d(mass)` | RMS `d(px)` | RMS `d(py)` | RMS `d(E)` |
+| ---: | --- | --- | ---: | ---: | ---: | ---: |
+| 48 | 47, 58, 47, 46 | | 2.105e-6 | 1.158e-6 | 1.110e-6 | 6.077e-7 |
+| 96 | 221, 216, 204, 246 | | 1.203e-7 | 6.294e-8 | 7.223e-8 | 3.373e-8 |
+| | | **ratio** | **17.50** | **18.40** | **15.36** | **18.02** |
+| | | **order** | **4.13** | **4.20** | **3.94** | **4.17** |
+
+Within each ensemble the individual samples change sign, which is the direct
+confirmation that a two-point comparison could not have worked. The RMS,
+however, is clean:
+
+**All four conserved components converge at order 4.0 to 4.2, energy
+included.** That matches the `O(h^4)`-per-patch estimate of section 7.3, now
+measured in the fluid rather than in a geometry proxy, and it disposes of the
+energy anomaly of 19.3, which does not exist.
+
+### 20.5 Status, and what is now established
+
+The ALE-RD slice of section 17, with the mesh-velocity split of section 18,
+has:
+
+- bitwise collapse to the static scheme at `sigma = 0`, and round-off
+  conservation there in every component;
+- exact free-stream preservation through hundreds of flips;
+- round-off endpoint conservation on flip-free non-uniform intervals;
+- a single remaining conservation defect which is entirely topological, is
+  independent of the timestep, and converges at **fourth order in `h`**.
+
+That last point is the one the phase needed. The topology defect predicted in
+section 7, measured offline in sections 9 and 10, and first seen in the fluid in
+section 18, is now characterised: it is real, it is the only remaining
+conservation error, and **it is controlled by spatial resolution at fourth
+order**, so it cannot masquerade as a second-order solution error in a
+convergence campaign.
+
+Two consequences for the plan:
+
+- **Endpoint conservation should be gated as: round-off on any flip-free
+  interval, and fourth-order convergent otherwise**, reported per run. A
+  round-off gate in the presence of flips would be unsatisfiable and would
+  wrongly block the phase.
+- The conservative topology operator of section 7 is **not** required for the
+  accuracy programme. It remains the principled option if a future application
+  needs machine-precision conservation with a moving, reconnecting mesh.
+
+The methodological lesson is recorded deliberately: two-point ratios of a
+fluctuating quantity produced a plausible but meaningless order in section 19,
+and only an ensemble settled it. Any future order claim about a
+topology-driven quantity in this project should use one.
