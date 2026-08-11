@@ -3904,3 +3904,119 @@ mechanism.
 Remaining from section 23.4: the mesh-velocity policy comparison of
 section 14.5 item 6 is still outstanding, and Yee rather than Gresho is the
 right vehicle for an order claim.
+
+---
+
+## 26. 2026-08-11: the boost-10 failure is conditioning, and a separate real defect in the timestep
+
+- Author: `Claude Code Opus 5`, answering Zhenyu's question of whether section
+  25.4 is a near-singular matrix or a CFL problem. It is the first; but the
+  question exposed a genuine, independent defect in the second.
+
+### 26.1 Boost 10 is conditioning, not CFL
+
+Four independent arguments, the last decisive:
+
+1. **Assertion A2 contains no timestep.** It compares `Phi = sum_j K_j Uhat_j`
+   against `sum_i phi_i = sum_i (-K_i^+)(S^-)^{-1} Phi = S^-(S^-)^{-1}Phi`.
+   Both sides are evaluated inside one residual assembly at one instant. No
+   `dt` appears anywhere in the identity.
+2. **The static boost-10 run has a stricter CFL and passes.** It needs 8193
+   steps against the moving mesh's 2049, so its timestep is four times smaller,
+   and it is clean.
+3. **`min_pivot_ratio` degrades monotonically with boost on a moving mesh** —
+   6.2e-6, 5.1e-8, 2.3e-9 at boosts 0, 1, 3 — while static boost 10 sits at
+   3.8e-4. That is a property of `S^-`, not of `dt`.
+4. **A hundredfold smaller timestep does not fix it.** Re-run at
+   `MaxSizeTimestep = 1e-5` and `CourantFac = 0.01`:
+
+   ```
+   defect = 1.30e-9   tolerance = 4.12e-11     still fails
+   ```
+
+   The defect is if anything larger, which is element-to-element noise; the
+   conditioning is unchanged.
+
+The mechanism is the one section 25.4 described: on a moving mesh `sigma` is
+approximately `u`, the two advective eigenvalues `u.n - sigma.n` vanish and
+`S^-` is nearly rank deficient, while the entries of `K` grow like the square of
+the bulk velocity through `velx_c = velx_avg/c`. The inversion of a
+near-singular matrix whose entries carry five orders of cancellation is what
+loses the precision.
+
+### 26.2 The timestep criterion is nevertheless wrong for RD
+
+Zhenyu's question was well aimed even though the answer is no, because looking
+at `get_timestep_hydro` in `timestep.c:392` shows the moving-mesh criterion is
+not the RD one:
+
+```
+csnd = c
+#if defined(VORONOI_STATIC_MESH)
+  csnd += |v|                     /* lab-frame speed, static mesh only */
+#endif
+dt = CourantFac * get_cell_radius(p) / csnd
+```
+
+Two gaps for the ALE-RD path.
+
+**The advective term is dropped entirely on the moving path.** AREPO adds `|v|`
+only under `VORONOI_STATIC_MESH`; on a moving mesh it assumes the quasi-
+Lagrangian frame makes the advective speed negligible and uses `dt ~ R/c`. That
+is AREPO's finite-volume assumption. The quantity that should appear is
+`|v - sigma|`, and section 22.1 established that `sigma` is not `v`: it carries
+the half-step acceleration and the regularisation drift. Measured on the moving
+Gresho runs, `regularisation_velocity_rms` is 0.0318 on average and 0.0626 at
+worst, **identical at boost 0 and boost 3** as a frame-independent quantity must
+be, against a sound speed of about 2.9. **The omitted term is therefore about
+one per cent of `c` on this problem**, so the criterion is accurate here by
+accident of the mesh-velocity policy rather than by construction.
+
+**The length scale is the wrong one.** `get_cell_radius` is the Voronoi cell
+radius. The RD stability condition of Arpaia et al. equation (85) is
+
+```
+dt = CFL * min_i |S_i| / sum_{K in D_i} alpha^K,      alpha^K = max_j |k_j|
+```
+
+which uses the median-dual control area, and on a moving mesh the modified
+midpoint area `|Sbar_i^{n+1/2}|` that section 24 settled. It also uses the
+upwind parameters `k_j` themselves, which the solver already computes as its
+eigenvalues, rather than a separately estimated sound speed.
+
+**So the RD path has been running on a finite-volume timestep criterion
+throughout**, including in volume 1's validated static campaign. That was safe
+there because `dt ~ R/(c+|v|)` is strictly more conservative than the RD
+condition in the static case. On the moving path it is no longer obviously
+conservative, because the advective term is simply absent.
+
+### 26.3 What to do
+
+Not urgent, but it should be closed before the mesh-velocity policy comparison
+of section 14.5 item 6, because that comparison **changes exactly the quantity
+the criterion silently assumes to be zero**. A non-Lagrangian `sigma`, or
+dropping the pressure predictor, would make `|v - sigma|` large while the
+timestep criterion continued to ignore it.
+
+The natural fix is cheap: the solver already forms `k_j` per element, so
+`alpha^K = max_j |k_j|` can be accumulated during the residual sweep and
+exported as a per-node stability limit, giving the Arpaia criterion directly. It
+should be added as a **diagnostic first** — report `dt_RD / dt_AREPO` per step —
+so the size of the discrepancy is known before anything is allowed to change the
+timestep a validated campaign was run with.
+
+### 26.4 On assertion A2 and the boost range
+
+Since the failure is conditioning rather than a scheme defect, and the defect is
+`6e-7` relative to the residual, there are two honest options and the choice is
+Zhenyu's:
+
+- record boost 3 as the validated range and boost 10 as a known limit, which is
+  what section 25 does; or
+- give assertion A2 a conditioning-aware tolerance on the ALE path, scaled by
+  the measured `min_pivot_ratio` rather than by a fixed multiple of the
+  round-off scale.
+
+The second is defensible — the assertion's fixed `4096 * eps * scale` was
+calibrated for a static regime where `S^-` is well conditioned — but relaxing a
+conservation assertion is not something to do without an explicit decision.
