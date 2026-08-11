@@ -59,6 +59,12 @@ FS_RHO, FS_PRESSURE, FS_VELOCITY = 1.0, 1.0, (1.0, 0.5)
 # profile; a mesh moving with the flow should reproduce the unboosted result.
 GRESHO_BOOST = 3.0
 
+# Boost sequence and resolutions for the quantitative Galilean study of log
+# section 25. All members share their generator lattice at a given resolution,
+# so a comparison across boosts varies only the velocity frame.
+GRESHO_BOOSTS = (0.0, 1.0, 3.0, 10.0)
+GRESHO_RESOLUTIONS = (48, 96)
+
 
 def smooth_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """A C-infinity periodic state.
@@ -72,6 +78,26 @@ def smooth_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     vx = 0.6 + 0.2 * np.sin(k * xy[:, 1])
     vy = 0.4 + 0.2 * np.sin(k * xy[:, 0])
     return rho, vx, vy
+
+
+def gresho_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The standard Gresho vortex: density one, and a triangular v_phi(r).
+
+    v_phi peaks at 1.0 at r = 0.2 and the sound speed is about 2.9, so a bulk
+    boost of 3 is three times the vortex's own peak velocity at Mach 1.
+    """
+    dx = xy[:, 0] - 0.5 * BOX
+    dy = xy[:, 1] - 0.5 * BOX
+    r = np.hypot(dx, dy)
+    safe = np.maximum(r, 1e-300)
+
+    vphi = np.where(r < 0.2, 5.0 * r, np.where(r < 0.4, 2.0 - 5.0 * r, 0.0))
+    pressure = np.where(r < 0.2, 5.0 + 12.5 * r ** 2,
+                        np.where(r < 0.4,
+                                 9.0 + 12.5 * r ** 2 - 20.0 * r + 4.0 * np.log(5.0 * safe),
+                                 3.0 + 4.0 * np.log(2.0)))
+    rho = np.ones_like(r)
+    return rho, -vphi * dy / safe, vphi * dx / safe, pressure
 
 
 def write_ic(path: Path, xy: np.ndarray, rho: np.ndarray, vx: np.ndarray,
@@ -165,6 +191,15 @@ def generate() -> list[Path]:
             write_ic(path, xy, rho, vx, vy, 1.0)
             written.append(path)
             print(f"  wrote {path.name} (ensemble member {member}, seed {seed})")
+
+    for n in GRESHO_RESOLUTIONS:
+        xy = jittered_lattice(n, BASE_SEED)
+        rho, vx, vy, pressure = gresho_state(xy)
+        for boost in GRESHO_BOOSTS:
+            path = HERE / f"IC_greshojit{n}_b{boost:g}.hdf5"
+            write_ic(path, xy, rho, vx + boost, vy, pressure)
+            written.append(path)
+            print(f"  wrote {path.name} (Gresho, n={n}, boost {boost:g})")
 
     for family in ("random48", "glass48"):
         base = HERE / f"IC_gresho_v0_{family}.hdf5"

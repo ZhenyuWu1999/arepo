@@ -3777,3 +3777,130 @@ if it ever does, the Campoli divisor is the immediate fallback and now exists.
 The mathematical form of the moving-mesh scheme is, with this, settled. The
 boost sequence and resolution study of section 23.4 can proceed against a form
 that will not be revisited.
+
+---
+
+## 25. 2026-08-11: the quantitative Galilean study, and the boost limit it found
+
+- Author: `Claude Code Opus 5`. New compile switch `RD_DIFFERENCE_RESIDUAL`.
+- Section 23 was one boost at one resolution. This is the boost sequence and
+  resolution study it asked for, run against the form settled in section 24.
+- Initial conditions: `create_mmrd_ics.py` gained a self-contained Gresho
+  generator, so every member of the boost sequence shares its generator lattice
+  at a given resolution and a comparison across boosts varies only the frame.
+
+### 25.1 The boost sequence
+
+Gresho, LDA, `t = 1`, `n = 48`, CFL 0.3. Peak `v_phi` is reported alongside
+`L1` because section 23.4 asked for diffusion and noise to be separated:
+
+| boost | static `L1` | static peak | moving `L1` | moving peak | `L1` ratio |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 0.00752 | 0.9463 | 0.00784 | 0.9340 | 1.0 |
+| 1 | 0.05768 | 0.8052 | **0.00771** | **0.9330** | 7.5 |
+| 3 | 0.16400 | 0.4568 | **0.00785** | **0.9366** | **20.9** |
+| 10 | 0.20263 | 0.3620 | *fails, see 25.4* | | |
+
+**The moving-mesh error is flat: 0.00784, 0.00771, 0.00785 across boosts 0 to 3,
+a spread of 1.8 per cent.** The peak is equally flat, 0.934 to 0.937. The static
+mesh degrades monotonically by a factor of 22 in `L1`, and the peak collapses
+from 0.95 to 0.46: **the static failure mode is diffusion, not noise**, which is
+what reporting the peak was meant to establish.
+
+### 25.2 It is also cheaper, for the same reason
+
+Steps to `t = 1` at fixed CFL:
+
+| | boost 0 | boost 1 | boost 3 | boost 10 |
+| --- | ---: | ---: | ---: | ---: |
+| static, `n=48` | 2049 | 2049 | 4097 | 8193 |
+| **moving, `n=48`** | **2049** | **2049** | **2049** | — |
+| static, `n=96` | 4097 | | >5505, unfinished | |
+| **moving, `n=96`** | **4097** | | **4097** | |
+
+A static mesh has its timestep set by `|v| + c` in the lab frame, so boosting
+throttles it; a moving mesh sees `|v - sigma| + c` and is unaffected. **The
+moving-mesh step count is identical across boosts at both resolutions.** At
+boost 3 and `n = 48` the moving mesh is therefore twenty-one times more accurate
+**and** twice as cheap; the static `n = 96` boost-3 run did not finish in the
+standard job allocation while its moving counterpart did.
+
+### 25.3 Resolution, and the invariance of the order itself
+
+| case | `n=48` `L1` | `n=96` `L1` | order |
+| --- | ---: | ---: | ---: |
+| static, boost 0 | 0.00752 | 0.00281 | 1.42 |
+| moving, boost 0 | 0.00784 | 0.00258 | **1.60** |
+| moving, boost 3 | 0.00785 | 0.00258 | **1.60** |
+
+**The convergence order is itself Galilean invariant**: boost 3 reproduces
+boost 0 to four digits at both resolutions. That is a stronger statement than
+the `L1` table, because an order is a property of the scheme rather than of one
+run.
+
+The order is 1.4 to 1.6 rather than 2. That is expected and not an ALE effect:
+the Gresho velocity profile is only `C^0`, with kinks at `r = 0.2` and
+`r = 0.4`, and the static LDA campaign of volume 1 reached 1.879 on the smooth
+Yee vortex for the same reason inverted. Yee is the right problem for an order
+claim; Gresho is the right problem for an invariance claim.
+
+### 25.4 Boost 10 on a moving mesh: a real limit, and what it is not
+
+At boost 10 the moving-mesh run fails on the first step, on the existing
+conservation assertion:
+
+```
+RD assertion A2: raw sum_i phi_i != phi^T within round-off
+defect = 3.01e-10   tolerance = 3.41e-11   roundoff_scale = 37.54   |phi^T|max = 4.69e-4
+```
+
+The static boost-10 run passes cleanly. The diagnosis:
+
+- `min_pivot_ratio` on the moving mesh degrades systematically with boost:
+  **6.2e-6 at boost 0, 5.1e-8 at boost 1, 2.3e-9 at boost 3**, against
+  **3.8e-4** for static boost 10. On a moving mesh `sigma` is approximately `u`,
+  so the two advective eigenvalues `u.n - sigma.n` vanish and `S^-` is nearly
+  rank deficient; on a static mesh they are `O(|v|)` and it is well conditioned.
+- Meanwhile the entries of `K` grow like the square of the bulk velocity through
+  `velx_c = velx_avg / c`, while the residual stays the size of the physical
+  imbalance. At boost 10 the intermediate terms are `O(37)` and the answer is
+  `O(5e-4)`: five orders of cancellation.
+
+**This is section 3.4's concern finally materialising.** Section 21.3 withdrew
+the requirement for `RD_ALWAYS_PSEUDOINVERSE` on the evidence that
+`min_pivot_ratio` never approached the threshold — but that evidence was
+collected **at boost 0 only**, and does not extend. The withdrawal stands for a
+different reason than the one given: **the pseudo-inverse does not fix boost 10
+either.** It was tried and fails identically, because the loss is in the
+near-singular round trip `S^- (S^-)^+ phi`, which a minimum-norm solve cannot
+recover.
+
+`RD_DIFFERENCE_RESIDUAL` was added and tested on the same hypothesis. Since
+`sum_j K_j = 0`, the element residual is unchanged by subtracting the element
+mean before multiplying, which removes the common `O(b)` part in one exact
+subtraction instead of in the accumulation. It is better conditioned and it
+passes boosts 0 and 3, **but it does not fix boost 10 either**, which localises
+the remaining loss to the LDA solve rather than to the residual assembly. The
+switch is kept, off by default, since it is harmless and the diagnosis is worth
+preserving in code.
+
+What this is **not**: a failure of the ALE geometry, of the DGCL, or of the
+conservation of the scheme. The defect is `6e-7` relative to the residual, and
+the run fails only because assertion A2 is a strict round-off gate written for
+the static regime. Whether to relax it on the ALE path with a documented,
+conditioning-aware tolerance, or to record boost 3 as the validated range, is a
+decision for Zhenyu; relaxing a conservation assertion is not something to do
+silently.
+
+### 25.5 Status
+
+The claim of section 23 is now quantitative: **the moving mesh holds `L1`, the
+peak amplitude, the convergence order and the timestep constant under boosts up
+to three times the vortex's own peak velocity, where a static mesh loses a
+factor of 22 in `L1`, half its peak amplitude and half its timestep.** The
+validated boost range is 0 to 3; boost 10 is a known limit with an understood
+mechanism.
+
+Remaining from section 23.4: the mesh-velocity policy comparison of
+section 14.5 item 6 is still outstanding, and Yee rather than Gresho is the
+right vehicle for an order claim.

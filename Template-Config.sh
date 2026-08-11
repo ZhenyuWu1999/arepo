@@ -59,6 +59,7 @@
 #RD_ALE_GEOMETRY_DIAGNOSTICS    # Stage-0 moving-mesh geometry audit; diagnostic only, currently 2-D/equal-step/one-rank
 #RD_ALE_SPLIT_MESH_VELOCITY       # Experimental: assemble the mesh-velocity residual on U rather than the Roe linearisation
 #RD_ALE_CAMPOLI_MASS              # Use the Campoli endpoint mass and divisor instead of the Arpaia midpoint pair
+#RD_DIFFERENCE_RESIDUAL          # Assemble the element residual from nodal differences; conditions the boosted case
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

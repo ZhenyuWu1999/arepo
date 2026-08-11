@@ -2201,6 +2201,12 @@ void compute_residuals(tessellation *T)
        * floor. */
       double Phi[4];
       double phi_scale = 0.0;
+#ifdef RD_DIFFERENCE_RESIDUAL
+      double U_hat_mean[4];
+      for(k = 0; k < 4; k++)
+        U_hat_mean[k] = (U_hat[k][0] + U_hat[k][1] + U_hat[k][2]) / 3.0;
+#endif
+
       for(k = 0; k < 4; k++)
         {
           Phi[k] = 0.0;
@@ -2233,11 +2239,41 @@ void compute_residuals(tessellation *T)
 
           for(j = 0; j < 3; j++)
             {
+#ifdef RD_DIFFERENCE_RESIDUAL
+              /* sum_j K_j = 0, because sum_j n_j = 0 for a closed triangle and
+               * the mesh-velocity shift is proportional to the same normals.
+               * The element residual is therefore unchanged by subtracting any
+               * common state, and subtracting the element mean is what makes
+               * that identity hold in floating point as well as in exact
+               * arithmetic.
+               *
+               * It matters under a Galilean boost. The entries of K grow like
+               * the square of the bulk velocity through velx_c = velx_avg/c,
+               * while the residual itself stays the size of the physical
+               * imbalance, so the accumulation loses relative precision like
+               * b^2. On a moving mesh that compounds with a near-singular S^-,
+               * because sigma is approximately u makes the two advective
+               * eigenvalues vanish. Assembling from differences removes the
+               * common part before it is ever multiplied, so the cancellation
+               * happens in one exact subtraction instead of in the sum. */
+              Phi[k] += Kmatrix[k][0][j][kfull] * (U_hat[0][j] - U_hat_mean[0]) +
+                        Kmatrix[k][1][j][kfull] * (U_hat[1][j] - U_hat_mean[1]) +
+                        Kmatrix[k][2][j][kfull] * (U_hat[2][j] - U_hat_mean[2]) +
+                        Kmatrix[k][3][j][kfull] * (U_hat[3][j] - U_hat_mean[3]);
+
+              /* The round-off scale must stay the absolute one: the residual is
+               * now accumulated from differences, but the solve and the
+               * -K_i^+ z application downstream still carry the full magnitude
+               * of K, so that is what bounds the error the assertion checks. */
+              for(p = 0; p < 4; p++)
+                phi_scale += fabs(Kmatrix[k][p][j][kfull]) * fabs(U_hat[p][j]);
+#else
               Phi[k] += Kmatrix[k][0][j][kfull] * U_hat[0][j] + Kmatrix[k][1][j][kfull] * U_hat[1][j] +
                         Kmatrix[k][2][j][kfull] * U_hat[2][j] + Kmatrix[k][3][j][kfull] * U_hat[3][j];
 
               for(p = 0; p < 4; p++)
                 phi_scale += fabs(Kmatrix[k][p][j][kfull]) * fabs(U_hat[p][j]);
+#endif
             }
 
 #ifdef RD_RK2_COHERENT_BETA_STAR
