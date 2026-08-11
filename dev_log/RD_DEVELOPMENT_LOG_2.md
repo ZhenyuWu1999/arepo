@@ -3830,13 +3830,23 @@ standard job allocation while its moving counterpart did.
 | case | `n=48` `L1` | `n=96` `L1` | order |
 | --- | ---: | ---: | ---: |
 | static, boost 0 | 0.00752 | 0.00281 | 1.42 |
+| **static, boost 3** | 0.16400 | 0.12428 | **0.40** |
 | moving, boost 0 | 0.00784 | 0.00258 | **1.60** |
-| moving, boost 3 | 0.00785 | 0.00258 | **1.60** |
+| **moving, boost 3** | 0.00785 | 0.00258 | **1.60** |
 
-**The convergence order is itself Galilean invariant**: boost 3 reproduces
-boost 0 to four digits at both resolutions. That is a stronger statement than
-the `L1` table, because an order is a property of the scheme rather than of one
-run.
+Two statements, and the second is the stronger.
+
+**The convergence order is itself Galilean invariant on a moving mesh**: boost 3
+reproduces boost 0 to four digits at both resolutions. An order is a property of
+the scheme rather than of one run, so this is a stronger claim than the `L1`
+table alone.
+
+**Under boost the static mesh does not merely lose accuracy, it loses
+convergence.** Its order falls from 1.42 to 0.40, and refining from `n=48` to
+`n=96` buys a factor of 1.3 where the unboosted case buys 2.7. The boosted
+static error is dominated by advection error that resolution does not remove at
+the scheme's own rate. **That is the property a static mesh cannot recover at
+any resolution**, and it is the sharpest form of the case for moving mesh.
 
 The order is 1.4 to 1.6 rather than 2. That is expected and not an ALE effect:
 the Gresho velocity profile is only `C^0`, with kinks at `r = 0.2` and
