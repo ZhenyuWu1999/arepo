@@ -60,6 +60,41 @@ facts. The split is administrative. Nothing in volume 1 is retracted by it.
 
 ---
 
+## Index of sections
+
+Written so that a reference like "section 20" carries its subject without
+opening the file. Sections 11 to 14 are Codex's, written concurrently with 7
+to 10 and renumbered without moving text; their dates therefore interleave.
+
+| # | subject in one line |
+| --- | --- |
+| 1-5 | handover state, literature, feasibility, phase plan, open questions |
+| 6 | Codex: the median-dual area jumps at a Delaunay flip, so the DGCL may fail |
+| 7 | that jump is second order, not O(1); keep the median dual, not Voronoi |
+| 8 | the working RK2 form is Campoli's, not Arpaia's; the two are one scheme |
+| 9 | the flip defect measured offline on real cascading connectivity changes |
+| 10 | Stage 0: a geometry-only diagnostic inside AREPO, driven by the FV solver |
+| 11-13 | Codex: write the maths first; mesh-only reference tests; Stage 0 and regularisation |
+| 14 | Codex: audit of Stage 0, and the decision to start the fluid prototype |
+| 15 | the flip first moment and the drift reconstruction verified inside AREPO |
+| 16 | Codex: frozen interface for the first fluid slice |
+| 17 | Codex: first fluid-coupled ALE-RD slice; a conservation defect appears |
+| 18 | that defect is two mechanisms: interpolation (fixed) and topology (not) |
+| 19 | regression gates for the interpolation fix, and the topology order |
+| 20 | the remaining defect is purely topological and converges at fourth order |
+| 21 | LDA enabled on the moving mesh; the pseudo-inverse switch costs 87% for nothing |
+| 22 | what sigma is made of, and the reproducibility cleanup |
+| 23 | Galilean invariance: the first physics result of the phase |
+| 24 | Arpaia against Campoli, verified numerically inside the solver |
+| 25 | the quantitative boost and resolution study, and the boost-10 failure |
+| 26 | boost 10 is a conditioning problem, not a CFL one |
+| 27 | Codex: boost 10 recovered by an element co-moving frame; an RD CFL limiter |
+| 28 | Codex: the co-moving fix had dropped a term; a contour residual instead |
+| 29 | Codex: Chapter 4 reorganised around the contour residual |
+| 30 | the contour and timestep effects separated; connectivity hashes date the flips |
+
+---
+
 ## 1. State at handover
 
 ### 1.1 What is settled and must not be reopened without cause
@@ -4030,3 +4065,670 @@ Zhenyu's:
 The second is defensible — the assertion's fixed `4096 * eps * scale` was
 calibrated for a static regime where `S^-` is well conditioned — but relaxing a
 conservation assertion is not something to do without an explicit decision.
+
+## 27. 2026-08-11: boost 10 is recovered by direct element co-moving algebra; RD CFL is now an experimental limiter
+
+This section supersedes two claims in section 26.2 and closes the immediate
+boost-10 diagnosis.  All new paths remain compile-time experiments and are
+off in `Template-Config.sh`.
+
+### 27.1 Corrections to section 26.2
+
+Section 26.2 overlooked the active `TREE_BASED_TIMESTEPS` path.  In the moving
+case, `timestep_treebased.c` initialises
+
+```
+CurrentMaxTiStep = R / (c + |v - sigma|)
+```
+
+and propagates non-local signal restrictions; `get_timestep_hydro()` then
+takes the minimum of its local `R/c` estimate and `CurrentMaxTiStep`.  Thus the
+relative advective speed was **not absent**.  The genuine mismatch was the
+finite-volume/Voronoi length scale versus the RD element-star bound.  The
+statement that the static FV condition is always more conservative than the RD
+condition was also too strong; even a regular equilateral example reverses the
+ordering.  Previous successful static campaigns remain empirical validation,
+not a general inequality between the two criteria.
+
+### 27.2 A condition number, not the LU pivot proxy
+
+`RD_ALE_CONDITION_DIAGNOSTIC` now evaluates the actual singular values,
+numerical rank and normwise backward error of the failing LDA system.  On the
+first boost-10 step (triangle 1096 in the CFL-limited run):
+
+| quantity | laboratory conservative variables | element co-moving variables |
+|---|---:|---:|
+| singular values | `[7.886, 3.039e-2, 9.663e-3, 1.699e-16]` | `[4.477e-2, 3.241e-2, 1.225e-2, 2.203e-14]` |
+| `cond_2(S^-)` | `4.64e16` | `2.03e12` |
+| normalised backward error | `6.25e-8` | `2.08e-23` |
+| A2 defect | `3.01e-10` | `5.42e-20` in-frame; `1.08e-19` after mapping back |
+| A2 tolerance | `3.41e-11` | same laboratory audit scale |
+
+The first attempt formed `G S G^{-1}` from the laboratory matrix.  It improved
+the solve but retained an A2 defect of order `1e-10`--`1e-11`, because it asked
+floating-point arithmetic to cancel the large boosted entries after they had
+already been assembled.  Directly rebuilding `K_i^+`, `K_i^-` and `S^-` from
+
+```
+u' = u - b_T,       sigma' = sigma - b_T,       b_T = mean_T(sigma)
+```
+
+removed that defect.  The similarity-transformed and directly built matrices
+differed by `5.97e-14` relative on the failing element, already enough to spoil
+the nearly singular identity.  This is why forcing DGELSD on the laboratory
+matrix did not help: the SVD was solving the poorly represented coordinates it
+was given.
+
+The remaining `cond_2 ~ 2e12` is real near-degeneracy from `u approximately
+sigma`; the coordinate change does not pretend otherwise.  DGELSD handles its
+consistent right-hand side with a tiny backward error.  A2 was **not relaxed**.
+
+### 27.3 Experimental element co-moving LDA/F1 path
+
+`RD_LDA_COMOVING_FRAME` implements the following element-local change of
+conservative coordinates:
+
+```
+U' = G(b_T) U
+G = [[1, 0, 0, 0],
+     [-bx, 1, 0, 0],
+     [-by, 0, 1, 0],
+     [|b|^2/2, -bx, -by, 1]] .
+```
+
+The operator, Roe-state spatial residual and F1 temporal right-hand side are
+assembled in the primed frame; LDA solves and distributes there; each completed
+nodal residual is transformed once by `G^{-1}` before entering AREPO's
+laboratory `Q` ledger.  It is not a different flux.  The compile-time guard
+currently restricts it to the equal-step, two-pass LDA/F1 ALE prototype; N, B,
+the hierarchy and the coherent-beta/rate-consistent experiments are excluded
+until separately derived.
+
+The important negative control was retaining the laboratory assembly of
+`Phi^T` and transforming it only afterward.  That version ran boost 10, but at
+`t=0.02` still differed from the de-boosted boost-0 solution by `8.12e-5` in
+density L1 and `1.02e-4` in pressure L1.  Once `Phi^T` was also assembled
+directly in the element frame, the same ID-matched comparison became:
+
+| field after undoing the boost/translation | L1 | Linf |
+|---|---:|---:|
+| generator coordinates | `1.18e-16` | `1.44e-15` |
+| velocity | `6.30e-15` | `4.89e-14` |
+| density | `1.13e-14` | `4.91e-14` |
+| pressure | `3.44e-14` | `1.54e-13` |
+| internal energy | `1.05e-13` | `5.06e-13` |
+| stored mass | `5.21e-18` | `2.67e-17` |
+| output Voronoi volume | `7.59e-18` | `6.78e-17` |
+
+Both boost 0 and boost 10 completed to `t=0.02` with every assertion active.
+Adding `RD_DIFFERENCE_RESIDUAL` changed none of these figures materially: once
+the complete residual is assembled in the small-velocity frame, subtracting a
+common Roe state is no longer needed for boost conditioning.  It remains an
+independent round-off experiment, not a prerequisite of the co-moving path.
+
+One diagnostic is not bitwise boost invariant even though the solution is:
+on the first step the boost-0/10 runs reported 1759/1698 rank-deficient F1
+fallbacks, and different counts of exactly singular LU pivots.  These are
+borderline rank decisions after subtracting two nearly equal velocities.  They
+were dynamically invisible here because the paired fields still agree at
+round-off, but the branch should be monitored on non-uniform and discontinuous
+tests rather than declared harmless in general.
+
+This is a short `n=48` Gresho gate, not yet a production validation.  The next
+required tests are the previous `t=1` boost ladder, resolution comparison,
+Campoli-versus-Arpaia comparison in the same coordinates, and eventually the
+Yee, Sod, KH/RT and Sedov cases.
+
+### 27.4 RD CFL diagnostic and limiter
+
+The Arpaia-style scalar used here is
+
+```
+dt_i = CFL * m_i / sum_{T contains i} alpha_T,
+alpha_T = max_{j,q} 0.5 * |n_j| * |lambda_jq| .
+```
+
+The first non-invasive measurement gave
+
+```
+selected AREPO dt       = 6.25e-4
+realised midpoint RD dt = 3.8284255e-4
+```
+
+so the existing step was 1.63 times the proposed RD bound.  This is not the
+cause of the boost-10 A2 failure (A2 is a same-element algebraic identity and
+smaller timesteps had already failed), but it is a separate mathematical gap.
+
+`RD_ALE_CFL_TIMESTEP` now runs after `tree_based_timesteps()` and before time-bin
+quantisation.  It accumulates the current-mesh endpoint median mass and the
+element spectral radii, then takes the minimum with AREPO's already propagated
+tree bound through `CurrentMaxTiStep`.  On the `n=48` Gresho runs:
+
+```
+current-mesh RD candidate = 3.8284255e-4
+quantised accepted dt     = 3.1250000e-4
+realised midpoint bound   = 3.8284255e-4 initially
+```
+
+The accepted step therefore has a factor `1.225` margin.  Through `t=0.02`,
+the current-mesh predictor and realised midpoint bound agreed to about `2e-7`
+relative on this mildly deforming mesh.  The implementation deliberately
+combines the RD and tree/FV restrictions; it does not delete the non-local
+AREPO safeguard.
+
+There is one unresolved mathematical detail: the Arpaia midpoint mass depends
+on the future geometry and hence on the timestep being selected.  The current
+endpoint mass is an explicit predictor, not a proof of the implicit midpoint
+bound on arbitrary severe deformation.  The realised post-drift diagnostic is
+therefore retained.  A production version should either establish a safe
+geometric estimate or iterate/clip when the realised bound is smaller.
+
+### 27.5 Reproducibility
+
+- condition diagnostic build: job `10383632`, artifact
+  `build_artifacts/ale-lda-boostdiag-direct/05ea49c2fd28-9fae11c9217d8f3f/Arepo`;
+- direct co-moving residual build without the difference-residual switch: job
+  `10383680`, artifact
+  `build_artifacts/ale-lda-comoving-directphi-nodiff/05ea49c2fd28-c7d0207c0f1d2e2f/Arepo`;
+- short boost-0/10 runs: jobs `10383681` and `10383682`;
+- ID-matched analysis: `examples/gresho_2d/analyze_galilean_pair.py`;
+- all builds used MKL on Slurm compute nodes and immutable build provenance.
+
+
+## 28. 2026-08-12: the `U-Uhat` audit changes the boost-10 interpretation; a conservative-state contour residual passes the first long Galilean gate
+
+This section supersedes one important interpretation in section 27.3. The
+direct element-frame Roe residual was well conditioned and Galilean invariant,
+but it had silently omitted the `U-Uhat` term required by
+`RD_ALE_SPLIT_MESH_VELOCITY`. Restoring that term exposes an interpolation
+compatibility issue rather than another linear-solver issue. All new choices
+below remain compile-time experiments; no default has changed.
+
+### 28.1 What happens when the omitted split term is restored
+
+The laboratory split residual is
+
+```
+Phi_T = sum_j K_j(Uhat_j) + C_T,
+C_T   = -1/2 sum_j |n_j| (sigma_bar . n_j) (U_j - Uhat_j).
+```
+
+In an element frame `b_T = sigma_bar`, the correction must be transformed as
+
+```
+C'_T = G(b_T) C_T
+     = -1/2 sum_j |n_j| (sigma_bar . n_j) G(b_T)(U_j-Uhat_j).
+```
+
+The code now constructs this quantity both ways. Their maximum difference was
+`O(1e-17)` at boost 0 and `O(1e-15)` at boost 10, so the implementation of the
+change of conservative coordinates is correct.
+
+That identity is not, however, Galilean covariance between two independently
+boosted simulations. Under an additional uniform boost `B`, the absolute mesh
+velocity in the correction changes from `sigma_bar` to `sigma_bar+B`, leaving
+
+```
+-1/2 sum_j |n_j| (B . n_j) G(B)(U_j-Uhat_j),
+```
+
+which is not discretely zero because the physical Roe residual uses the
+parameter-vector interpolant `Uhat` while the moving median-dual ledger uses the
+P1 conservative interpolant `U`. The short `t=0.02`, `n=48` Gresho comparison
+therefore degraded from round-off and scaled approximately linearly with boost:
+
+| boost | velocity L1 | density L1 | pressure L1 | internal-energy L1 |
+|---:|---:|---:|---:|---:|
+| 3  | `1.263e-5` | `2.442e-5` | `3.044e-5` | `2.114e-4` |
+| 10 | `4.230e-5` | `8.119e-5` | `1.019e-4` | `7.026e-4` |
+
+Thus the first direct-frame result in section 27.3 solved the conditioning
+problem but obtained exact invariance partly by dropping a required term. A
+consistent residual must use one interpolant for both physical and geometric
+parts; transforming the split correction cannot repair the mismatch.
+
+### 28.2 Conservative-state contour residual
+
+`RD_ALE_CONTOUR_RESIDUAL` tests the smallest consistent alternative. In the
+`b_T=sigma_bar` element frame it forms the total from nodal conservative states,
+
+```
+Phi'_T = 1/2 sum_j |n_j| [n_jx F_x(U'_j) + n_jy F_y(U'_j)].
+```
+
+The Roe matrices still define the multidimensional LDA distribution; they no
+longer define the element total. The total residual and the moving median-dual
+ledger now use the same P1 `U`, so no `U-Uhat` correction is needed. This is a
+different RD spatial residual, not a purely algebraic rewrite of the old one.
+
+At `t=0.02`, boost 0 against boost 10 after undoing translation and boost gave
+
+| field | L1 | Linf |
+|---|---:|---:|
+| coordinates | `1.202e-16` | `1.554e-15` |
+| velocity | `6.348e-15` | `5.157e-14` |
+| density | `1.150e-14` | `5.129e-14` |
+| pressure | `3.535e-14` | `1.563e-13` |
+| internal energy | `1.060e-13` | `4.583e-13` |
+
+Three reverse gates passed:
+
+1. A smooth no-flip endpoint test ran 16 steps; its cumulative endpoint
+   conservation defect reached `1.255e-13`, consistent with round-off
+   accumulation.
+2. The non-rigid uniform-state regularisation test recorded 784 removed and
+   784 added edges over 90 geometry records (flips in every record), while
+   `max|dU|=4.441e-16` and the largest endpoint defect was `9.326e-15`.
+3. Campoli's mass pair passed the same uniform test; velocity and density were
+   bitwise identical to Arpaia at the final snapshot.
+
+The negative control matters: at boost 0 and `t=0.02`, the corrected split and
+contour solutions already differ by velocity L1 `3.241e-4`, density L1
+`6.408e-5` and pressure L1 `4.163e-4`. The contour choice must therefore earn
+its own consistency, accuracy and shock results before it can become a default.
+
+### 28.3 Full `t=1` boost ladder
+
+The contour experiment completed the formerly failing boost 10 case with the
+new RD CFL limiter. The integral Gresho profile is almost boost independent:
+
+| boost | volume-weighted `v_phi` L1 | peak `v_phi` | velocity L1 against de-boosted boost 0 | density L1 | pressure L1 |
+|---:|---:|---:|---:|---:|---:|
+| 0  | `9.384016e-3` | `0.9614260` | -- | -- | -- |
+| 1  | `9.384143e-3` | `0.9614260` | `2.054e-6` | `6.684e-7` | `5.310e-6` |
+| 3  | `9.379595e-3` | `0.9611953` | `5.257e-5` | `1.208e-5` | `9.693e-5` |
+| 10 | `9.384214e-3` | `0.9614263` | `4.844e-6` | `1.711e-6` | `1.125e-5` |
+
+Boost 3 has a much larger particlewise Linf (`4.41e-2` in velocity) than boost
+10 even though its integral profile remains on the same plateau. This
+non-monotonicity is evidence for a local topology-branch difference, not a
+smooth boost-dependent truncation error. Exact short-time covariance therefore
+becomes statistical/physical covariance after thousands of rebuilds: the mesh
+can take different but nearly equivalent flip branches after round-off-size
+perturbations.
+
+Relative to section 25's Roe-state residual, the contour residual retains a
+higher peak (`0.961` rather than about `0.934`) but has a slightly larger profile
+L1 (`0.00938` rather than about `0.0078`). The likely interpretation is less
+dissipation with more local scatter. A spatial-resolution ladder and a smooth
+Yee test are needed before calling this an accuracy improvement.
+
+### 28.4 Arpaia versus Campoli inside the contour formulation
+
+Campoli independently reproduces boost-10 covariance at `t=0.02`: velocity L1
+`6.257e-15`, density L1 `1.122e-14` and pressure L1 `3.333e-14`. The choice of
+mass scalar pair is therefore separate from the boost fix.
+
+On the smooth moving test the two forms retained the predicted second-order
+difference when the actual quantised timestep was halved:
+
+| actual `dt` | velocity L1 difference | density L1 difference | pressure L1 difference |
+|---:|---:|---:|---:|
+| `1.5625e-4` | `1.556e-13` | `5.412e-13` | `6.729e-13` |
+| `7.8125e-5` | `3.870e-14` | `1.349e-13` | `1.681e-13` |
+| `3.90625e-5` | `9.823e-15` | `3.406e-14` | `4.207e-14` |
+
+The velocity ratios are `4.02` and `3.94`; the other fields give the same
+factor-four behaviour. This confirms the section 8.7 algebra in the new
+residual coordinates as well.
+
+At `t=1`, however, the two mesh trajectories no longer remain particlewise
+close: velocity L1/Linf are `5.043e-5/4.060e-2`. The profile metrics remain
+close (`0.0093840`, peak `0.961426` for Arpaia; `0.0093951`, peak `0.961444`
+for Campoli). The first logged `minA` difference above `1e-4` relative appears
+near `t=0.57666`, and an abrupt 15.6 per cent difference appears near
+`t=0.984375`, consistent with different near-cocircular flip choices. The
+current log lacks a connectivity hash, so this is strong geometric evidence,
+not yet an exact first-flip timestamp.
+
+Section 24.3 must therefore be read narrowly: the forms are immaterial for
+bulk accuracy here and differ by `O(dt^2)` before topology branching, but their
+long particlewise mesh histories need not remain close. Keep **Arpaia as the
+default mass/divisor pair** because its analysis is the primary reference, and
+keep Campoli as the positive-divisor verification/fallback. The residual
+default is not yet settled: the contour experiment needs Yee convergence and
+Sod/KH/RT/Sedov tests, especially across discontinuous flips.
+
+### 28.5 Reproducibility
+
+- corrected split build: job `10384065`, artifact
+  `build_artifacts/ale-lda-comoving-split-corrected/05ea49c2fd28-496eec351044de41/Arepo`;
+- Arpaia contour build: job `10384071`, artifact
+  `build_artifacts/ale-lda-comoving-contour/05ea49c2fd28-dbf5f9ae27385311/Arepo`;
+- Campoli contour build: job `10384078`, artifact
+  `build_artifacts/ale-lda-comoving-contour-campoli/05ea49c2fd28-9017afac5d15d026/Arepo`;
+- short boost and reverse gates: jobs `10384072`--`10384081`;
+- Arpaia/Campoli timestep ladder: jobs `10384083`--`10384088`;
+- full Arpaia boost ladder: jobs `10384090`--`10384093`;
+- long Campoli comparison: job `10384094`;
+- all outputs and provenance are under
+  `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/output_gal3_*`.
+
+## 29. 2026-08-13: Chapter 4 is reorganised around Arpaia, the conservative-state contour residual, and the AREPO realisation
+
+The moving-mesh draft in the thesis has been substantially reorganised after
+the boost study in sections 25--28. This is primarily a clarification of the
+mathematical contract; it does not make the experimental contour path a code
+default. Only Chapter 4 was changed. Chapters 1--3, including the static RD
+notation and derivation, were left untouched.
+
+### 29.1 Why the thesis needed to change
+
+The former Chapter 4 began with the endpoint-mass/Campoli representation and
+introduced the Arpaia midpoint form only later as a comparison. That order no
+longer matched either the literature or the implementation work:
+
+- Arpaia et al. (2015) is the primary published ALE-RD analysis;
+- the midpoint form treats N, LDA and B through one common construction,
+  whereas endpoint N needs an explicit centre-distributed geometric share;
+- the current fluid prototype has mainly followed the Arpaia mass/divisor
+  pair; and
+- sections 24 and 28 found no clear accuracy or performance advantage that
+  would justify making Campoli the principal form. Before topology branches,
+  their measured difference follows the predicted second-order scaling; after
+  many rebuilds, small differences can select different near-cocircular flip
+  histories without materially changing the bulk Gresho profile.
+
+More importantly, the boost-10 investigation changed the spatial-residual
+question. The old Roe construction used the parameter-vector-linearised state
+`Uhat` for the physical residual while the moving-mass and mesh-advection
+parts referred to the nodal conservative state `U`. Restoring the omitted
+`U-Uhat` split correction showed that this mixed interpolation is not
+Galilean covariant: the short-time error grew approximately linearly with the
+boost. Direct co-moving algebra fixed the conditioning problem, but it could
+not make two different interpolants covariant.
+
+The conservative-state contour experiment instead constructs the element
+total from one nodal `P1-U` representation. It reached round-off agreement
+between boost 0 and boost 10 at `t=0.02`, completed the full boost-10 run, and
+kept the long-time integral Gresho profiles almost boost independent. The
+long-time particlewise differences are non-monotone in boost and correlate
+with different topology branches, so they are not evidence for a remaining
+smooth boost-dependent truncation term. These results motivate the new
+mathematical organisation, while the nonzero difference between the Roe and
+contour solutions remains the reason not to promote the contour residual
+without convergence and shock tests.
+
+### 29.2 New black main line in Chapter 4
+
+The moving-mesh material is now split into two explicit levels.
+
+1. **ALE-RD theory on a moving triangulation.** This part defines the moving
+   P1 basis, the intensive nodal degree of freedom U_i, the continuous ALE
+   equations, the non-conservative Arpaia residual, the midpoint DGCL, and the
+   two-stage Arpaia RK method. The Arpaia modified median-dual mass is the
+   reference divisor and the free-stream argument is manifest for N, LDA and
+   B.
+2. **Realisation in AREPO.** Only this part introduces Q_i=m_i U_i as a
+   storage ledger, the rebase operation, pulled-back new connectivity,
+   topology-change moments, active/inactive generators, pending residuals,
+   hierarchical clocks, MPI ownership, and the RD timestep diagnostic.
+
+This separation removes the previous ambiguity in which Q_i could look like
+the physical unknown or a material median-dual control volume. The
+mathematical unknown is U_i; Q_i is an AREPO storage convention whose weight
+must match the RD mass operator whenever raw residual numerators are
+accumulated.
+
+The Arpaia midpoint equations are now black thesis text rather than a red
+review correction. Campoli has its own comparison subsection. The retained
+derivation records that, for a frozen F1/LDA distribution matrix, the endpoint
+and midpoint forms differ by the same element scalar delta_T in the temporal
+coefficient and nodal divisor. The equivalence is explicitly restricted to
+the F1 family. Endpoint N, and the N fraction of B, still require the separate
+geometric share. Arpaia is therefore the default mathematical form; Campoli
+remains a comparison and a possible positive-divisor fallback under strong
+compression.
+
+### 29.3 What P1-U means, and which residual it discretises
+
+The thesis now defines
+
+~~~
+I_h F(U) = sum_j psi_j F(U_j),
+b_T      = |T|^{-1} integral_T sigma_h dA
+         = (sigma_1 + sigma_2 + sigma_3)/3.
+~~~
+
+Because U_h is linear on a triangle, its gradient is constant. Hence
+
+~~~
+integral_T sigma_h . grad(U_h) dA
+  = |T| b_T . grad(U_h)
+  = integral_boundaryT (b_T . n) U_h ds.
+~~~
+
+The contour total
+
+~~~
+Phi_tilde_T^(P1-U)
+  = integral_boundaryT [I_h F(U).n - (b_T.n) U_h] ds
+~~~
+
+therefore discretises the **geometrically non-conservative Arpaia residual**
+
+~~~
+integral_boundaryT F.n ds - integral_T sigma_h.grad(U_h) dA,
+~~~
+
+not the complete conservative ALE residual. A red terminology note was added
+to prevent the central ambiguity: using the conservative Euler state U does
+not make an expression a conservative ALE residual. The latter differs by
+
+~~~
+- integral_T U_h div(sigma_h) dA,
+~~~
+
+and Arpaia deliberately absorbs this geometric source into the modified
+midpoint mass. The contour total and the mass correction therefore do not
+double count the same term.
+
+The inward nodal-normal convention and factor 1/2 are explicitly tied back to
+Chapter 3 through grad(psi_j)=n_j/(2|T|). The Roe state is not removed from the
+method: it still constructs K_i^+, K_i^-, S^- and the N/LDA/B distribution
+operators. It no longer defines the element total in the new candidate
+formulation.
+
+### 29.4 Element-local co-moving coordinates
+
+The Galilean map U'=G(b_T)U is now part of the black theoretical line. The
+Euler flux identity
+
+~~~
+F_n(G U) = G [F_n(U) - (b_T.n) U]
+~~~
+
+shows that the laboratory P1-U non-conservative residual and the element
+frame residual transform covariantly. Since
+sigma'_h=sigma_h-b_T has zero element mean,
+
+~~~
+integral_T sigma'_h . grad(U'_h) dA = 0,
+~~~
+
+so the spatial total in the element frame is only the contour integral of the
+physical flux evaluated from U'_j. This is the clean ALE analogue of AREPO's
+co-moving Riemann solve and explains the boost-10 improvement: powers of the
+bulk velocity are removed before the nearly Lagrangian upwind matrix is
+formed.
+
+Only the mean translation disappears. Mesh deformation remains in
+div(sigma_h), the modified Arpaia mass, the midpoint geometry, and eventual
+connectivity changes. The transformation also does not cure a genuine rank
+deficiency when u-sigma=0; it separates that physical degeneracy from
+avoidable laboratory-coordinate conditioning.
+
+### 29.5 Red comments retained as research notes
+
+The new chapter has a black mathematical narrative, while red text is used
+for qualifications that are still implementation- or evidence-dependent:
+
+- the distinction between conservative variables and a conservative ALE
+  residual;
+- the relation to the earlier U-Uhat split correction and its N/LDA
+  distribution weights;
+- the boost-10 motivation and the remaining full-RK covariance gate;
+- the possible loss of positivity of the modified Arpaia divisor;
+- the AREPO mesh lifetime and absence of an explicitly built midpoint mesh;
+- edge-flip moment identities and the smooth O(h^4) versus discontinuous
+  topology defect;
+- the mildly implicit nature of an RD CFL bound based on future midpoint
+  geometry; and
+- unresolved interruption of an open RK interval by a topology/clock change.
+
+Two pdflatex passes completed without a LaTeX error. After the second pass,
+Chapter 4 had no unresolved internal equation or section references. The
+remaining undefined citations are the repository's normal no-BibTeX build
+state. The generated PDF and auxiliary files were removed afterwards, so the
+thesis worktree contains only the Chapter 4 source modification.
+
+### 29.6 Recommended next priorities
+
+The next work should test the new mathematical contract before cleaning it
+into a production code path.
+
+1. **Close the elemental algebra first.** Verify the volume/mean-velocity and
+   contour assemblies to round-off, verify laboratory/co-moving covariance of
+   the element total and nodal distribution, and extend the check through both
+   complete Arpaia RK stages including their temporal mass terms. Keep the
+   legacy Roe-Uhat result as a method comparison, not as an algebraic gate.
+2. **Establish smooth consistency and order.** Run the moving Yee vortex with
+   a resolution ladder and controlled mesh motion. This is the decisive test
+   of replacing the Roe-defined element total by I_h F(U). Compare static,
+   laboratory contour, co-moving contour, and the corrected split path at the
+   same RD timestep.
+3. **Instrument topology branching before long campaigns.** Record a
+   connectivity hash, first differing flip, flip count, and the topology
+   contribution to each conserved component. This is needed to distinguish
+   truncation error from the random-walk-like divergence of near-cocircular
+   mesh histories.
+4. **Test discontinuities, where the topology estimate is weakest.** Use Sod
+   first, followed by KH, RT and Sedov. Measure the flip-associated defect,
+   positivity, shock stability, and conservation separately. Repeat the key
+   cases with mesh regularisation on and off.
+5. **Keep Arpaia as the default mathematical pair during these tests.**
+   Retain Campoli as a compiled comparison and exercise it on strong
+   compression, where the Arpaia modified divisor is most likely to approach
+   zero. Do not generalise the F1 equivalence to N.
+6. **Finish the RD CFL contract.** The current endpoint predictor plus
+   realised-midpoint audit is adequate for experiments, but production use
+   needs either a safe deformation bound or an iterate/clip rule when the
+   realised midpoint limit is smaller.
+7. **Defer hierarchical moving connectivity.** Equal-timestep fluid tests
+   should mature before defining how an open element RK interval survives a
+   flip or a triangle-clock change.
+
+The immediate priority is therefore not another large Gresho campaign. It is
+the elemental/full-RK covariance proof followed by the moving Yee convergence
+test. If those pass, the discontinuous topology campaign becomes the next
+decision gate for whether the conservative-state contour residual can replace
+the legacy Roe-defined element total.
+
+---
+
+## 30. 2026-08-13: the contour and timestep effects separated, and connectivity hashes date the flip branches
+
+- Author: `Claude Code Opus 5`, acting on two criticisms of sections 27 and 28
+  (Codex's element co-moving frame, and the conservative-state contour
+  residual that replaced it).
+- Source change: a connectivity hash in the geometry diagnostic. Nothing else.
+
+### 30.1 Codex's correction of section 26 is upheld; I was wrong
+
+Section 26.2 claimed the moving-mesh timestep drops the advective term. It does
+not. `timestep_treebased.c:476-485` computes
+
+```
+#ifdef VORONOI_STATIC_MESH
+  csnd += |v|
+#else
+  csnd += |v - VelVertex|          <-- present on the moving path
+#endif
+CurrentMaxTiStep = rad / csnd
+```
+
+and `get_timestep_hydro` takes the minimum with it. `TREE_BASED_TIMESTEPS` is
+enabled in every Config here, so the relative advective speed was always
+included. I read only `get_timestep_hydro` and missed it, and the "about one per
+cent of `c`" estimate built on that reading is void. Section 26.2's other
+over-statement, that the static finite-volume condition is always more
+conservative than the RD condition, is also withdrawn on Codex's counterexample.
+What survives of section 26.2 is the length scale only: `get_cell_radius` is the
+Voronoi radius rather than the RD median-dual star bound.
+
+### 30.2 Separating the contour residual from the RD CFL limiter
+
+Section 28.3 compared its `t = 1` boost ladder against section 25's and
+attributed the difference to the contour residual. But that ladder changed three
+switches at once — `RD_LDA_COMOVING_FRAME`, `RD_ALE_CONTOUR_RESIDUAL` and
+`RD_ALE_CFL_TIMESTEP` — against section 25's single one. A two-by-two on the
+identical initial condition, Gresho boost 0, `n = 48`, `t = 1`:
+
+| | AREPO timestep, 2049 steps | RD-CFL timestep, 4097 steps |
+| --- | --- | --- |
+| Roe-state residual | `L1 = 0.00784`, peak 0.9340 | `L1 = 0.00778`, peak 0.9294 |
+| contour residual | `L1 = 0.00950`, peak 0.9474 | `L1 = 0.00940`, peak 0.9614 |
+
+Reading the margins:
+
+- **The RD CFL limiter halves the timestep and changes `L1` by 0.8 per cent.**
+  The solution was already timestep converged, so `L1` here measures spatial
+  error. That is reassuring for the limiter: it costs a factor of two in steps
+  and changes nothing it should not.
+- **The contour residual is responsible for the whole `L1` increase**, 0.00784
+  to 0.00950, twenty-one per cent worse at matched timestep.
+- **The peak is a genuine interaction and section 28.3's attribution is half
+  right.** Of the reported rise from 0.934 to 0.961, the residual contributes
+  0.934 to 0.947 and the timestep the remaining 0.947 to 0.961. Under the Roe
+  residual the same halving moves the peak the other way, 0.9340 to 0.9294.
+
+So at boost 0 the contour residual is **not** an accuracy improvement on this
+problem: it buys 1.4 per cent of peak amplitude for 21 per cent of `L1`. That is
+consistent with section 28.2's own reading of less dissipation with more local
+scatter, and it reinforces the conclusion there that the contour residual must
+earn its default through Yee convergence and the discontinuous tests, not
+through this comparison.
+
+### 30.3 Connectivity hashes: the flip branches now have timestamps
+
+Sections 28.3 and 28.4 attributed two observations to Delaunay branch
+differences — boost 3 having a larger particlewise `Linf` than boost 10, and
+Arpaia and Campoli separating by `t = 1` — and recorded honestly that the log
+"lacks a connectivity hash, so this is strong geometric evidence, not yet an
+exact first-flip timestamp".
+
+The diagnostic now emits one. The edge set is already sorted by particle ID and
+deduplicated, so an FNV-1a over it is a rank-independent fingerprint of the
+connectivity, and two runs of the same problem can be compared record by record.
+Contour residual with the RD CFL limiter, `n = 48`, `t = 1`, each boost against
+boost 0:
+
+| comparison | records with identical connectivity | first divergence |
+| --- | ---: | ---: |
+| boost 3 against boost 0 | 1624 of 4096 | **`t = 0.396729`** |
+| boost 10 against boost 0 | 2288 of 4096 | **`t = 0.558838`** |
+
+Two results.
+
+**The covariance is exact, not approximate, and it is exact in the mesh as well
+as in the solution.** Under boosts of three and ten times the vortex's own peak
+velocity, the Delaunay connectivity is bit-for-bit the same for 1624 and 2288
+consecutive rebuilds. That is a stronger statement than any field comparison,
+because connectivity is a discrete quantity that cannot be close: it either
+matches or it does not.
+
+**Section 28.3's non-monotonicity is explained exactly.** Boost 3 branches at
+`t = 0.397` and boost 10 only at `t = 0.559`, so boost 3 has forty per cent
+longer to accumulate a different mesh history. Its larger particlewise `Linf`
+therefore has nothing to do with the size of the boost. Codex's inference was
+right and is now a measurement.
+
+The hash should be used the same way for the Arpaia against Campoli separation
+of section 28.4, where the same explanation is offered on the same kind of
+evidence.
+
+### 30.4 An index
+
+Section references throughout this log now resolve through an index at the top,
+one line per section, so that a reference such as "section 20" carries its
+subject without opening the file.

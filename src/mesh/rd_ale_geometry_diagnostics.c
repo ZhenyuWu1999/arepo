@@ -81,6 +81,7 @@ struct rd_ale_node
 struct rd_ale_snapshot
 {
   double area;
+  unsigned long long connectivity_hash;
   double probe[RD_ALE_NPROBE];
   struct rd_ale_edge *edges;
   int nedge;
@@ -244,6 +245,36 @@ static void rd_ale_snapshot_free(struct rd_ale_snapshot *snapshot)
   memset(snapshot, 0, sizeof(*snapshot));
 }
 
+/*! \brief FNV-1a over the ID-keyed edge set, as a connectivity fingerprint.
+ *
+ *  Two runs of the same problem in different frames, or with different mass
+ *  scalars, stay particlewise close only until their Delaunay triangulations
+ *  take different branches at a near-cocircular event. After that the
+ *  trajectories separate for a reason that is geometric rather than numerical,
+ *  and comparing solutions without knowing when that happened confuses the two.
+ *  The edge set is already sorted by particle ID and deduplicated, so a hash of
+ *  it is a rank-independent fingerprint of the connectivity and the step at
+ *  which two runs first differ can be read off exactly.
+ */
+static unsigned long long rd_ale_connectivity_hash(const struct rd_ale_edge *edges, int nedge)
+{
+  unsigned long long hash = 1469598103934665603ULL; /* FNV offset basis */
+
+  for(int edge = 0; edge < nedge; edge++)
+    {
+      MyIDType pair[2] = {edges[edge].lo, edges[edge].hi};
+      const unsigned char *bytes = (const unsigned char *)pair;
+
+      for(size_t byte = 0; byte < sizeof(pair); byte++)
+        {
+          hash ^= (unsigned long long)bytes[byte];
+          hash *= 1099511628211ULL; /* FNV prime */
+        }
+    }
+
+  return hash;
+}
+
 static void rd_ale_build_snapshot(const tessellation *T, struct rd_ale_snapshot *snapshot)
 {
   memset(snapshot, 0, sizeof(*snapshot));
@@ -312,6 +343,7 @@ static void rd_ale_build_snapshot(const tessellation *T, struct rd_ale_snapshot 
       snapshot->edges[unique++] = snapshot->edges[edge];
 
   snapshot->nedge = unique;
+  snapshot->connectivity_hash = rd_ale_connectivity_hash(snapshot->edges, snapshot->nedge);
 }
 
 static void rd_ale_compare_edges(const struct rd_ale_snapshot *old_snapshot, const struct rd_ale_snapshot *new_snapshot,
@@ -415,7 +447,7 @@ static void rd_ale_open_output(void)
             "min_angle_new,max_centroid_offset_r,rms_centroid_offset_r,quasi_lagrangian_velocity_rms,mesh_velocity_rms,"
             "regularisation_velocity_rms,regularisation_velocity_max,regularisation_active_fraction,"
             "dm_signed_sum,dm_abs_sum,dm_abs_max,dm_touched_nodes,"
-            "dm_first_moment_x,dm_first_moment_y,max_pullback_position_error\n");
+            "dm_first_moment_x,dm_first_moment_y,max_pullback_position_error,connectivity_hash\n");
 }
 
 void rd_ale_geometry_velocity_begin(void)
@@ -696,7 +728,7 @@ void rd_ale_geometry_after_mesh(tessellation *T)
           "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
           "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%d,%d,%d,"
           "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
-          "%.17g,%.17g,%.17g,%d,%.17g,%.17g,%.17g\n",
+          "%.17g,%.17g,%.17g,%d,%.17g,%.17g,%.17g,%016llx\n",
           All.NumCurrentTiStep, All.Time, All.TimeStep, drift_dt, ntriangle, removed_edges, added_edges,
           RdAleOld.area, pulled_area, midpoint_area, current.area,
           (pulled_area - box_area) / box_area, (midpoint_area - box_area) / box_area, (current.area - box_area) / box_area,
@@ -705,7 +737,7 @@ void rd_ale_geometry_after_mesh(tessellation *T)
           min_old_area / mean_area, min_mid_area / mean_area, min_new_area / mean_area, min_angle_new,
           centroid_max, centroid_rms, RdAleQuasiLagrangianRms, mesh_velocity_rms, RdAleRegularisationRms, RdAleRegularisationMax,
           RdAleRegularisationActiveFraction, dm_signed_sum, dm_abs_sum, dm_abs_max, dm_touched, dm_first_moment[0], dm_first_moment[1],
-          pullback_position_error);
+          pullback_position_error, current.connectivity_hash);
   fflush(RdAleFile);
 
   mpi_printf("RD-ALE-GEOM: step=%d replaced_edges=%d/%d D=(%.3e,%.3e) cum=(%.3e,%.3e) minA/mean=%.3e "
@@ -714,7 +746,7 @@ void rd_ale_geometry_after_mesh(tessellation *T)
              All.NumCurrentTiStep, removed_edges, added_edges, defect[0], defect[1], RdAleCumulativeDefect[0],
              RdAleCumulativeDefect[1], min_new_area / mean_area, min_angle_new, inverted_old, nonpositive_arpaia,
              RdAleRegularisationRms, dm_signed_sum, dm_touched, dm_first_moment[0], dm_first_moment[1],
-             pullback_position_error);
+             pullback_position_error, current.connectivity_hash);
 
   free(campoli_mass);
   free(arpaia_mass);
