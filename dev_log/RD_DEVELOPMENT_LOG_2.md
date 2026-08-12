@@ -92,6 +92,7 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 28 | Codex: the co-moving fix had dropped a term; a contour residual instead |
 | 29 | Codex: Chapter 4 reorganised around the contour residual |
 | 30 | the contour and timestep effects separated; connectivity hashes date the flips |
+| 31 | Yee decides the contour residual; the horizon of particlewise comparison |
 
 ---
 
@@ -4732,3 +4733,107 @@ evidence.
 Section references throughout this log now resolve through an index at the top,
 one line per section, so that a reference such as "section 20" carries its
 subject without opening the file.
+
+---
+
+## 31. 2026-08-13: Yee decides the contour residual, and particlewise comparison has a horizon
+
+- Author: `Claude Code Opus 5`, closing the two items left by section 30 (the
+  two-by-two that separated the contour residual from the CFL limiter, and the
+  connectivity hash).
+- Source change: none. `create_mmrd_ics.py` gains a self-contained Yee vortex.
+
+### 31.1 Why Yee was needed
+
+Section 30.2 (the two-by-two disentangling the contour residual from the RD CFL
+limiter) found the contour residual twenty-one per cent worse in `L1` on Gresho.
+That could not settle anything, because the Gresho velocity profile is only
+`C^0` and caps the observed order near 1.6, as section 25 (the quantitative
+boost and resolution study) already showed. The Yee vortex is smooth and is an
+exact steady solution in its own frame, so at boost zero every deviation is
+scheme error. Its constants match
+`Analysis/yee_boost/yee_boost_common.py`, against which volume 1's static LDA
+order of 1.879 was measured; note that `gamma` is 1.4 there and 5/3 in the
+Gresho cases.
+
+### 31.2 Both residuals converge; the ranking reverses
+
+Boost 0, `t = 1`, density `L1` against the analytic steady state, identical
+timestep policy and initial conditions:
+
+| residual | `n=32` | `n=64` | `n=128` | order 32-64 | order 64-128 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Roe-state | 2.558e-3 | 7.361e-4 | 2.163e-4 | **1.80** | **1.77** |
+| contour | 2.092e-3 | 6.617e-4 | 2.026e-4 | **1.66** | **1.71** |
+
+Two things, and they do not point the same way.
+
+**The moving-mesh Roe path converges at 1.80 and 1.77**, consistent with volume
+1's static 1.879 on the same vortex. That is the first confirmation that moving
+mesh has not cost the scheme its order on a smooth problem, and it is the
+result section 4's phase plan called the minimum defensible deliverable.
+
+**The contour residual is more accurate at every resolution but converges more
+slowly**: 6 to 18 per cent lower `L1`, at order 1.66 to 1.71 against 1.77 to
+1.80. Extrapolating the two fits, the Roe form overtakes it somewhere around
+`n` of several hundred.
+
+**This reverses the Gresho reading of section 30.2.** There the contour residual
+was 21 per cent worse; here it is 6 to 18 per cent better. The two problems
+differ in exactly the way that should matter: Gresho's kinks at `r = 0.2` and
+`r = 0.4` are where the `P^1`-in-flux and quadratic-in-`Z` interpolants disagree
+most, and Yee has no such feature. So the contour residual is neither uniformly
+better nor uniformly worse; it is better on smooth flow at accessible
+resolutions and worse at a kink.
+
+**Neither result justifies changing the default.** The discriminating tests are
+now the discontinuous ones, Sod and KH, where the `C^0` behaviour is the whole
+question and where the contour form's handling of a kink is the property under
+test rather than an incidental one.
+
+### 31.3 Particlewise comparison has a horizon of about two thousand steps
+
+Section 28.4 (Arpaia against Campoli inside the contour formulation) attributed
+their separation at `t = 1` to different Delaunay branches, on geometric
+evidence. The connectivity hash added in section 30.3 dates it. All three
+comparisons are the same problem, `n = 48` Gresho, `t = 1`, 4096 records:
+
+| comparison | records with identical connectivity | first divergence |
+| --- | ---: | ---: |
+| Campoli against Arpaia | 1386 | `t = 0.338623` |
+| boost 3 against boost 0 | 1624 | `t = 0.396729` |
+| boost 10 against boost 0 | 2288 | `t = 0.558838` |
+
+Section 28.4's inference is therefore confirmed and dated: the two mass forms
+produce bit-identical connectivity for 1386 consecutive rebuilds and only then
+branch.
+
+The comparison between rows is the more useful result. A Galilean boost is, in
+exact arithmetic, **no perturbation at all**, so the boost rows branch purely
+through floating-point asymmetry. The Campoli row is a genuine `O(dt^2)` scheme
+difference. They branch at comparable times, and the genuine difference branches
+**earlier** than a boost of three. Near-cocircular decisions are therefore about
+as easily flipped by round-off as by a real second-order change in the scheme.
+
+**The rule this implies should be applied to every comparison in this phase:**
+particlewise or `Linf` agreement between two variants of this scheme has a
+horizon of roughly one to two thousand steps at `n = 48`, after which only
+integral or statistical metrics mean anything. Section 28.3's non-monotonic
+`Linf` across boosts, and section 28.4's particlewise separation, are both this
+effect and neither is evidence about the schemes being compared. Short-time
+covariance gates — the `t = 0.02` comparisons of sections 27 and 28 — remain
+valid precisely because they sit well inside the horizon.
+
+### 31.4 What is now settled and what is next
+
+Settled: the moving-mesh Roe path is second order on a smooth problem, at 1.80
+and 1.77 against volume 1's static 1.879. The contour residual is a real
+alternative with a different error profile rather than an improvement. The two
+mass forms and the boost ladder are exactly covariant in the mesh until a
+near-cocircular event, and their later divergence is not evidence.
+
+Next, in order: Sod and KH for the contour residual, since that is where its
+kink behaviour decides; the mesh-velocity policy comparison of section 14.5 item
+6, which section 22.1 showed is coupled to the upwind matrix conditioning; and
+P4, the build-fingerprint hole for untracked sources, still the only open item
+from section 14.2.

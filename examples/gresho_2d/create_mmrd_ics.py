@@ -65,6 +65,18 @@ GRESHO_BOOST = 3.0
 GRESHO_BOOSTS = (0.0, 1.0, 3.0, 10.0)
 GRESHO_RESOLUTIONS = (48, 96)
 
+# Yee isentropic vortex, for order measurement. Gresho's velocity profile is
+# only C^0 and caps the observed order near 1.6, so it cannot decide whether a
+# residual is second order. Yee is smooth and is an exact steady solution in its
+# own frame, so at boost zero any deviation is pure scheme error. Constants
+# match Analysis/yee_boost/yee_boost_common.py, against which volume 1's LDA
+# order of 1.879 was measured; note gamma differs from the Gresho cases.
+YEE_BOX = 10.0
+YEE_GAMMA = 1.4
+YEE_BETA = 5.0
+YEE_T_INFINITY = 1.0
+YEE_RESOLUTIONS = (32, 64, 128)
+
 
 def smooth_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """A C-infinity periodic state.
@@ -98,6 +110,21 @@ def gresho_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np
                                  3.0 + 4.0 * np.log(2.0)))
     rho = np.ones_like(r)
     return rho, -vphi * dy / safe, vphi * dx / safe, pressure
+
+
+def yee_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    dx = xy[:, 0] - 0.5 * YEE_BOX
+    dy = xy[:, 1] - 0.5 * YEE_BOX
+    dx -= YEE_BOX * np.round(dx / YEE_BOX)
+    dy -= YEE_BOX * np.round(dy / YEE_BOX)
+    r2 = dx * dx + dy * dy
+
+    temperature = YEE_T_INFINITY - ((YEE_GAMMA - 1.0) * YEE_BETA ** 2
+                                    / (8.0 * np.pi ** 2 * YEE_GAMMA) * np.exp(1.0 - r2))
+    rho = temperature ** (1.0 / (YEE_GAMMA - 1.0))
+    pressure = rho * temperature
+    factor = 0.5 * YEE_BETA / np.pi * np.exp(0.5 * (1.0 - r2))
+    return rho, -dy * factor, dx * factor, pressure
 
 
 def write_ic(path: Path, xy: np.ndarray, rho: np.ndarray, vx: np.ndarray,
@@ -200,6 +227,39 @@ def generate() -> list[Path]:
             write_ic(path, xy, rho, vx + boost, vy, pressure)
             written.append(path)
             print(f"  wrote {path.name} (Gresho, n={n}, boost {boost:g})")
+
+    for n in YEE_RESOLUTIONS:
+        rng = np.random.default_rng(BASE_SEED)
+        h = YEE_BOX / n
+        centres = (np.arange(n) + 0.5) * h
+        gx, gy = np.meshgrid(centres, centres, indexing="ij")
+        xy = np.column_stack([gx.ravel(), gy.ravel()])
+        xy = (xy + (rng.random(xy.shape) - 0.5) * JITTER * h) % YEE_BOX
+        rho, vx, vy, pressure = yee_state(xy)
+        path = HERE / f"IC_yeejit{n}.hdf5"
+        n_part = len(xy)
+        with h5py.File(path, "w") as f:
+            header = f.create_group("Header")
+            for key, value in dict(BoxSize=YEE_BOX, Flag_Cooling=0, Flag_DoublePrecision=1,
+                                   Flag_Feedback=0, Flag_Metals=0, Flag_Sfr=0, Flag_StellarAge=0,
+                                   HubbleParam=1.0, NumFilesPerSnapshot=1, Omega0=0.0, OmegaB=0.0,
+                                   OmegaLambda=0.0, Redshift=0.0, Time=0.0).items():
+                header.attrs[key] = value
+            header.attrs["MassTable"] = np.zeros(6, dtype=np.int32)
+            for key in ("NumPart_ThisFile", "NumPart_Total"):
+                counts = np.zeros(6, dtype=np.int32); counts[0] = n_part
+                header.attrs[key] = counts
+            header.attrs["NumPart_Total_HighWord"] = np.zeros(6, dtype=np.int32)
+            gas = f.create_group("PartType0")
+            coordinates = np.zeros((n_part, 3)); coordinates[:, :2] = xy
+            gas.create_dataset("Coordinates", data=coordinates)
+            velocities = np.zeros((n_part, 3)); velocities[:, 0] = vx; velocities[:, 1] = vy
+            gas.create_dataset("Velocities", data=velocities)
+            gas.create_dataset("Masses", data=rho)
+            gas.create_dataset("InternalEnergy", data=pressure / ((YEE_GAMMA - 1.0) * rho))
+            gas.create_dataset("ParticleIDs", data=np.arange(1, n_part + 1, dtype=np.int32))
+        written.append(path)
+        print(f"  wrote {path.name} (Yee vortex, n={n}, box {YEE_BOX:g}, gamma {YEE_GAMMA})")
 
     for family in ("random48", "glass48"):
         base = HERE / f"IC_gresho_v0_{family}.hdf5"
