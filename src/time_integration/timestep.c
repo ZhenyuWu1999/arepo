@@ -117,6 +117,14 @@ void find_timesteps_without_gravity(void)
   tree_based_timesteps();
 #endif /* #ifdef TREE_BASED_TIMESTEPS */
 
+#ifdef RD_ALE_CFL_TIMESTEP
+  /* The tree limiter is an FV/Voronoi signal-crossing criterion.  RD instead
+   * needs the nodal median-dual mass divided by the incident element spectral
+   * radii.  Apply that independent upper bound after the tree has reset and
+   * propagated CurrentMaxTiStep, so get_timestep_hydro() takes their minimum. */
+  rd_apply_cfl_timestep_constraint(&Mesh);
+#endif
+
   TIMER_START(CPU_TIMELINE);
 
   int idx, i, bin, binold;

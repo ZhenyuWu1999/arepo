@@ -68,6 +68,33 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if defined(VORONOI_STATIC_MESH) || !defined(FORCE_EQUAL_TIMESTEPS) || !defined(RD_RK2_TOTAL_RESIDUAL)
 #error "RD_ALE_EQUALSTEP requires a moving mesh, equal timesteps and the total-residual RK2 path."
 #endif
+
+#if defined(RD_ALE_CONDITION_DIAGNOSTIC) && !defined(LDA_SCHEME)
+#error "RD_ALE_CONDITION_DIAGNOSTIC currently diagnoses the LDA distribution only."
+#endif
+
+#if defined(RD_ALE_CFL_DIAGNOSTIC) && !defined(RD_ALE_EQUALSTEP)
+#error "RD_ALE_CFL_DIAGNOSTIC requires the equal-step ALE prototype."
+#endif
+#if defined(RD_ALE_CFL_TIMESTEP) && (!defined(RD_ALE_EQUALSTEP) || !defined(TREE_BASED_TIMESTEPS))
+#error "RD_ALE_CFL_TIMESTEP currently requires RD_ALE_EQUALSTEP and TREE_BASED_TIMESTEPS."
+#endif
+#if defined(RD_LDA_COMOVING_FRAME) && \
+    (!defined(RD_ALE_EQUALSTEP) || !defined(LDA_SCHEME) || defined(B_SCHEME) || defined(N_SCHEME) || \
+     defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR) || defined(RD_RK2_RATE_CONSISTENT_HEUN) || \
+     defined(RD_HIERARCHICAL_TIMESTEPS))
+#error "RD_LDA_COMOVING_FRAME currently covers only the equal-step two-pass LDA/F1 prototype."
+#endif
+#if defined(RD_LDA_COMOVING_FRAME) && defined(RD_ALE_CONDITION_DIAGNOSTIC)
+#error "Use separate builds for RD_LDA_COMOVING_FRAME and the lab-vs-frame diagnostic."
+#endif
+#if defined(RD_ALE_CONTOUR_RESIDUAL) && \
+    (!defined(RD_ALE_EQUALSTEP) || defined(B_SCHEME) || (!defined(LDA_SCHEME) && !defined(N_SCHEME)))
+#error "RD_ALE_CONTOUR_RESIDUAL covers the equal-step LDA and N experiments; B stays outside the ALE phase."
+#endif
+#if defined(RD_ALE_CONTOUR_RESIDUAL) && defined(N_SCHEME) && defined(RD_LDA_COMOVING_FRAME)
+#error "The N contour distribution is only derived in the laboratory frame; see RD_ALE_FORM_SELECTION.md."
+#endif
 #if !defined(N_SCHEME) && !defined(LDA_SCHEME)
 #error "RD_ALE_EQUALSTEP supports N/lumped and LDA/F1; B and its nonlinear sensor stay outside the ALE phase."
 #endif
@@ -418,6 +445,19 @@ static double RD_stat_min_pivot_ratio;     /* smallest min|diag(U)|/max|diag(U)|
 static double RD_stat_max_cons_defect_abs; /* largest raw conservation defect, absolute */
 static double RD_stat_max_phi;             /* largest |phi^T| seen, for context on the absolute figure */
 static double RD_stat_ever_max_cons_defect_abs; /* high-water mark across calls; NOT reset per call */
+#ifdef RD_ALE_CONDITION_DIAGNOSTIC
+static double RD_stat_max_condition_lab;
+static double RD_stat_shift_condition_at_lab_max;
+static double RD_stat_max_backward_error_lab;
+static double RD_stat_max_backward_error_shift;
+static double RD_stat_max_shift_a2_defect;
+static lapack_int RD_stat_min_shift_rank;
+#endif
+#ifdef RD_LDA_COMOVING_FRAME
+static double RD_stat_max_comoving_correction_covariance;
+static double RD_stat_max_comoving_phi_covariance;
+static double RD_stat_max_comoving_phi_covariance_relative;
+#endif
 #ifdef RD_RK2_TOTAL_RESIDUAL
 static long long RD_stat_f1_lumped;        /* corrector elements whose temporal term fell back to the lumped mass */
 static double RD_stat_min_stage_rho;       /* smallest predictor density seen this step */
@@ -507,6 +547,19 @@ static void rd_reset_solver_statistics(void)
   RD_stat_min_pivot_ratio     = 1.0;
   RD_stat_max_cons_defect_abs = 0.0;
   RD_stat_max_phi             = 0.0;
+#ifdef RD_ALE_CONDITION_DIAGNOSTIC
+  RD_stat_max_condition_lab          = 0.0;
+  RD_stat_shift_condition_at_lab_max = 0.0;
+  RD_stat_max_backward_error_lab     = 0.0;
+  RD_stat_max_backward_error_shift   = 0.0;
+  RD_stat_max_shift_a2_defect        = 0.0;
+  RD_stat_min_shift_rank             = 5;
+#endif
+#ifdef RD_LDA_COMOVING_FRAME
+  RD_stat_max_comoving_correction_covariance = 0.0;
+  RD_stat_max_comoving_phi_covariance = 0.0;
+  RD_stat_max_comoving_phi_covariance_relative = 0.0;
+#endif
 #ifdef RD_RK2_TOTAL_RESIDUAL
   RD_stat_f1_lumped       = 0;
   RD_stat_min_stage_rho   = MAX_DOUBLE_NUMBER;
@@ -541,6 +594,99 @@ static void rd_record_dt_extrapolation(double dt_extrapolation)
 {
   RD_stat_min_dt_extrap = dmin(RD_stat_min_dt_extrap, dt_extrapolation);
   RD_stat_max_dt_extrap = dmax(RD_stat_max_dt_extrap, dt_extrapolation);
+}
+
+/*! Build K_i^+, K_i^- and K_i in an explicitly chosen inertial frame.
+ *  Keeping this algebra in one routine lets the boost diagnostic construct
+ *  the operator directly in co-moving variables, rather than obtaining it by
+ *  an ill-conditioned similarity transform of the laboratory matrix. */
+static void rd_build_characteristic_matrices(double velx, double vely, double enthalpy, double cs,
+                                             double mesh_velx, double mesh_vely, const double normal_x[3],
+                                             const double normal_y[3], const double magnitude[3],
+                                             double lambda[3][4], double Kmatrix[4][4][3][3])
+{
+  double velx_c = velx / cs, vely_c = vely / cs, h_c = enthalpy / cs;
+  double alpha = 0.5 * GAMMA_MINUS1 * (velx * velx + vely * vely);
+  double alpha_c = alpha / cs;
+
+  for(int vertex = 0; vertex < 3; vertex++)
+    {
+      double vel_dot_n = velx * normal_x[vertex] + vely * normal_y[vertex];
+      double mesh_dot_n = mesh_velx * normal_x[vertex] + mesh_vely * normal_y[vertex];
+      lambda[vertex][0] = vel_dot_n + cs - mesh_dot_n;
+      lambda[vertex][1] = vel_dot_n - cs - mesh_dot_n;
+      lambda[vertex][2] = vel_dot_n - mesh_dot_n;
+      lambda[vertex][3] = vel_dot_n - mesh_dot_n;
+
+      for(int split = 0; split < 3; split++)
+        {
+          double value1, value2, value3;
+          if(split == 0)
+            {
+              value1 = dmax(0.0, lambda[vertex][0]);
+              value2 = dmax(0.0, lambda[vertex][1]);
+              value3 = dmax(0.0, lambda[vertex][2]);
+            }
+          else if(split == 1)
+            {
+              value1 = dmin(0.0, lambda[vertex][0]);
+              value2 = dmin(0.0, lambda[vertex][1]);
+              value3 = dmin(0.0, lambda[vertex][2]);
+            }
+          else
+            {
+              value1 = lambda[vertex][0];
+              value2 = lambda[vertex][1];
+              value3 = lambda[vertex][2];
+            }
+
+          double value12 = 0.5 * (value1 - value2);
+          double value123 = 0.5 * (value1 + value2 - 2.0 * value3);
+          double nx = normal_x[vertex], ny = normal_y[vertex];
+          double scale = 0.5 * magnitude[vertex];
+
+          Kmatrix[0][0][vertex][split] = scale * (alpha_c * value123 / cs - vel_dot_n * value12 / cs + value3);
+          Kmatrix[0][1][vertex][split] = scale * (-GAMMA_MINUS1 * velx_c * value123 / cs + nx * value12 / cs);
+          Kmatrix[0][2][vertex][split] = scale * (-GAMMA_MINUS1 * vely_c * value123 / cs + ny * value12 / cs);
+          Kmatrix[0][3][vertex][split] = scale * (GAMMA_MINUS1 * value123 / (cs * cs));
+
+          Kmatrix[1][0][vertex][split] =
+              scale * ((alpha_c * velx_c - vel_dot_n * nx) * value123 +
+                       (alpha_c * nx - velx_c * vel_dot_n) * value12);
+          Kmatrix[1][1][vertex][split] =
+              scale * ((nx * nx - GAMMA_MINUS1 * velx_c * velx_c) * value123 -
+                       (GAMMA - 2.0) * velx_c * nx * value12 + value3);
+          Kmatrix[1][2][vertex][split] =
+              scale * ((nx * ny - GAMMA_MINUS1 * velx_c * vely_c) * value123 +
+                       (velx_c * ny - GAMMA_MINUS1 * vely_c * nx) * value12);
+          Kmatrix[1][3][vertex][split] =
+              scale * (GAMMA_MINUS1 * velx_c * value123 / cs + GAMMA_MINUS1 * nx * value12 / cs);
+
+          Kmatrix[2][0][vertex][split] =
+              scale * ((alpha_c * vely_c - vel_dot_n * ny) * value123 +
+                       (alpha_c * ny - vely_c * vel_dot_n) * value12);
+          Kmatrix[2][1][vertex][split] =
+              scale * ((nx * ny - GAMMA_MINUS1 * velx_c * vely_c) * value123 +
+                       (vely_c * nx - GAMMA_MINUS1 * velx_c * ny) * value12);
+          Kmatrix[2][2][vertex][split] =
+              scale * ((ny * ny - GAMMA_MINUS1 * vely_c * vely_c) * value123 -
+                       (GAMMA - 2.0) * vely_c * ny * value12 + value3);
+          Kmatrix[2][3][vertex][split] =
+              scale * (GAMMA_MINUS1 * vely_c * value123 / cs + GAMMA_MINUS1 * ny * value12 / cs);
+
+          Kmatrix[3][0][vertex][split] =
+              scale * ((alpha_c * h_c - vel_dot_n * vel_dot_n) * value123 +
+                       vel_dot_n * (alpha_c - h_c) * value12);
+          Kmatrix[3][1][vertex][split] =
+              scale * ((vel_dot_n * nx - velx - alpha_c * velx_c) * value123 +
+                       (h_c * nx - GAMMA_MINUS1 * velx_c * vel_dot_n) * value12);
+          Kmatrix[3][2][vertex][split] =
+              scale * ((vel_dot_n * ny - vely - alpha_c * vely_c) * value123 +
+                       (h_c * ny - GAMMA_MINUS1 * vely_c * vel_dot_n) * value12);
+          Kmatrix[3][3][vertex][split] =
+              scale * (GAMMA_MINUS1 * h_c * value123 / cs + GAMMA_MINUS1 * vel_dot_n * value12 / cs + value3);
+        }
+    }
 }
 
 /*! \brief Solve  S^- X = B  for the residual-distribution upwind system.
@@ -655,6 +801,185 @@ static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapa
 
   return info;
 }
+
+#ifdef RD_ALE_CONDITION_DIAGNOSTIC
+static void rd_matmul4(const double A[4][4], const double B[4][4], double C[4][4])
+{
+  for(int i = 0; i < 4; i++)
+    for(int j = 0; j < 4; j++)
+      {
+        C[i][j] = 0.0;
+        for(int k = 0; k < 4; k++)
+          C[i][j] += A[i][k] * B[k][j];
+      }
+}
+
+static void rd_matvec4(const double A[4][4], const double x[4], double y[4])
+{
+  for(int i = 0; i < 4; i++)
+    {
+      y[i] = 0.0;
+      for(int k = 0; k < 4; k++)
+        y[i] += A[i][k] * x[k];
+    }
+}
+
+static int rd_singular_values4(const double matrix[4][4], double singular[4])
+{
+  double A[16], U[16], VT[16], superb[3];
+  memcpy(A, &matrix[0][0], sizeof(A));
+  return (int)LAPACKE_dgesvd(LAPACK_ROW_MAJOR, 'A', 'A', 4, 4, A, 4, singular, U, 4, VT, 4, superb);
+}
+
+static double rd_backward_error4(const double A[4][4], const double x[4], const double b[4])
+{
+  long double residual_norm = 0.0L, matrix_norm = 0.0L, x_norm = 0.0L, b_norm = 0.0L;
+
+  for(int i = 0; i < 4; i++)
+    {
+      long double row_sum = 0.0L, ax = 0.0L;
+      x_norm = fmaxl(x_norm, fabsl((long double)x[i]));
+      b_norm = fmaxl(b_norm, fabsl((long double)b[i]));
+      for(int j = 0; j < 4; j++)
+        {
+          row_sum += fabsl((long double)A[i][j]);
+          ax += (long double)A[i][j] * (long double)x[j];
+        }
+      matrix_norm = fmaxl(matrix_norm, row_sum);
+      residual_norm = fmaxl(residual_norm, fabsl((long double)b[i] - ax));
+    }
+
+  long double denominator = b_norm + matrix_norm * x_norm;
+  return (denominator > 0.0L) ? (double)(residual_norm / denominator) : (double)residual_norm;
+}
+
+/*! Compare the LDA solve in laboratory conserved variables with the same
+ *  algebra after a Galilean change of conservative coordinates.  This is
+ *  diagnostic only: Flux_RD remains the unmodified production result.
+ *
+ *  For frame velocity b,
+ *    U' = G(b) U = (rho, m-rho b, E-b.m+rho|b|^2/2),
+ *  and the identical linear map is S' = G S G^{-1}.  A large reduction in
+ *  condition number or A2 defect therefore identifies coordinate scaling,
+ *  rather than a physical loss of rank, as the boosted failure mechanism. */
+static void rd_diagnose_lda_condition(const double S[4][4], int kplus, const double Phi[4],
+                                      const double X_lab[4], const double Flux_lab[4][3],
+                                      const double frame_velocity[3], double velx_avg, double vely_avg, double h_avg,
+                                      double cs_avg, const double normal_x[3], const double normal_y[3],
+                                      const double magnitude[3], double roundoff_scale, int triangle_index)
+{
+  double b0 = frame_velocity[0], b1 = frame_velocity[1], b2 = b0 * b0 + b1 * b1;
+  double G[4][4] = {{1.0, 0.0, 0.0, 0.0},
+                    {-b0, 1.0, 0.0, 0.0},
+                    {-b1, 0.0, 1.0, 0.0},
+                    {0.5 * b2, -b0, -b1, 1.0}};
+  double Ginv[4][4] = {{1.0, 0.0, 0.0, 0.0},
+                       {b0, 1.0, 0.0, 0.0},
+                       {b1, 0.0, 1.0, 0.0},
+                       {0.5 * b2, b0, b1, 1.0}};
+  double work[4][4], S_similarity[4][4];
+  rd_matmul4(G, S, work);
+  rd_matmul4(work, Ginv, S_similarity);
+
+  double velx_shift = velx_avg - b0, vely_shift = vely_avg - b1;
+  double h_shift = h_avg - b0 * velx_avg - b1 * vely_avg + 0.5 * b2;
+  double lambda_shift[3][4], K_shift[4][4][3][3], S_shift[4][4];
+  rd_build_characteristic_matrices(velx_shift, vely_shift, h_shift, cs_avg, 0.0, 0.0,
+                                   normal_x, normal_y, magnitude, lambda_shift, K_shift);
+  for(int row = 0; row < 4; row++)
+    for(int col = 0; col < 4; col++)
+      {
+        S_shift[row][col] = 0.0;
+        for(int vertex = 0; vertex < 3; vertex++)
+          S_shift[row][col] += K_shift[row][col][vertex][1];
+      }
+
+  double similarity_gap = 0.0, direct_scale = 0.0;
+  for(int row = 0; row < 4; row++)
+    for(int col = 0; col < 4; col++)
+      {
+        similarity_gap = dmax(similarity_gap, fabs(S_similarity[row][col] - S_shift[row][col]));
+        direct_scale = dmax(direct_scale, fabs(S_shift[row][col]));
+      }
+  if(direct_scale > 0.0)
+    similarity_gap /= direct_scale;
+
+  double singular_lab[4], singular_shift[4];
+  int svd_info_lab = rd_singular_values4(S, singular_lab);
+  int svd_info_shift = rd_singular_values4(S_shift, singular_shift);
+  if(svd_info_lab != 0 || svd_info_shift != 0)
+    return;
+
+  double condition_lab = (singular_lab[3] > 0.0) ? singular_lab[0] / singular_lab[3] : INFINITY;
+  double condition_shift = (singular_shift[3] > 0.0) ? singular_shift[0] / singular_shift[3] : INFINITY;
+  double eta_lab = rd_backward_error4(S, X_lab, Phi);
+
+  double Phi_shift[4];
+  rd_matvec4(G, Phi, Phi_shift);
+  double X_shift[4] = {Phi_shift[0], Phi_shift[1], Phi_shift[2], Phi_shift[3]};
+  double A_shift[16], solve_singular[4];
+  lapack_int rank_shift = -1;
+  memcpy(A_shift, &S_shift[0][0], sizeof(A_shift));
+  lapack_int solve_info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 4, 4, 1, A_shift, 4, X_shift, 1, solve_singular,
+                                         RD_SVD_RCOND, &rank_shift);
+  if(solve_info != 0)
+    return;
+
+  double eta_shift = rd_backward_error4(S_shift, X_shift, Phi_shift);
+  double Flux_shift[4][3], Flux_shift_back[4][3];
+  for(int vertex = 0; vertex < 3; vertex++)
+    {
+      double Kplus_shift[4][4], flux_prime[4], flux_back[4];
+      for(int row = 0; row < 4; row++)
+        for(int col = 0; col < 4; col++)
+          Kplus_shift[row][col] = K_shift[row][col][vertex][kplus];
+      rd_matvec4(Kplus_shift, X_shift, flux_prime);
+      for(int row = 0; row < 4; row++)
+        {
+          flux_prime[row] = -flux_prime[row];
+          Flux_shift[row][vertex] = flux_prime[row];
+        }
+      rd_matvec4(Ginv, flux_prime, flux_back);
+      for(int row = 0; row < 4; row++)
+        Flux_shift_back[row][vertex] = flux_back[row];
+    }
+
+  double a2_lab = 0.0, a2_shift = 0.0, a2_shift_coordinates = 0.0;
+  for(int row = 0; row < 4; row++)
+    {
+      double sum_lab = 0.0, sum_shift = 0.0, sum_shift_coordinates = 0.0;
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          sum_lab += Flux_lab[row][vertex];
+          sum_shift += Flux_shift_back[row][vertex];
+          sum_shift_coordinates += Flux_shift[row][vertex];
+        }
+      a2_lab = dmax(a2_lab, fabs(Phi[row] - sum_lab));
+      a2_shift = dmax(a2_shift, fabs(Phi[row] - sum_shift));
+      a2_shift_coordinates = dmax(a2_shift_coordinates, fabs(Phi_shift[row] - sum_shift_coordinates));
+    }
+
+  if(condition_lab > RD_stat_max_condition_lab)
+    {
+      RD_stat_max_condition_lab = condition_lab;
+      RD_stat_shift_condition_at_lab_max = condition_shift;
+    }
+  RD_stat_max_backward_error_lab = dmax(RD_stat_max_backward_error_lab, eta_lab);
+  RD_stat_max_backward_error_shift = dmax(RD_stat_max_backward_error_shift, eta_shift);
+  RD_stat_max_shift_a2_defect = dmax(RD_stat_max_shift_a2_defect, a2_shift);
+  RD_stat_min_shift_rank = imin(RD_stat_min_shift_rank, rank_shift);
+
+  double tolerance = RD_CONSERVATION_ROUNDOFF_FACTOR * DBL_EPSILON * roundoff_scale;
+  if(a2_lab > 0.5 * tolerance)
+    printf("RD-COND task=%d triangle=%d frame=[%.17g,%.17g] "
+           "s_lab=[%.6e,%.6e,%.6e,%.6e] cond_lab=%.6e eta_lab=%.6e a2_lab=%.6e "
+           "s_shift=[%.6e,%.6e,%.6e,%.6e] cond_shift=%.6e rank_shift=%d eta_shift=%.6e "
+           "similarity_gap=%.6e a2_shift_coord=%.6e a2_shift_back=%.6e tol=%.6e\n",
+           ThisTask, triangle_index, b0, b1, singular_lab[0], singular_lab[1], singular_lab[2], singular_lab[3],
+           condition_lab, eta_lab, a2_lab, singular_shift[0], singular_shift[1], singular_shift[2], singular_shift[3],
+           condition_shift, (int)rank_shift, eta_shift, similarity_gap, a2_shift_coordinates, a2_shift, tolerance);
+}
+#endif
 
 /*! \brief Check the raw identity sum_{i in T} phi_i = phi^T.
  *
@@ -779,6 +1104,9 @@ struct rd_element_set
   struct rd_ale_triangle_geometry *ale_geometry;
   double *ale_endpoint_area;
   double *ale_divisor;
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+  double *ale_cfl_alpha_sum;
+#endif
   double(*ale_uold)[4];
   double ale_old_total[4];
   double ale_dt;
@@ -904,6 +1232,9 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
   set->ale_geometry = NULL;
   set->ale_endpoint_area = NULL;
   set->ale_divisor = NULL;
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+  set->ale_cfl_alpha_sum = NULL;
+#endif
   set->ale_uold = NULL;
   set->ale_dt = 0.0;
   set->ale_uniform_initial = 0;
@@ -966,6 +1297,10 @@ static void rd_free_element_set(struct rd_element_set *set)
 #ifdef RD_ALE_EQUALSTEP
   if(set->ale_uold != NULL)
     myfree(set->ale_uold);
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+  if(set->ale_cfl_alpha_sum != NULL)
+    myfree(set->ale_cfl_alpha_sum);
+#endif
   if(set->ale_divisor != NULL)
     myfree(set->ale_divisor);
   if(set->ale_endpoint_area != NULL)
@@ -1031,9 +1366,15 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
       &set->ale_geometry, "RD_ALEGeometry", set->n * sizeof(*set->ale_geometry));
   set->ale_endpoint_area = (double *)mymalloc("RD_ALEEndpointArea", NumGas * sizeof(*set->ale_endpoint_area));
   set->ale_divisor = (double *)mymalloc("RD_ALEDivisor", NumGas * sizeof(*set->ale_divisor));
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+  set->ale_cfl_alpha_sum = (double *)mymalloc("RD_ALECFLAlpha", NumGas * sizeof(*set->ale_cfl_alpha_sum));
+#endif
   set->ale_uold = (double(*)[4])mymalloc("RD_ALEUOld", NumGas * sizeof(*set->ale_uold));
   memset(set->ale_endpoint_area, 0, NumGas * sizeof(*set->ale_endpoint_area));
   memset(set->ale_divisor, 0, NumGas * sizeof(*set->ale_divisor));
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+  memset(set->ale_cfl_alpha_sum, 0, NumGas * sizeof(*set->ale_cfl_alpha_sum));
+#endif
 
   double umin[4] = {DBL_MAX, DBL_MAX, DBL_MAX, DBL_MAX};
   double umax[4] = {-DBL_MAX, -DBL_MAX, -DBL_MAX, -DBL_MAX};
@@ -1268,6 +1609,65 @@ static void rd_ale_finish_step(struct rd_element_set *set)
              rebase_change[2], rebase_change[3], endpoint_change[0], endpoint_change[1], endpoint_change[2],
              endpoint_change[3], new_total[0], new_total[1], new_total[2], new_total[3]);
 }
+
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+/*! Report, but do not yet enforce, the scalar ALE-RD CFL restriction
+ *
+ *       dt_i <= CFL mbar_i / sum_{T contains i} alpha_T,
+ *       alpha_T = max_j rho(K_j) = max_{j,q} |n_j| |lambda_{jq}| / 2.
+ *
+ *  The existing AREPO bound is reconstructed from the same quantities used by
+ *  get_timestep_hydro(), including CurrentMaxTiStep when the tree signal-speed
+ *  limiter is enabled.  Keeping this diagnostic non-invasive establishes the
+ *  convention and safety ratio before it is allowed to select a time bin. */
+static void rd_ale_report_cfl(const struct rd_element_set *set)
+{
+  double rd_limit = DBL_MAX, carrier_limit = DBL_MAX;
+  MyIDType rd_id = 0, carrier_id = 0;
+
+  for(int i = 0; i < NumGas; i++)
+    {
+      double alpha_sum = set->ale_cfl_alpha_sum[i];
+      if(alpha_sum > 0.0 && isfinite(alpha_sum))
+        {
+          double candidate = All.CourantFac * set->ale_divisor[i] / alpha_sum;
+          if(candidate < rd_limit)
+            {
+              rd_limit = candidate;
+              rd_id = P[i].ID;
+            }
+        }
+
+      double csnd = get_sound_speed(i);
+      if(!(csnd > 0.0))
+        csnd = 1.0e-30;
+#ifdef VORONOI_STATIC_MESH
+      csnd += sqrt(P[i].Vel[0] * P[i].Vel[0] + P[i].Vel[1] * P[i].Vel[1] + P[i].Vel[2] * P[i].Vel[2]) / All.cf_atime;
+#endif
+      double carrier_candidate = get_cell_radius(i) / csnd;
+#ifdef TREE_BASED_TIMESTEPS
+      carrier_candidate = dmin(carrier_candidate, SphP[i].CurrentMaxTiStep);
+#endif
+      carrier_candidate *= All.CourantFac;
+      if(carrier_candidate < carrier_limit)
+        {
+          carrier_limit = carrier_candidate;
+          carrier_id = P[i].ID;
+        }
+    }
+
+  if(!(rd_limit < DBL_MAX))
+    terminate_program("RD ALE CFL diagnostic found no positive nodal alpha sum");
+
+  /* With RD_ALE_CFL_TIMESTEP, CurrentMaxTiStep already carries the minimum of
+   * AREPO's tree bound and the current-geometry RD predictor.  Call this the
+   * carrier limit rather than incorrectly labelling it as a pure FV bound. */
+  mpi_printf("RD-CFL time=%.8g selected_dt=%.8g rd_midpoint_limit=%.8g carrier_limit=%.8g "
+             "rd_over_selected=%.6e rd_over_carrier=%.6e rd_id=%llu carrier_id=%llu\n",
+             All.Time, set->ale_dt, rd_limit, carrier_limit, rd_limit / set->ale_dt, rd_limit / carrier_limit,
+             (unsigned long long)rd_id, (unsigned long long)carrier_id);
+}
+#endif
 #endif /* RD_ALE_EQUALSTEP */
 
 /*! \brief Accumulate the median dual area over the complete physical set.
@@ -1351,6 +1751,109 @@ static void rd_accumulate_dual_area(tessellation *T, const struct rd_element_set
   }
 #endif /* #ifdef RD_DEBUG_ASSERTS */
 }
+
+#ifdef RD_ALE_CFL_TIMESTEP
+/*! Add the current-mesh RD spectral restriction to CurrentMaxTiStep.
+ *
+ *  This function is called immediately after tree_based_timesteps(), before
+ *  AREPO quantises the next equal timestep.  For each current triangle,
+ *
+ *      alpha_T = max_j |n_j| [c_Roe + |(u_Roe-sigma_bar).n_hat_j|] / 2,
+ *
+ *  and every incident node receives alpha_T.  The resulting raw (pre-Courant)
+ *  bound m_i/sum alpha_T is combined with, rather than substituted for, the
+ *  tree/Voronoi signal bound.  At this selection point the future midpoint
+ *  mass depends on the as-yet unknown dt; the current endpoint median-dual
+ *  mass is therefore the explicit prototype coefficient.  The post-drift
+ *  RD_ALE_CFL_DIAGNOSTIC reports the corresponding midpoint value and checks
+ *  how much this explicit estimate changed over the accepted step. */
+void rd_apply_cfl_timestep_constraint(tessellation *T)
+{
+  if(NTask != 1)
+    terminate_program("RD_ALE_CFL_TIMESTEP currently supports the one-rank ALE prototype only");
+
+  struct rd_element_set set;
+  rd_build_element_set(T, &set, 0);
+
+  double *mass = (double *)mymalloc("RD_CFLMass", NumGas * sizeof(*mass));
+  double *alpha_sum = (double *)mymalloc("RD_CFLAlpha", NumGas * sizeof(*alpha_sum));
+  memset(mass, 0, NumGas * sizeof(*mass));
+  memset(alpha_sum, 0, NumGas * sizeof(*alpha_sum));
+
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+
+  for(int slot = 0; slot < set.n; slot++)
+    {
+      int triangle = set.element[slot];
+      double sum_sqrt_rho = 0.0, velx_num = 0.0, vely_num = 0.0, h_num = 0.0;
+      double sigma[2] = {0.0, 0.0};
+
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
+          double rho = SphP[index].Density;
+          double sqrt_rho = sqrt(rho);
+          double velx = P[index].Vel[0], vely = P[index].Vel[1];
+          double enthalpy = GAMMA / GAMMA_MINUS1 * SphP[index].Pressure / rho + 0.5 * (velx * velx + vely * vely);
+
+          sum_sqrt_rho += sqrt_rho;
+          velx_num += sqrt_rho * velx;
+          vely_num += sqrt_rho * vely;
+          h_num += sqrt_rho * enthalpy;
+          sigma[0] += SphP[index].VelVertex[0] / 3.0;
+          sigma[1] += SphP[index].VelVertex[1] / 3.0;
+          mass[index] += set.normals[slot].area / 3.0;
+        }
+
+      double velx_roe = velx_num / sum_sqrt_rho;
+      double vely_roe = vely_num / sum_sqrt_rho;
+      double h_roe = h_num / sum_sqrt_rho;
+      double cs2 = GAMMA_MINUS1 * (h_roe - 0.5 * (velx_roe * velx_roe + vely_roe * vely_roe));
+      if(!(cs2 > 0.0) || !isfinite(cs2))
+        terminate_program("RD_ALE_CFL_TIMESTEP encountered an invalid Roe sound speed");
+      double cs = sqrt(cs2);
+
+      double alpha_triangle = 0.0;
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          double relative_normal =
+              (velx_roe - sigma[0]) * set.normals[slot].normal[vertex][0] +
+              (vely_roe - sigma[1]) * set.normals[slot].normal[vertex][1];
+          double alpha_vertex = 0.5 * set.normals[slot].mag[vertex] * (cs + fabs(relative_normal));
+          alpha_triangle = dmax(alpha_triangle, alpha_vertex);
+        }
+
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
+          alpha_sum[index] += alpha_triangle;
+        }
+    }
+
+  double raw_limit = DBL_MAX;
+  MyIDType limiting_id = 0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      if(!(mass[i] > 0.0) || !(alpha_sum[i] > 0.0) || !isfinite(alpha_sum[i]))
+        terminate_program("RD_ALE_CFL_TIMESTEP found an invalid nodal coefficient");
+      double candidate = mass[i] / alpha_sum[i];
+      SphP[i].CurrentMaxTiStep = dmin(SphP[i].CurrentMaxTiStep, candidate);
+      if(candidate < raw_limit)
+        {
+          raw_limit = candidate;
+          limiting_id = P[i].ID;
+        }
+    }
+
+  mpi_printf("RD-CFL-SELECT time=%.8g current_mesh_raw=%.8g courant_limit=%.8g limiting_id=%llu\n",
+             All.Time, raw_limit, All.CourantFac * raw_limit, (unsigned long long)limiting_id);
+
+  myfree(alpha_sum);
+  myfree(mass);
+  rd_free_element_set(&set);
+}
+#endif
 
 void reset_dualarea(tessellation *T)
 {
@@ -1804,6 +2307,9 @@ void compute_residuals(tessellation *T)
       double Pressure[DIMS + 1];
 
       double Velvertex_avg[3];  // moving mesh: average mesh velocity
+#ifdef RD_LDA_COMOVING_FRAME
+      double rd_frame_G[4][4], rd_frame_Ginv[4][4];
+#endif
       for(j = 0; j < 3; j++)
         {
           Velvertex_avg[j] = 0.0;
@@ -2191,6 +2697,22 @@ void compute_residuals(tessellation *T)
             }
         }
 
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+      if(rd_stage == 0)
+        {
+          double alpha_triangle = 0.0;
+          for(j = 0; j < 3; j++)
+            for(k = 0; k < 4; k++)
+              alpha_triangle = dmax(alpha_triangle, 0.5 * Mag[j] * fabs(Lambda[j][k]));
+
+          for(j = 0; j < 3; j++)
+            {
+              int index = rd_ale_local_point_index(&DP[DT[thistask_triangles[i]].p[j]]);
+              set.ale_cfl_alpha_sum[index] += alpha_triangle;
+            }
+        }
+#endif
+
       // compute residual: get residual Phi
       /* phi_scale is the pre-cancellation magnitude of Phi's own assembly.
        * In a quiet element the exact residual is zero and Phi is cancellation
@@ -2282,7 +2804,42 @@ void compute_residuals(tessellation *T)
 #endif
         }
 
-      /* S^- = sum_{j in T} K_j^-  (thesis notation, chapter 3) */
+#if defined(RD_ALE_CONTOUR_RESIDUAL) && !defined(RD_LDA_COMOVING_FRAME)
+      /* Laboratory-coordinate control for the element-frame experiment below.
+       * Use exactly the same nodal conservative P1 contour residual, including
+       * the mean mesh-advection flux, but retain the laboratory K^+/- matrices,
+       * S^- solve and F1 right-hand side. Exact arithmetic makes this the
+       * Galilean image of the co-moving construction; their numerical gap
+       * therefore isolates coordinate conditioning from the residual choice. */
+      phi_scale = 0.0;
+      for(k = 0; k < 4; k++)
+        Phi[k] = 0.0;
+      for(j = 0; j < 3; j++)
+        {
+          double rho = U_fluid[j][0];
+          double vx = U_fluid[j][1] / rho;
+          double vy = U_fluid[j][2] / rho;
+          double energy = U_fluid[j][3];
+          double sigma_dot_n = Velvertex_avg[0] * N_X[j] + Velvertex_avg[1] * N_Y[j];
+          double flux_x[4] = {U_fluid[j][1],
+                              U_fluid[j][1] * vx + Pressure[j],
+                              U_fluid[j][2] * vx,
+                              (energy + Pressure[j]) * vx};
+          double flux_y[4] = {U_fluid[j][2],
+                              U_fluid[j][1] * vy,
+                              U_fluid[j][2] * vy + Pressure[j],
+                              (energy + Pressure[j]) * vy};
+          for(k = 0; k < 4; k++)
+            {
+              double contribution =
+                  0.5 * Mag[j] * (N_X[j] * flux_x[k] + N_Y[j] * flux_y[k] - sigma_dot_n * U_fluid[j][k]);
+              Phi[k] += contribution;
+              phi_scale += fabs(contribution);
+            }
+        }
+#endif
+
+            /* S^- = sum_{j in T} K_j^-  (thesis notation, chapter 3) */
       double Sminus[4][4];
 
       for(k = 0; k < 4; k++)
@@ -2364,6 +2921,225 @@ void compute_residuals(tessellation *T)
                 (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / f1_interval;
 #endif
         }
+#endif
+
+#ifdef RD_LDA_COMOVING_FRAME
+      /* Change only the algebraic coordinates of this element solve.  The
+       * frame is the element-average generator velocity, so the directly
+       * assembled ALE operator has sigma'=0 and velocities u'=u-sigma_bar.
+       * The spatial residual is reassembled in that frame, so neither the
+       * laboratory K matrix nor its large common-state cancellation enters
+       * the solve.  Temporal right-hand sides use the same Galilean map.  The
+       * final nodal residuals are mapped back immediately before they enter
+       * AREPO's laboratory-frame ledger. */
+      {
+        double Phi_lab_before_frame[4];
+        memcpy(Phi_lab_before_frame, Phi, sizeof(Phi_lab_before_frame));
+
+        double b0 = Velvertex_avg[0], b1 = Velvertex_avg[1], b2 = b0 * b0 + b1 * b1;
+        double G_local[4][4] = {{1.0, 0.0, 0.0, 0.0},
+                                {-b0, 1.0, 0.0, 0.0},
+                                {-b1, 0.0, 1.0, 0.0},
+                                {0.5 * b2, -b0, -b1, 1.0}};
+        double Ginv_local[4][4] = {{1.0, 0.0, 0.0, 0.0},
+                                   {b0, 1.0, 0.0, 0.0},
+                                   {b1, 0.0, 1.0, 0.0},
+                                   {0.5 * b2, b0, b1, 1.0}};
+        memcpy(rd_frame_G, G_local, sizeof(rd_frame_G));
+        memcpy(rd_frame_Ginv, Ginv_local, sizeof(rd_frame_Ginv));
+
+        double velx_shift = velx_avg - b0, vely_shift = vely_avg - b1;
+        double h_shift = h_avg - b0 * velx_avg - b1 * vely_avg + 0.5 * b2;
+        double lambda_shift[3][4], K_shift[4][4][3][3];
+        rd_build_characteristic_matrices(velx_shift, vely_shift, h_shift, Cs_avg, 0.0, 0.0,
+                                         N_X, N_Y, Mag, lambda_shift, K_shift);
+        memcpy(Kmatrix, K_shift, sizeof(Kmatrix));
+
+        for(k = 0; k < 4; k++)
+          for(p = 0; p < 4; p++)
+            {
+              Sminus[k][p] = 0.0;
+              for(j = 0; j < 3; j++)
+                Sminus[k][p] += Kmatrix[k][p][j][kminus];
+            }
+
+        double U_hat_shift[4][3], U_fluid_shift[4][3];
+        for(j = 0; j < 3; j++)
+          for(k = 0; k < 4; k++)
+            {
+              U_hat_shift[k][j] = 0.0;
+              U_fluid_shift[k][j] = 0.0;
+              for(p = 0; p < 4; p++)
+                {
+                  U_hat_shift[k][j] += rd_frame_G[k][p] * U_hat[p][j];
+                  U_fluid_shift[k][j] += rd_frame_G[k][p] * U_fluid[j][p];
+                }
+            }
+
+        /* The direct co-moving Roe residual K'_j Uhat'_j is only the
+         * transform of the Roe-linearised ALE term.  The production ALE
+         * residual deliberately advects the original conservative P1 state
+         * with the mesh, so the U-Uhat split correction must cross the frame
+         * boundary as well:
+         *
+         *     C'_T = G(b_T) C_T
+         *          = -1/2 sum_j |n_j| (sigma_bar.n_j)
+         *                    G(b_T) (U_j-Uhat_j).
+         *
+         * Although sigma'=sigma_bar-b_T=0 in the characteristic operator,
+         * this term does not vanish: it repairs the non-covariance introduced
+         * by using the Roe parameter-vector interpolant Uhat for the physical
+         * flux while the geometric transport uses the original nodal U. */
+        double correction_shift[4] = {0.0, 0.0, 0.0, 0.0};
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
+        double correction_expected[4] = {0.0, 0.0, 0.0, 0.0};
+        double correction_covariance_scale = 0.0;
+
+        for(j = 0; j < 3; j++)
+          {
+            double sigma_dot_n = Velvertex_avg[0] * N_X[j] + Velvertex_avg[1] * N_Y[j];
+            for(k = 0; k < 4; k++)
+              {
+                double delta_shift = U_fluid_shift[k][j] - U_hat_shift[k][j];
+                correction_shift[k] -= 0.5 * Mag[j] * sigma_dot_n * delta_shift;
+                correction_covariance_scale += 0.5 * Mag[j] * fabs(sigma_dot_n) * fabs(delta_shift);
+              }
+          }
+
+        for(k = 0; k < 4; k++)
+          for(p = 0; p < 4; p++)
+            correction_expected[k] += rd_frame_G[k][p] * rd_ale_mesh_velocity_correction[p];
+
+        double correction_covariance_defect = 0.0;
+        for(k = 0; k < 4; k++)
+          correction_covariance_defect = dmax(correction_covariance_defect,
+                                               fabs(correction_shift[k] - correction_expected[k]));
+        RD_stat_max_comoving_correction_covariance =
+            dmax(RD_stat_max_comoving_correction_covariance, correction_covariance_defect);
+
+#ifdef RD_DEBUG_ASSERTS
+        double correction_covariance_tolerance =
+            RD_CONSERVATION_ROUNDOFF_FACTOR * DBL_EPSILON * dmax(1.0, correction_covariance_scale);
+        if(correction_covariance_defect > correction_covariance_tolerance)
+          {
+            printf("RD-COMOVING-CORRECTION task=%d triangle=%d defect=%.17g tol=%.17g scale=%.17g\n",
+                   ThisTask, thistask_triangles[i], correction_covariance_defect,
+                   correction_covariance_tolerance, correction_covariance_scale);
+            terminate_program("co-moving U-Uhat correction failed Galilean covariance gate");
+          }
+#endif
+#endif
+
+#ifdef RD_DIFFERENCE_RESIDUAL
+        double U_hat_shift_mean[4];
+        for(k = 0; k < 4; k++)
+          U_hat_shift_mean[k] = (U_hat_shift[k][0] + U_hat_shift[k][1] + U_hat_shift[k][2]) / 3.0;
+#endif
+
+        phi_scale = 0.0;
+#ifdef RD_ALE_CONTOUR_RESIDUAL
+        /* Galilean-covariant total residual based on the same conservative P1
+         * state as the moving median-dual ledger.  Interpolate the physical
+         * Euler flux from its nodal values and integrate its divergence over
+         * the triangle.  In the b_T=sigma_bar frame the mean mesh advection is
+         * zero, so no U-Uhat correction is present.  The Roe matrices remain
+         * the multidimensional upwind distribution operator; they no longer
+         * define the element total. */
+        for(k = 0; k < 4; k++)
+          Phi[k] = 0.0;
+        for(j = 0; j < 3; j++)
+          {
+            double rho = U_fluid_shift[0][j];
+            double vx = U_fluid_shift[1][j] / rho;
+            double vy = U_fluid_shift[2][j] / rho;
+            double energy = U_fluid_shift[3][j];
+            double flux_x[4] = {U_fluid_shift[1][j],
+                                U_fluid_shift[1][j] * vx + Pressure[j],
+                                U_fluid_shift[2][j] * vx,
+                                (energy + Pressure[j]) * vx};
+            double flux_y[4] = {U_fluid_shift[2][j],
+                                U_fluid_shift[1][j] * vy,
+                                U_fluid_shift[2][j] * vy + Pressure[j],
+                                (energy + Pressure[j]) * vy};
+            for(k = 0; k < 4; k++)
+              {
+                double contribution = 0.5 * Mag[j] * (N_X[j] * flux_x[k] + N_Y[j] * flux_y[k]);
+                Phi[k] += contribution;
+                phi_scale += fabs(contribution);
+              }
+          }
+#else
+        for(k = 0; k < 4; k++)
+          {
+            Phi[k] = correction_shift[k];
+            phi_scale += fabs(correction_shift[k]);
+            for(j = 0; j < 3; j++)
+              for(p = 0; p < 4; p++)
+                {
+#ifdef RD_DIFFERENCE_RESIDUAL
+                  Phi[k] += Kmatrix[k][p][j][kfull] * (U_hat_shift[p][j] - U_hat_shift_mean[p]);
+#else
+                  Phi[k] += Kmatrix[k][p][j][kfull] * U_hat_shift[p][j];
+#endif
+                  phi_scale += fabs(Kmatrix[k][p][j][kfull]) * fabs(U_hat_shift[p][j]);
+                }
+          }
+
+        /* This second gate includes the characteristic operator as well as
+         * the split correction.  Unlike the correction-only identity above,
+         * its laboratory reference has already suffered the large-boost
+         * cancellation that motivated the co-moving construction, so it is
+         * diagnostic rather than a fatal assertion. */
+        double Phi_frame_expected[4] = {0.0, 0.0, 0.0, 0.0};
+        double phi_covariance_defect = 0.0, phi_covariance_scale = 0.0;
+        for(k = 0; k < 4; k++)
+          {
+            for(p = 0; p < 4; p++)
+              Phi_frame_expected[k] += rd_frame_G[k][p] * Phi_lab_before_frame[p];
+            phi_covariance_defect = dmax(phi_covariance_defect, fabs(Phi[k] - Phi_frame_expected[k]));
+            phi_covariance_scale = dmax(phi_covariance_scale, dmax(fabs(Phi[k]), fabs(Phi_frame_expected[k])));
+          }
+        RD_stat_max_comoving_phi_covariance = dmax(RD_stat_max_comoving_phi_covariance, phi_covariance_defect);
+        RD_stat_max_comoving_phi_covariance_relative =
+            dmax(RD_stat_max_comoving_phi_covariance_relative,
+                 phi_covariance_defect / dmax(DBL_MIN, phi_covariance_scale));
+#endif
+
+        double rhs_shift[4][RD_UPWIND_NRHS];
+        for(k = 0; k < 4; k++)
+          for(int column = 0; column < RD_UPWIND_NRHS; column++)
+            {
+              rhs_shift[k][column] = 0.0;
+              for(p = 0; p < 4; p++)
+                rhs_shift[k][column] += rd_frame_G[k][p] * rhs[p][column];
+            }
+        memcpy(rhs, rhs_shift, sizeof(rhs));
+        for(k = 0; k < 4; k++)
+          {
+            rhs[k][0] = Phi[k];
+            rhs[k][1] = 0.0;
+            for(j = 0; j < 3; j++)
+              for(p = 0; p < 4; p++)
+                rhs[k][1] += Kmatrix[k][p][j][kminus] * U_hat_shift[p][j];
+          }
+
+        if(rd_stage == 1)
+          for(j = 0; j < 3; j++)
+            {
+              double shifted[4];
+              for(k = 0; k < 4; k++)
+                {
+                  shifted[k] = 0.0;
+                  for(p = 0; p < 4; p++)
+                    shifted[k] += rd_frame_G[k][p] * dU_vertex[j][p];
+                }
+              memcpy(dU_vertex[j], shifted, sizeof(shifted));
+            }
+
+#ifdef RD_DEBUG_ASSERTS
+        rd_assert_K_sum_vanishes(Kmatrix, kfull, thistask_triangles[i]);
+#endif
+      }
 #endif
 
 #ifdef RD_DIAG_TRACE_ELEMENT
@@ -2492,6 +3268,10 @@ void compute_residuals(tessellation *T)
         }
 
 #ifdef LDA_SCHEME
+#ifdef RD_ALE_CONDITION_DIAGNOSTIC
+      rd_diagnose_lda_condition(Sminus, kplus, Phi, X_lda, Flux_RD, Velvertex_avg, velx_avg, vely_avg, h_avg,
+                                Cs_avg, N_X, N_Y, Mag, LDA_roundoff_scale + phi_scale, thistask_triangles[i]);
+#endif
       rd_check_conservation(Flux_RD, Phi, LDA_roundoff_scale + phi_scale, thistask_triangles[i], "LDA");
 #else
       rd_check_conservation(Flux_LDA, Phi, LDA_roundoff_scale + phi_scale, thistask_triangles[i], "LDA");
@@ -2541,12 +3321,49 @@ void compute_residuals(tessellation *T)
           N_roundoff_scale = dmax(N_roundoff_scale, equation_scale);
         }
 
-#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY) && !defined(RD_ALE_CONTOUR_RESIDUAL)
       /* Outside the component loop, and with its own indices: reusing k or j
-       * here would terminate the enclosing loop early. */
+       * here would terminate the enclosing loop early.
+       *
+       * Suppressed under the contour residual: there the element total is
+       * rebuilt from nodal conservative states, so the U-Uhat correction has
+       * already been discarded from Phi and adding it to the nodal fluxes alone
+       * would break sum_i phi_i = Phi. */
       for(int corr_k = 0; corr_k < 4; corr_k++)
         for(int corr_j = 0; corr_j < 3; corr_j++)
           Flux_RD[corr_k][corr_j] += rd_ale_mesh_velocity_correction[corr_k] / 3.0;
+#endif
+
+#if defined(N_SCHEME) && defined(RD_ALE_CONTOUR_RESIDUAL)
+      /* Reconcile the N distribution with the contour element total.
+       *
+       * N does not distribute Phi. Its nodal flux is K_i^+(U_i - U_in), and the
+       * identity sum_i phi_i^N = sum_j K_j Uhat_j holds by construction of the
+       * inflow state. The contour residual replaces the element total by the
+       * divergence of the interpolated physical flux, which is a different
+       * quantity, so that identity no longer closes and assertion A2 would fire
+       * on the first step.
+       *
+       * The difference is distributed with the row sum of N's mass matrix,
+       * which for the lumped mass is 1/3 at each vertex. This is the same
+       * construction used for the split correction above and for the geometric
+       * residual of the development log. It is conservative by construction,
+       * leaves the upwind character of K_i^+ untouched, and vanishes
+       * identically when the two totals agree, so it is inert wherever the
+       * contour and Roe totals coincide.
+       *
+       * This is a scheme design choice, not an algebraic identity: it fixes how
+       * a first-order monotone distribution is reconciled with a total it did
+       * not generate, and its accuracy and positivity are what the campaign in
+       * RD_ALE_FORM_SELECTION.md measures. */
+      for(int corr_k = 0; corr_k < 4; corr_k++)
+        {
+          double distributed = Flux_RD[corr_k][0] + Flux_RD[corr_k][1] + Flux_RD[corr_k][2];
+          double residue     = (Phi[corr_k] - distributed) / 3.0;
+
+          for(int corr_j = 0; corr_j < 3; corr_j++)
+            Flux_RD[corr_k][corr_j] += residue;
+        }
 #endif
 
 #ifdef N_SCHEME
@@ -3044,6 +3861,21 @@ void compute_residuals(tessellation *T)
         }
 #endif
 
+#ifdef RD_LDA_COMOVING_FRAME
+      for(j = 0; j < 3; j++)
+        {
+          double lab_flux[4];
+          for(k = 0; k < 4; k++)
+            {
+              lab_flux[k] = 0.0;
+              for(p = 0; p < 4; p++)
+                lab_flux[k] += rd_frame_Ginv[k][p] * Flux_RD[p][j];
+            }
+          for(k = 0; k < 4; k++)
+            Flux_RD[k][j] = lab_flux[k];
+        }
+#endif
+
 #ifdef RD_DIAG_TRACE_ELEMENT
       if(rd_trace)
         printf("RD-TRACE-OUT stage=%d flux00=%.17g flux30=%.17g flux01=%.17g flux31=%.17g\n", rd_stage, Flux_RD[0][0],
@@ -3128,6 +3960,11 @@ void compute_residuals(tessellation *T)
 #endif
 
   apply_FluxRD_list();
+
+#ifdef RD_ALE_CFL_DIAGNOSTIC
+  if(rd_stage == 0)
+    rd_ale_report_cfl(&set);
+#endif
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
   if(rd_stage == RD_RK_STAGE_PREDICTOR)
@@ -3273,6 +4110,23 @@ void compute_residuals(tessellation *T)
           (double)RD_SVD_RCOND, stat_rank_counts[0], stat_rank_counts[1], stat_rank_counts[2], stat_rank_counts[3],
           stat_rank_counts[4], (stat_totals[1] > 0) ? stat_min_rank : -1, stat_min_out[0], stat_max_out[0], stat_max_out[2],
           (stat_max_out[2] > 0.0) ? stat_max_out[0] / stat_max_out[2] : 0.0, stat_min_out[1], stat_max_out[1]);
+
+#ifdef RD_ALE_CONDITION_DIAGNOSTIC
+    if(ThisTask == 0)
+      printf("RD-COND-SUMMARY time=%.8g max_cond_lab=%.6e cond_shift_at_lab_max=%.6e "
+             "max_eta_lab=%.6e max_eta_shift=%.6e max_a2_shift=%.6e min_rank_shift=%d\n",
+             All.Time, RD_stat_max_condition_lab, RD_stat_shift_condition_at_lab_max,
+             RD_stat_max_backward_error_lab, RD_stat_max_backward_error_shift, RD_stat_max_shift_a2_defect,
+             (int)RD_stat_min_shift_rank);
+#endif
+
+#ifdef RD_LDA_COMOVING_FRAME
+    if(ThisTask == 0)
+      printf("RD-COMOVING-SUMMARY time=%.8g max_correction_covariance=%.6e "
+             "max_phi_covariance=%.6e max_phi_covariance_relative=%.6e\n",
+             All.Time, RD_stat_max_comoving_correction_covariance,
+             RD_stat_max_comoving_phi_covariance, RD_stat_max_comoving_phi_covariance_relative);
+#endif
 
 #ifdef RD_RK2_TOTAL_RESIDUAL
     long long f1_lumped_total;

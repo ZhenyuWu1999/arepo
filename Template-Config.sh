@@ -60,6 +60,11 @@
 #RD_ALE_SPLIT_MESH_VELOCITY       # Experimental: assemble the mesh-velocity residual on U rather than the Roe linearisation
 #RD_ALE_CAMPOLI_MASS              # Use the Campoli endpoint mass and divisor instead of the Arpaia midpoint pair
 #RD_DIFFERENCE_RESIDUAL          # Assemble the element residual from nodal differences; conditions the boosted case
+#RD_ALE_CONDITION_DIAGNOSTIC     # Diagnose boosted LDA systems in lab and element co-moving conservative variables
+#RD_ALE_CFL_DIAGNOSTIC           # Compare the selected AREPO step with the element-based ALE-RD CFL bound
+#RD_ALE_CFL_TIMESTEP             # Experimental: include the current-mesh ALE-RD spectral bound in timestep selection
+#RD_LDA_COMOVING_FRAME           # Experimental LDA solve/distribution in element co-moving conservative variables
+#RD_ALE_CONTOUR_RESIDUAL          # Experimental P1 conservative-state contour residual; laboratory or element frame
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

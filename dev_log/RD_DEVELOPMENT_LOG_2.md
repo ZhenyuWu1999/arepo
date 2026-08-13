@@ -94,6 +94,11 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 30 | the contour and timestep effects separated; connectivity hashes date the flips |
 | 31 | Yee decides the contour residual; the horizon of particlewise comparison |
 
+The form-selection campaign that follows section 31 has its own document,
+`dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
+their derivations, then decides a recommended default from an eight-build
+campaign over particle-level, smooth and discontinuous tests.
+
 ---
 
 ## 1. State at handover

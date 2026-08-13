@@ -77,6 +77,14 @@ YEE_BETA = 5.0
 YEE_T_INFINITY = 1.0
 YEE_RESOLUTIONS = (32, 64, 128)
 
+# Discontinuous tier of the form-selection campaign. Both use gamma = 1.4.
+# The Sod tube is periodic with two interfaces, at x = L/4 and x = 3L/4, which is
+# the arrangement volume 1 used; the KH contact is given a finite transition
+# width so that the initial data is resolved and a positivity failure at t = 0
+# does not pre-empt the comparison the campaign is for.
+SHOCK_GAMMA = 1.4
+KH_TRANSITION = 0.025
+
 
 def smooth_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """A C-infinity periodic state.
@@ -125,6 +133,23 @@ def yee_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.nd
     pressure = rho * temperature
     factor = 0.5 * YEE_BETA / np.pi * np.exp(0.5 * (1.0 - r2))
     return rho, -dy * factor, dx * factor, pressure
+
+
+def sod_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    left = (xy[:, 0] > 0.25 * BOX) & (xy[:, 0] < 0.75 * BOX)
+    rho = np.where(left, 1.0, 0.125)
+    pressure = np.where(left, 1.0, 0.1)
+    return rho, np.zeros(len(xy)), np.zeros(len(xy)), pressure
+
+
+def kh_state(xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    y = xy[:, 1] / BOX
+    w = KH_TRANSITION
+    band = 0.5 * (np.tanh((y - 0.25) / w) - np.tanh((y - 0.75) / w))
+    rho = 1.0 + band
+    vx = -0.5 + band
+    vy = 0.1 * np.sin(4.0 * np.pi * xy[:, 0] / BOX)
+    return rho, vx, vy, np.full(len(xy), 2.5)
 
 
 def write_ic(path: Path, xy: np.ndarray, rho: np.ndarray, vx: np.ndarray,
@@ -260,6 +285,34 @@ def generate() -> list[Path]:
             gas.create_dataset("ParticleIDs", data=np.arange(1, n_part + 1, dtype=np.int32))
         written.append(path)
         print(f"  wrote {path.name} (Yee vortex, n={n}, box {YEE_BOX:g}, gamma {YEE_GAMMA})")
+
+    for name, state, n in (("sod", sod_state, 64), ("kh", kh_state, 64)):
+        xy = jittered_lattice(n, BASE_SEED)
+        rho, vx, vy, pressure = state(xy)
+        path = HERE / f"IC_{name}jit{n}.hdf5"
+        n_part = len(xy)
+        with h5py.File(path, "w") as f:
+            header = f.create_group("Header")
+            for key, value in dict(BoxSize=BOX, Flag_Cooling=0, Flag_DoublePrecision=1,
+                                   Flag_Feedback=0, Flag_Metals=0, Flag_Sfr=0, Flag_StellarAge=0,
+                                   HubbleParam=1.0, NumFilesPerSnapshot=1, Omega0=0.0, OmegaB=0.0,
+                                   OmegaLambda=0.0, Redshift=0.0, Time=0.0).items():
+                header.attrs[key] = value
+            header.attrs["MassTable"] = np.zeros(6, dtype=np.int32)
+            for key in ("NumPart_ThisFile", "NumPart_Total"):
+                counts = np.zeros(6, dtype=np.int32); counts[0] = n_part
+                header.attrs[key] = counts
+            header.attrs["NumPart_Total_HighWord"] = np.zeros(6, dtype=np.int32)
+            gas = f.create_group("PartType0")
+            coordinates = np.zeros((n_part, 3)); coordinates[:, :2] = xy
+            gas.create_dataset("Coordinates", data=coordinates)
+            velocities = np.zeros((n_part, 3)); velocities[:, 0] = vx; velocities[:, 1] = vy
+            gas.create_dataset("Velocities", data=velocities)
+            gas.create_dataset("Masses", data=rho)
+            gas.create_dataset("InternalEnergy", data=pressure / ((SHOCK_GAMMA - 1.0) * rho))
+            gas.create_dataset("ParticleIDs", data=np.arange(1, n_part + 1, dtype=np.int32))
+        written.append(path)
+        print(f"  wrote {path.name} ({name}, n={n}, gamma {SHOCK_GAMMA})")
 
     for family in ("random48", "glass48"):
         base = HERE / f"IC_gresho_v0_{family}.hdf5"
