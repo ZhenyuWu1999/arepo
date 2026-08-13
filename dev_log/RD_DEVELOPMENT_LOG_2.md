@@ -93,11 +93,14 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 29 | Codex: Chapter 4 reorganised around the contour residual |
 | 30 | the contour and timestep effects separated; connectivity hashes date the flips |
 | 31 | Yee decides the contour residual; the horizon of particlewise comparison |
+| 32 | the form-selection campaign, and the stress test that weakened it |
 
-The form-selection campaign that follows section 31 has its own document,
+Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
 their derivations, then decides a recommended default from an eight-build
-campaign over particle-level, smooth and discontinuous tests.
+campaign over particle-level, smooth and discontinuous tests. Section 32
+summarises it and records the stress test that partially retracted its
+residual recommendation.
 
 ---
 
@@ -4842,3 +4845,151 @@ kink behaviour decides; the mesh-velocity policy comparison of section 14.5 item
 6, which section 22.1 showed is coupled to the upwind matrix conditioning; and
 P4, the build-fingerprint hole for untracked sources, still the only open item
 from section 14.2.
+
+> **Section 32 runs those tests**, as part of a campaign over the whole switch
+> matrix, and finds that the discontinuous tier separates LDA from N far more
+> sharply than it separates the two residuals.
+
+---
+
+## 32. 2026-08-13: the form-selection campaign, and the stress test that weakened its own recommendation
+
+Section 31.4 listed Sod and KH as the next tests, because that is where the
+contour residual's kink behaviour decides. Rather than run them alone, the whole
+switch matrix was run against one protocol, because the five switches had
+reached a state where each was validated only against the defect it was
+introduced for and none was a default.
+
+**The campaign has its own document, `dev_log/RD_ALE_FORM_SELECTION.md`**, which
+states the switches and their derivations before the results. It is standalone
+so that it can be read as the argument for a default without reading four
+thousand lines of chronology. This section records what it found and what
+happened afterwards; it does not duplicate it.
+
+### 32.1 The one piece of new mathematics
+
+Extending `RD_ALE_CONTOUR_RESIDUAL` to N was not a guard relaxation. N never
+distributes `Phi`: its nodal flux is `K_i^+(U_i - U_in)` and the identity
+`sum_i phi_i^N = sum_j K_j Uhat_j` holds by construction of the inflow state, so
+substituting a different element total makes assertion A2 fail at the first
+step. The difference is instead distributed with N's lumped row sum,
+
+```
+phi_i^N += (Phi_contour - sum_i phi_i^N) / 3,
+```
+
+which is the same construction used for the section 18 split correction under N
+and for the geometric residual of section 7.5. It is conservative by
+construction and inert where the two totals agree. It passed every tier-A gate,
+but it is a scheme design choice rather than a validated scheme and is recorded
+as one.
+
+### 32.2 What the campaign established
+
+Eight builds, `{Roe+split, contour} x {laboratory, co-moving}` plus two
+single-axis confirmations and N duplicates of both residuals. All eight pass the
+`sigma = 0` bitwise collapse, the 784-flip free-stream gate, and flip-free
+endpoint conservation.
+
+**`G(b_T)` is exactly a similarity, and it is worth having anyway.** Laboratory
+and co-moving agree to every printed digit on the boost-3 covariance gate and
+are **bit-identical** at all three Yee resolutions. It changes no answer. But it
+decides whether real problems run: laboratory Roe cannot do boost 10 at all, and
+on KH it dies at `t = 2.4e-4` on the conservation identity where the co-moving
+build reaches `t = 0.98`, four thousand times further.
+
+**KH generalises the boost-10 finding.** A shear layer on a quasi-Lagrangian
+mesh has `sigma` approximately `u` *everywhere*, so `S^-` degenerates for
+precisely the reason section 27 identified at high boost. The degeneracy is not
+a curiosity of an artificial test; it is generic in shear, which is most of
+astrophysical hydrodynamics.
+
+**The Roe form is not discretely covariant and its defect is linear in boost**:
+`1.895e-5` at boost 3 against `6.345e-5` at boost 10, a ratio of 3.35 against a
+boost ratio of 3.33, confirming the section 28 argument quantitatively. The
+contour form is covariant to round-off, `2.4e-15`, in both frames and at both
+boosts.
+
+**On Yee the two residuals trade**: Roe is closer to second order, 1.75 and 1.78;
+the contour form is more accurate at every resolution tested but converges more
+slowly, 1.64 and 1.71. This reproduces section 31.2 under a different timestep
+policy, which is worth noting because it was the one result the harness change
+could have contaminated.
+
+**Campoli conserves four orders better on a flip-free interval**, `2.2e-16`
+against Arpaia's `1.5e-12`, for a structural reason worth remembering: Campoli's
+divisor is the plain new median dual, which is also the storage area, so the
+final `Q_bar -> Q_new` rebase is the identity. Arpaia divides by `m_bar` and
+multiplies by `m_new`, and the figure is exactly that accumulation over five
+steps. This does not make Campoli the better default today, but it names the
+condition under which it would become one.
+
+### 32.3 The recommendation, and the stress test that weakened it
+
+The campaign recommended adopting `RD_LDA_COMOVING_FRAME` and **keeping Roe as
+the default residual**, the second resting substantially on one measurement: the
+contour form fails on Sod at `t = 0.139` where the Roe form completes, and `G`
+does not change the failure time in any digit, so the failure is intrinsic to
+the residual rather than to conditioning.
+
+That measurement was taken at one Courant number and one resolution, and it
+carried most of the weight of the recommendation, so it was re-run across both.
+The result is section 8 of the campaign document and it is a **partial
+retraction**:
+
+| build | CFL 0.30, `n=64` | CFL 0.10 | CFL 0.03 | CFL 0.30, `n=128` |
+| --- | --- | --- | --- | --- |
+| contour + LDA | fails `t=0.139` | fails `t=0.140` | fails `t=0.132` | **fails `t=0.056`** |
+| Roe + LDA | completes | completes | *wall clock, no failure* | **fails `t=0.149`** |
+
+The contour failure is confirmed intrinsic: a negative pressure at the shock
+front, `rho = 0.0966`, `press = -0.0111`, with `rd_over_selected = 1.27` showing
+the step was already inside the RD limit, and a tenfold reduction in timestep
+moves the failure time by under six per cent. Refinement makes it *worse*, which
+is what a less dissipative scheme should do — more resolution sharpens the shock
+and enlarges the overshoot.
+
+**But the Roe form fails at `n = 128` too**, with a negative *density*, a worse
+failure mode than the contour form's negative pressure. Its completion at
+`n = 64` is a property of that resolution, not of the scheme. The CFL 0.03 Roe
+run produced no assertion and no termination and was killed by the job time
+limit after ten times as many steps; it is recorded as inconclusive rather than
+as a pass, which is the discipline section 14.2 asked for and which was violated
+in section 19.
+
+The premise therefore survives only in weakened form: **the contour residual is
+less robust than the Roe residual on Sod, but neither is a defensible default
+for shock problems under LDA.** The only builds that complete both discontinuous
+tests at every setting are the **N** variants, of both residuals. The
+discontinuous tier separates LDA from N far more sharply than it separates the
+two residuals, so it cannot settle the residual question, and the choice falls
+back on the smooth and covariance evidence — where the contour form is exactly
+covariant and more accurate at accessible resolutions, and the Roe form is
+closer to second order and inherits Arpaia's published analysis.
+
+### 32.4 What this leaves
+
+Section 5.1 of the campaign document is untouched by the stress test:
+`RD_LDA_COMOVING_FRAME` should be the default, on evidence that is a similarity
+measurement plus a conditioning measurement, neither of which the Sod result
+touches. **This is a recommendation, not a change**; `Template-Config.sh` and the
+production Configs are untouched and the decision is Zhenyu's.
+
+Section 5.2 stands in direction but not in strength, and the campaign document
+says so in place rather than by silent edit.
+
+The methodological point is the one worth carrying forward. A recommendation
+that rests on a single run at a single operating point is not a result, and this
+one was published before being stress-tested. It took two extra jobs to find
+that the load-bearing measurement was resolution-dependent. **The cost of
+testing one's own conclusion is far below the cost of a default chosen on one
+data point**, and the campaign's own horizon rule of section 31.3 — that only
+integral metrics mean anything past one to two thousand steps — is the same
+lesson in a different variable.
+
+Next, in order: a positivity or limiting mechanism, which is now the gating item
+for both residuals rather than an improvement to one of them, and which section
+6 of the campaign document names as the thing that would overturn the residual
+recommendation outright; the mesh-velocity policy comparison of section 14.5
+item 6; and P4, the build-fingerprint hole for untracked sources, still the only
+open item from section 14.2.
