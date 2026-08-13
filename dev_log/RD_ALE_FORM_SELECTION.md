@@ -323,6 +323,10 @@ The contour form buys exact discrete Galilean covariance, `2.4e-15` against
 `1.9e-5`. What it costs is robustness at a discontinuity: it fails on Sod where
 the Roe form completes, and `G` does not help, so the failure is intrinsic.
 
+**Amended by section 8, which stress-tested this premise.** The contour form
+does fail where the Roe form completes at `n=64`, but the Roe form also fails at
+`n=128`, so the correct statement is a difference of degree and not of kind.
+
 The trade is unfavourable for a production astrophysics code because **the
 property it buys is invisible where it matters and the property it costs is
 not**. Sections 23 and 25 already showed that the Roe form's `L1`, peak
@@ -383,3 +387,81 @@ than a proof of the implicit bound.
 - Output and provenance: `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/output_F_*`.
 - All builds through `build_case.sbatch`, all runs through `run_case.sbatch`,
   on Slurm compute nodes with MKL and immutable artifacts.
+
+---
+
+## 8. Amendment: the Sod robustness premise, stress-tested
+
+Section 5.2 rests on one measurement — the contour form fails on Sod where the
+Roe form completes — taken at a single Courant number and a single resolution.
+Since that measurement carries most of the weight of the recommendation, it was
+re-run across the timestep and the resolution.
+
+### 8.1 Where the failure is
+
+The failure is a **negative pressure at the shock front**, not a generic
+blow-up: `rho = 0.0966`, `press = -0.0111` at `x = 0.987`, which at `t = 0.139`
+is where the right-going shock from the `x = 0.75` interface has reached. The
+run diagnostics show `rd_over_selected = 1.27`, so the step was already inside
+the RD stability limit when it failed.
+
+### 8.2 The corrected table
+
+| build | CFL 0.30, `n=64` | CFL 0.10, `n=64` | CFL 0.03, `n=64` | CFL 0.30, `n=128` |
+| --- | --- | --- | --- | --- |
+| contour + LDA | fails `t=0.139` | fails `t=0.140` | fails `t=0.132` | **fails `t=0.056`**, negative mass |
+| Roe + LDA | completes | completes | *wall clock at `t=0.121`, no failure* | **fails `t=0.149`**, negative density |
+
+The CFL 0.03 Roe entry is not a failure: the run was killed by the job time
+limit with no assertion and no termination, having taken ten times as many steps
+as the others. It is reported as inconclusive rather than as a pass.
+
+### 8.3 What this changes
+
+**The contour failure is intrinsic, as claimed.** Reducing the timestep by a
+factor of ten moves the failure time by less than six per cent, so it is a
+positivity failure of the scheme and not a stability-limit violation. Refining
+the mesh makes it *worse*, failing at `t = 0.056` instead of `t = 0.139`, which
+is what a less dissipative scheme should do: more resolution sharpens the shock,
+steepens the gradient and enlarges the overshoot.
+
+**But the Roe form is not robust either.** At `n = 128` it fails at `t = 0.149`
+with a negative *density*, which is a worse failure mode than the contour form's
+negative pressure. Its completion at `n = 64` is therefore a property of that
+particular resolution, not of the scheme.
+
+**The premise of section 5.2 survives only in weakened form.** The correct
+statement is that the contour form is *less robust* than the Roe form on Sod —
+failing at every setting tested against one — rather than that one is robust and
+the other is not. **Neither is a defensible default for shock problems under
+LDA.**
+
+### 8.4 The recommendation after the amendment
+
+Section 5.1, adopting `RD_LDA_COMOVING_FRAME`, is untouched: it rests on the
+similarity and conditioning measurements of sections 4.2 to 4.4, none of which
+this amendment touches.
+
+Section 5.2 stands in direction but not in strength. Keeping the Roe residual as
+the default remains the conservative choice, because it is the form with the
+published analysis and it is the more robust of the two by the margin measured
+here. But the campaign no longer supports the stronger claim that the contour
+form is disqualified by robustness, and the honest summary of the discontinuous
+tier is different from the one in section 4.4:
+
+> Under LDA, the Sod tube discriminates between the two residuals only in
+> degree, and neither survives refinement. The only builds that complete both
+> discontinuous tests at every setting are the **N** variants, of both
+> residuals. The discontinuous tier therefore separates LDA from N far more
+> sharply than it separates the two residuals.
+
+That points the decision somewhere this campaign deliberately excluded. A
+non-oscillatory shock capability for the moving mesh means either the B scheme,
+which section 4 of the main log excluded from the whole ALE phase and whose
+blend coefficient is built from the total residual and therefore depends on
+exactly this choice, or a positivity limiter, which does not exist for either
+form. **Until one of them exists, the residual choice should not be settled on
+shock evidence**, and it should be settled on the smooth and covariance evidence
+of sections 4.2 and 4.3 — where the contour form is exactly covariant and more
+accurate, and the Roe form is closer to second order and carries the published
+analysis.
