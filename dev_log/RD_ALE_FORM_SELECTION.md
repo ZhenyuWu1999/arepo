@@ -259,8 +259,19 @@ Density `L1` against the analytic steady state, boost 0, `t = 1`:
 | contour, laboratory | 2.2901e-3 | 7.3562e-4 | 2.2522e-4 | 1.64 | 1.71 |
 | contour, co-moving | **2.2901e-3** | **7.3562e-4** | **2.2522e-4** | 1.64 | 1.71 |
 
-The laboratory and co-moving rows are **bit-identical at every resolution**,
-which is the strongest available confirmation of section 3.3. The Roe form is
+The laboratory and co-moving rows agree in every printed digit at every
+resolution, which is the strongest available confirmation of section 3.3.
+
+> **Corrected by section 34.1 of the main log.** This paragraph originally
+> claimed the rows were *bit-identical*. They are not: the largest field
+> differences grow from `6e-15` at `n=32` to `1.08e-10` in density and
+> `6.57e-9` in position at `n=128` for the Roe form. The `L1` agreement is
+> real, since those differences sit far below `L1 = 2.4e-4`, but the correct
+> statement is "equivalent far below truncation error." Contour's divergence
+> is two orders smaller than Roe's, which independently confirms section 4.2's
+> conditioning argument.
+
+The Roe form is
 closer to second order, the contour form is more accurate at every resolution
 tested but converges more slowly, reproducing section 31.2 under a different
 timestep policy.
@@ -392,6 +403,15 @@ than a proof of the implicit bound.
 
 ## 8. Amendment: the Sod robustness premise, stress-tested
 
+> **Status after section 34 of the main log: this amendment is not citable as
+> it stands.** Three of its inputs were corrected — the CFL 0.03 Roe entry
+> (section 8.2 below), the failure mechanism at `n=128` (section 8.3 below),
+> and the provenance of `IC_sodjit128.hdf5`, which is in neither
+> `MMRD_ICS.sha256` nor `create_mmrd_ics.py`. Since the whole retraction rests
+> on the single `n=128` run built from that unmanaged artifact, and since the
+> two `n=128` failures turn out not to be comparable, the amendment must be
+> re-run against a manifested initial condition before it can carry weight.
+
 Section 5.2 rests on one measurement — the contour form fails on Sod where the
 Roe form completes — taken at a single Courant number and a single resolution.
 Since that measurement carries most of the weight of the recommendation, it was
@@ -410,20 +430,31 @@ the RD stability limit when it failed.
 | build | CFL 0.30, `n=64` | CFL 0.10, `n=64` | CFL 0.03, `n=64` | CFL 0.30, `n=128` |
 | --- | --- | --- | --- | --- |
 | contour + LDA | fails `t=0.139` | fails `t=0.140` | fails `t=0.132` | **fails `t=0.056`**, negative mass |
-| Roe + LDA | completes | completes | *wall clock at `t=0.121`, no failure* | **fails `t=0.149`**, negative density |
+| Roe + LDA | completes | completes | **completes** | **fails `t=0.149`**, negative density |
 
-The CFL 0.03 Roe entry is not a failure: the run was killed by the job time
-limit with no assertion and no termination, having taken ten times as many steps
-as the others. It is reported as inconclusive rather than as a pass.
+> **Corrected by section 34.1 of the main log.** The CFL 0.03 Roe entry
+> originally read *"wall clock at `t=0.121`, no failure"* and was reported as
+> inconclusive. That is wrong. The run reached `Final time=0.2`, called
+> `endrun`, wrote `snap_001.hdf5` and an `end` file, and recorded
+> `exit_status.txt = 0`. Roe completes all three `n=64` Courant numbers.
 
 ### 8.3 What this changes
 
 **The contour failure is intrinsic, as claimed.** Reducing the timestep by a
 factor of ten moves the failure time by less than six per cent, so it is a
 positivity failure of the scheme and not a stability-limit violation. Refining
-the mesh makes it *worse*, failing at `t = 0.056` instead of `t = 0.139`, which
-is what a less dissipative scheme should do: more resolution sharpens the shock,
-steepens the gradient and enlarges the overshoot.
+the mesh makes it fail earlier, at `t = 0.056` instead of `t = 0.139`.
+
+> **Corrected by section 34.2 of the main log.** This paragraph originally
+> attributed the earlier `n=128` failure to a sharpened shock and a larger
+> overshoot. That mechanism is wrong. The `n=128` failure is
+> `mass=-7.88e-9, oldMass=3.06e-8` on a cell some 250 times lighter than the
+> lightest plausible one — a degenerate sliver, not a shock front — whereas
+> all three `n=64` failures are a healthy density with a negative pressure at
+> the shock. The two failures have different mechanisms, so the `n=128` row
+> cannot be read as the `n=64` mechanism intensified, and it cannot be
+> compared with the Roe `n=128` failure, which is a negative predictor density
+> at a shock. Whether the residual caused the sliver is unmeasured.
 
 **But the Roe form is not robust either.** At `n = 128` it fails at `t = 0.149`
 with a negative *density*, which is a worse failure mode than the contour form's

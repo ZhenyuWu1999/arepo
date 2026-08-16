@@ -94,6 +94,8 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 30 | the contour and timestep effects separated; connectivity hashes date the flips |
 | 31 | Yee decides the contour residual; the horizon of particlewise comparison |
 | 32 | the form-selection campaign, and the stress test that weakened it |
+| 33 | Codex audit: contour remains the provisional mathematical default, not Roe + split |
+| 34 | the audit verified; extensibility becomes the criterion and the frame becomes a parameter |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -101,6 +103,21 @@ their derivations, then decides a recommended default from an eight-build
 campaign over particle-level, smooth and discontinuous tests. Section 32
 summarises it and records the stress test that partially retracted its
 residual recommendation.
+
+Section 33 is Codex's independent audit of that recommendation. It accepts the
+Arpaia modified-midpoint mass pair and element co-moving conservative
+coordinates, but does not accept the campaign's argument for promoting
+Roe-`Uhat` + split over the contour residual. This is a provisional
+mathematical recommendation only: Zhenyu agrees with the direction on first
+inspection but has not completed the detailed review, and no production Config
+is changed.
+
+Section 34 verifies section 33's factual corrections against the raw output,
+adds a fourth the audit understated, and then moves the criterion: with B
+descoped and LDA and N both mandatory, the compile guards make the co-moving
+frame the narrow choice and the residual form the portable one. It records
+Zhenyu's frame parameterisation, in which the laboratory frame is the
+zero-velocity case of the co-moving one, and the selections that follow.
 
 ---
 
@@ -4993,3 +5010,543 @@ for both residuals rather than an improvement to one of them, and which section
 recommendation outright; the mesh-velocity policy comparison of section 14.5
 item 6; and P4, the build-fingerprint hole for untracked sources, still the only
 open item from section 14.2.
+
+---
+
+## 33. 2026-08-13: Codex audit — keep contour as the provisional mathematical default, not Roe + split
+
+- **Reviewer:** Codex.
+- **Scope:** the mathematical default requested in
+  `dev_log/RD_ALE_FORM_SELECTION.md`, checked against Chapter 4, the latest
+  logs, and the raw output used by the campaign.
+- **Source change:** this log entry only. Chapter 4, code, compile switches and
+  production Configs are unchanged.
+- **Status:** provisional. Zhenyu agrees with the direction on first inspection,
+  especially with formulating the residual in the new co-moving frame, but has
+  not yet audited the details.
+
+### 33.1 Decision in one line
+
+The cleanest canonical mathematical tuple is
+
+```text
+Arpaia modified-midpoint RK2
++ conservative-state P1-U contour total residual
++ element-local co-moving conservative coordinates
+```
+
+Here “contour” selects the element total residual. It does **not** remove the
+Roe matrices from LDA: the matrices still define `K_i^+`, `S^-`, and the
+upwind distribution of that total. Roe-`Uhat` + split should remain available
+as a legacy/control formulation, not lead the Chapter 4 derivation.
+
+This separation is the main reason contour is the more natural default. In a
+co-moving frame the conservation law is already expressed through the moving
+space-time boundary. A contour total is therefore the direct discrete object;
+reconstructing a Roe mean state and then adding a separate mesh-velocity split
+is an extra algebraic factorisation whose covariance has to be recovered by
+careful cancellation.
+
+### 33.2 Evidence from the campaign that survives audit
+
+The raw Yee snapshots reproduce the campaign values:
+
+| residual | L1 at 32 | L1 at 64 | L1 at 128 | observed orders |
+| --- | ---: | ---: | ---: | ---: |
+| Roe + split | `2.773120116e-3` | `8.237560548e-4` | `2.402256079e-4` | 1.75, 1.78 |
+| contour | `2.290109722e-3` | `7.356192296e-4` | `2.252200434e-4` | 1.64, 1.71 |
+
+Thus contour is 17.4%, 10.7% and 6.2% lower in L1 at the three tested
+resolutions, while Roe has the better measured asymptotic slope. The current
+data do not prove that contour has the better asymptotic scheme, but they do
+show that choosing Roe as the mathematical default on accuracy grounds is not
+justified.
+
+The boost campaign is more decisive about form: Roe + split has a covariance
+defect linear in the boost, whereas the contour total is covariant to
+round-off. The element co-moving implementation also removes the large
+absolute-velocity conditioning problem without changing the intended
+conservative operator.
+
+The five-step flip-free comparison confirms a real storage/rebase advantage for
+Campoli: total-energy drift is round-off rather than about `4e-12`. That is
+useful evidence for a future implementation choice, but it is not enough to
+replace Arpaia as the formal time/geometry default. Keep Campoli as the
+comparison/fallback form.
+
+### 33.3 Corrections to the latest campaign report
+
+Four qualifications materially weaken its recommendation for Roe:
+
+1. The Roe, `n=64`, `CFL=0.03` Sod run was not inconclusive. Its raw log
+   reaches `Final time=0.2` and exits normally. The correct table says Roe
+   completes at `n=64` for CFL 0.30, 0.10 and 0.03, but fails at `n=128`,
+   CFL 0.30, at `t=0.149`. Contour fails the three `n=64` runs and the
+   `n=128` run.
+2. Lab-frame and co-moving Yee results are not bit-identical. After ParticleID
+   alignment, the largest Roe `n=128` differences are about `1.08e-10` in
+   density and `6.57e-9` in position; contour's density difference is about
+   `8.79e-13`. Connectivity hashes agree. The defensible statement is
+   “equivalent far below truncation error,” not “bit-identical.”
+3. The `n=128` Sod IC is untracked and absent from the campaign checksum
+   manifest. Independent regeneration reproduces it exactly, so there is no
+   evidence of contamination, but the generator and manifest must be completed
+   before these runs become thesis evidence.
+4. “Refinement makes contour worse because lower dissipation sharpens the
+   shock” is a plausible hypothesis, not a demonstrated mechanism. The
+   `n=64` failure is negative predictor pressure, the `n=128` failure is
+   negative stored mass, and only one jitter realisation was tested.
+
+The discontinuous tests therefore establish that bare LDA needs a positivity or
+limiting mechanism. They do not select the element residual. Completion of the
+N variants also does not prove that the equal-correction N-contour construction
+is the desired positivity mechanism; that construction is itself a scheme
+choice.
+
+### 33.4 Published analysis does not uniquely select Roe + split
+
+The campaign's remaining argument is that Roe should lead because it “inherits
+Arpaia's published analysis.” This conflates two independent choices:
+
+- Arpaia's modified-midpoint mass/time construction; and
+- the spatial representation of the element total residual.
+
+Arpaia's conservation argument permits obtaining the total through direct
+contour integration or through an exact mean-value Jacobian linearisation.
+Published authority therefore supports the time/mass structure, but does not
+uniquely promote the present Roe-`Uhat` + split discretisation over contour.
+
+There is still a real burden on the current contour formula: Chapter 4 uses a
+specified nodal-flux quadrature, not the exact nonlinear boundary flux of
+`F(U_h)`. It must earn its accuracy and robustness numerically. That is a
+reason to keep the decision provisional, not a reason to make Roe + split the
+canonical derivation.
+
+### 33.5 Mathematical default versus production default
+
+For the thesis derivation and future implementation work, use the contour form
+as the provisional mathematical default, in element-local co-moving
+coordinates, with Roe matrices retained only in the LDA distribution. Keep:
+
+- Arpaia as the time/geometry default and Campoli as the explicit comparison;
+- Roe-`Uhat` + split as a regression/control path;
+- the ordinary timestep selector as default until the RD-CFL proposal has an
+  independent benefit;
+- production Configs unchanged until the remaining gates pass.
+
+Before switching a production default, require three controlled results:
+
+1. prescribed *identical* mesh motion for Yee at `n=256` and `n=512`, to
+   separate spatial convergence from different mesh trajectories;
+2. a B/positivity implementation followed by Sod and Kelvin–Helmholtz tests, so
+   shock robustness is judged with the intended stabilisation rather than bare
+   LDA;
+3. an element-level full-RK covariance check including the temporal `F1`
+   terms, not only the spatial total.
+
+### 33.6 Current switch policy
+
+| choice | mathematical default | production default now |
+| --- | --- | --- |
+| time/mass | Arpaia modified midpoint | unchanged |
+| element total | **contour, provisional** | unchanged |
+| algebraic frame | **element co-moving** | unchanged |
+| LDA distribution | Roe matrices `K_i^+`, `S^-` | unchanged |
+| shock stabilisation | B/positivity is the next gate | no new default |
+| timestep | ordinary selector | unchanged |
+
+The resulting position is deliberately narrower than “contour wins.” Contour
+is the better organising mathematics, especially in the new co-moving frame;
+Roe + split remains an essential control and may still prove numerically
+superior in an asymptotic or stabilised regime. The default should change in
+code only after those regimes are tested.
+
+---
+
+## 34. 2026-08-16: the audit verified, and the selection criterion moves to extensibility
+
+- **Author:** Claude Code (Opus 5), from Zhenyu's review of section 33.
+- **Scope:** independent verification of section 33's factual corrections; a
+  fourth correction it understated; what the compile guards imply for the
+  choice of default; Zhenyu's frame parameterisation and the scope decisions
+  that follow from it.
+- **Source change:** this log entry, plus a corrective note in
+  `dev_log/RD_ALE_FORM_SELECTION.md` section 8.2. No solver change, no compile
+  switch change, no production Config change.
+- **Status:** recommendations, for Codex's review. Nothing here has been
+  implemented.
+
+### 34.1 Section 33's three factual corrections are confirmed
+
+All three were re-measured from the raw output rather than accepted, and all
+three reproduce Codex's numbers.
+
+**Correction 1 — the Roe, `n=64`, CFL 0.03 Sod run completed.** From the run's
+own records:
+
+```text
+arepo log :  Final time=0.2 reached. Simulation ends.
+             endrun called, calling MPI_Finalize()
+provenance:  exit_status.txt = 0
+directory :  end present, snap_001.hdf5 written
+```
+
+Section 8.2 of the campaign document reports it as killed by the job time
+limit at `t = 0.121` and records it as inconclusive. That is wrong. The
+corrected row is that **Roe completes all three `n=64` Courant numbers** and
+fails only at `n=128`.
+
+**Correction 2 — laboratory and co-moving are not bit-identical.** After
+ParticleID alignment, maximum absolute differences at `t = 1`:
+
+| build | field | `n=32` | `n=64` | `n=128` |
+| --- | --- | ---: | ---: | ---: |
+| Roe | Density | 6.44e-15 | 1.09e-13 | **1.077e-10** |
+| Roe | Coordinates | 7.99e-15 | 1.33e-12 | **6.568e-9** |
+| contour | Density | 6.22e-15 | 2.63e-13 | 8.794e-13 |
+| contour | Coordinates | 6.22e-15 | 4.74e-12 | 5.631e-12 |
+
+No resolution is bit-identical; the divergence grows with step count. The
+campaign's claim of bit-identity was inferred from `L1` agreeing to the printed
+digits, which is true and much weaker — `1e-10` sits far below `L1 = 2.4e-4`.
+The defensible statement is "equivalent far below truncation error."
+
+The table carries information the campaign missed. **Roe's laboratory/co-moving
+divergence is two orders larger than contour's**, which is an independent
+confirmation of the conditioning argument of section 4.2 of the campaign
+document, obtained from data already in hand.
+
+**Correction 3 — the `n=128` Sod initial condition is outside the manifest.**
+`MMRD_ICS.sha256` lists only `IC_khjit64.hdf5` and `IC_sodjit64.hdf5`, and the
+generator hard-codes the resolution:
+
+```python
+# examples/gresho_2d/create_mmrd_ics.py:289
+for name, state, n in (("sod", sod_state, 64), ("kh", kh_state, 64)):
+```
+
+`IC_sodjit128.hdf5` exists on disk but is produced by neither. Codex treats this
+as a provenance defect with no evidence of contamination, which is correct as
+far as it goes, but understates the consequence: **that initial condition
+carries the entire partial retraction of section 8**. The retraction's whole
+case is the single `n=128` run. Combined with correction 1, which restores a
+Roe pass, the retraction is now weaker than when it was written and rests on
+one run built from an unmanaged artifact. Until the generator gains a
+resolution parameter and the manifest is completed, section 8 is not citable.
+
+### 34.2 A fourth correction, understated: the `n=128` contour failure is a degenerate cell
+
+Codex's item 4 calls the mechanism "refinement sharpens the shock and enlarges
+the overshoot" a plausible hypothesis rather than a demonstrated one. The raw
+termination records show it is not merely undemonstrated; **it is the wrong
+mechanism.**
+
+```text
+contour, n=128, t=0.0556:
+  very bad...i=6183 ID=3426 mass=-7.88e-09 oldMass=3.06e-08 utherm=1561.86
+
+Roe,     n=128, t=0.1488:
+  RD predictor state invalid: ID=3748 rho=-0.000452688 press=2.48913
+```
+
+The Sod `n=128` initial condition has density between 0.125 and 1.0 on 16384
+cells in a unit box, so a typical cell mass is about `3.4e-5` and the smallest
+plausible one about `7.6e-6`. The failing cell holds `oldMass = 3.06e-8`, some
+250 times below that floor. **It is a sliver, not a shock front.**
+
+For contrast, all three contour failures at `n=64` are a healthy density with a
+negative pressure at `x` near the shock —
+
+```text
+CFL 0.30: rho=0.0966  press=-0.0111   x=0.987
+CFL 0.10: rho=0.1347  press=-0.000326 x=0.990
+CFL 0.03: rho=0.0883  press=-0.000141 x=0.00084
+```
+
+— which is a genuine overshoot. The two contour failures therefore have
+different mechanisms, and section 8.3 of the campaign document treats them as
+one mechanism intensifying with resolution. That reading is withdrawn.
+
+Two consequences:
+
+1. **The `n=128` row has no discriminating power.** Roe fails there on the
+   scheme (a negative predictor density at a shock); contour fails on the
+   geometry. They are not comparable, and the retraction of section 8 rested
+   on comparing them.
+2. The claim is not that contour is exonerated. Mesh motion is driven by
+   `VelVertex`, which contains the solved fluid velocity, so "the residual
+   produced the sliver" cannot be excluded. The honest statement is that
+   **the proximate trigger is a degenerate cell, and whether the residual
+   caused it is unmeasured.**
+
+### 34.3 The guard matrix inverts the priority
+
+The compile guards at the top of `src/hydro/residual_distribution_solver.c`
+decide what each switch can be combined with:
+
+```c
+:82   RD_LDA_COMOVING_FRAME    excludes N_SCHEME, B_SCHEME, RD_HIERARCHICAL_TIMESTEPS
+:91   RD_ALE_CONTOUR_RESIDUAL  excludes B_SCHEME
+:95   RD_ALE_CONTOUR_RESIDUAL + N_SCHEME + RD_LDA_COMOVING_FRAME  is an error
+```
+
+| | LDA | N | B | hierarchical |
+| --- | :-: | :-: | :-: | :-: |
+| `RD_ALE_CONTOUR_RESIDUAL` | yes | yes | no | no |
+| `RD_LDA_COMOVING_FRAME` | yes | **no** | no | **no** |
+
+**The residual form, argued over for two rounds, is the portable choice. The
+co-moving frame, which neither the campaign nor the audit disputed, is the
+narrow one** — it excludes N, B and the timestep hierarchy, which is every
+direction the work is going.
+
+Once extensibility is admitted as a selection criterion, it therefore does not
+first judge Roe against contour. It judges the frame and the mass pair. This
+criterion is also cheap: it is a derivation exercise, not machine time.
+
+### 34.4 The frame is a parameter, not a switch
+
+**Zhenyu's proposal**, and it is correct: the co-moving frame contains the
+laboratory frame as the zero-velocity case, so the two need not be separate
+compile branches.
+
+The implementation is already most of the way there. From line 2926:
+
+```c
+double b0 = Velvertex_avg[0], b1 = Velvertex_avg[1], b2 = b0*b0 + b1*b1;
+double G_local[4][4]    = {{1,0,0,0}, {-b0,1,0,0}, {-b1,0,1,0}, {0.5*b2,-b0,-b1,1}};
+double velx_shift = velx_avg - b0, vely_shift = vely_avg - b1;
+double h_shift    = h_avg - b0*velx_avg - b1*vely_avg + 0.5*b2;
+rd_build_characteristic_matrices(velx_shift, vely_shift, h_shift, Cs_avg, 0.0, 0.0, ...);
+```
+
+At `b = 0` the matrices are exactly the identity and the shifted states reduce
+exactly to the unshifted ones — these are additions and subtractions of exact
+zeros, so the reduction is bitwise, not approximate.
+
+One correction is needed before the unification is real. The call above
+**hard-codes `sigma' = 0`**, which is the `b_T = sigma_bar` special case rather
+than the general one. The correct parameterisation carries `b_T` as a free
+element-local frame velocity and assembles
+
+```text
+u'      = u      - b_T
+sigma'  = sigma  - b_T
+```
+
+so that
+
+- `b_T = 0` gives `u' = u`, `sigma' = sigma`: **the laboratory frame**;
+- `b_T = sigma_bar` gives `sigma' = 0`: **the present co-moving build**.
+
+The two builds become two values of one parameter in one derivation, and one
+axis of the switch matrix disappears.
+
+**Three acceptance gates follow, and all three are bitwise**, because the
+reductions above are exact arithmetic rather than small differences:
+
+1. `b_T = 0` reproduces the laboratory build **bitwise**;
+2. `b_T = sigma_bar` reproduces the present co-moving build **bitwise**;
+3. `b_T` set to a single constant over the whole mesh gives **exactly** the
+   Galilean transform of the `b_T = 0` result.
+
+Gate 3 is the one worth having. It turns discrete covariance from a comparison
+across two binaries into an identity inside one, which is precisely the
+measurement that produced the false bit-identity claim of correction 2.
+
+### 34.5 N in the co-moving frame: the derivation is three lines
+
+The guards of section 34.3 look like mathematical obstacles and are not; they
+record what has not yet been derived. N reuses the same similarity that section
+4.2 of the campaign document already verified for LDA:
+
+```text
+K'_j = G K_j G^-1   =>   S'^- = G S^- G^-1   =>   Uhat'_in = G Uhat_in
+phi'^N_i = K'^+_i (U'_i - Uhat'_in)
+         = G K^+_i G^-1 G (U_i - Uhat_in)
+         = G phi^N_i
+```
+
+The contour extension to N passes as well. Its lumped correction is
+`phi_i^N += (Phi_contour - sum_i phi_i^N)/3`; `G` is linear, both terms
+transform under `G`, so their difference does, and division by three commutes
+with `G`. **`contour + N + co-moving` has no mathematical obstruction**, and
+the guard at line 95 should be removable with the derivation written down.
+
+One expectation should be set correctly. `G` will probably buy **less** for N
+than for LDA. Section 4.4 of the campaign document has `LDA + laboratory` dying
+on KH at `t = 2.4e-4` on the conservation identity while `N + laboratory`
+completes the run; N is markedly less sensitive to the `S^-` degeneracy that
+`G` exists to condition. Implementing it for N is for uniformity of the
+derivation, not to rescue N.
+
+### 34.6 Scope decisions
+
+**Zhenyu's, recorded as decisions rather than as findings:**
+
+1. **B is descoped as a completion requirement.** It is not mature enough to
+   gate this phase. One weak requirement survives: the derivation must not be
+   written in a form that excludes B, since B's blend coefficient is built from
+   the total residual. This immediately removes the guard at line 91 as an
+   obstacle, since what it excludes is B.
+2. **LDA and N must both run.** Every retained form must work for both. This
+   makes the line 82 and line 95 guards the only remaining blockers, and
+   section 34.5 shows they are removable.
+3. **Switches of the Arpaia/Campoli and Roe/contour kind are to be decided, not
+   exhaustively tested.** Pick the better one and move on.
+
+On the third: **pick and delete, do not pick and retain as a fallback.** The
+five surviving switches, each validated only against the defect it was
+introduced for, are exactly what produced an eight-build matrix and a
+recommendation whose load-bearing measurement was wrong. A compile branch
+nobody builds decays. The proposal for a discarded form is to keep its
+derivation in the documentation plus one frozen regression Config, and remove
+it from the scheme matrix.
+
+### 34.7 The selections
+
+**Element total: contour.** Portable across LDA and N, excluding only the now
+descoped B; covariant to round-off where the Roe defect is linear in boost; and
+under the frame parameterisation of section 34.4 it is the direct discrete form
+of a space-time boundary flux, whereas the Roe mean-value identity presumes
+three nodes on one interpolant at one time — which is exactly what a timestep
+hierarchy breaks. Its one unpaid debt is real and belongs in the derivation:
+Chapter 4 specifies a nodal-flux quadrature, not the exact
+`contour integral of (F(U_h) - (sigma.n) U_h)`, and that gap is the common
+suspect for both the order deficit (1.64/1.71 against 1.75/1.78) and the Sod
+negative pressure. **This agrees with section 33 and adds portability and the
+hierarchy argument to its reasons.**
+
+**Frame: parameterised per section 34.4**, laboratory retained as `b_T = 0`.
+
+**Mass pair: Campoli is favoured, less firmly, pending one derivation check.**
+Section 4.1 of the campaign document found Campoli's divisor is the plain new
+median dual, which is also the storage area, so the endpoint rebase is the
+identity and conservation is `2.2e-16` against Arpaia's `1.5e-12`. Under a
+timestep hierarchy the geometry changes per bin and the ledger migrates between
+ranks, so a ledger permanently denominated in the storage area is worth much
+more than it is today, while Arpaia's `m_bar -> m_new` multiplies by changing
+geometry at every bin. **The check to run first, on paper**: does Campoli's
+mass form still satisfy the DGCL and free-stream preservation under
+**non-uniform time slabs**? The equal-step comparison against Arpaia is already
+done, in commit `93229c0`.
+
+### 34.8 What the hierarchy and MPI actually constrain
+
+Read against `RD_hierarchical_timestep_conservation_design.md` and
+`RD_hierarchical_timestep_phaseb_prototype.md`, both from volume 1.
+
+**The hierarchy constrains the temporal mass, not the spatial residual.**
+Section 10 of the design document excludes LDA+F1 from the first hierarchy
+because the F1 temporal mass couples all three vertices,
+`T_i^T = beta_i^T (|T|/3) sum_j (U_j* - U_j^n)/h_T`, so a frozen vertex has no
+accepted `dU/h`; N's lumped mass is diagonal, `(|T|/3) delta_ij`, and a frozen
+vertex is unambiguous. This axis separates **N from LDA+F1** far more sharply
+than it separates the two residuals.
+
+**The residual form still enters, at derivation level.** Roe's conservative
+linearisation identity holds for one interpolant at one time; a hierarchy is a
+non-uniform space-time slab decomposition, which is what a contour integral
+over a moving boundary already describes. This should be settled on paper, not
+by runs.
+
+**The unwritten collision.** Section 5 of the phase-B prototype records that
+`DualArea` is initialised once from the all-active static tessellation and then
+persists and migrates as part of `SphP`. On a moving mesh it changes every
+step, and the Arpaia pair additionally needs the half-time geometry `m_bar` and
+the new geometry `m_new`. **Hierarchical timesteps on a moving mesh therefore
+need geometry at several time levels per bin**, which no document covers. This
+is the real integration risk of the phase, and it is also the reason section
+34.7 favours the mass form that needs no endpoint rebase.
+
+**MPI is close to neutral on the residual choice.** Phase-B already solved the
+hard part on a fixed mesh: the global minimum-ID simplex ownership rule, the
+star construction, and 1/4/16-rank invariance, together with two intermediate
+implementations its tests rejected. Two properties transfer for free and are
+further reasons to adopt the frame parameterisation: `G(b_T)` is element-local,
+and the LU-against-SVD branch is a per-element pivot ratio, so **both are
+decomposition-invariant by construction**. What is not bitwise is the
+accumulation order of `sum over T containing i` across ranks, already named as
+item 7 of section 11 of the design document, and it affects both residuals
+equally. One thing does need redoing: the ownership key depends on `b_T`, and a
+moving mesh rebuilds the triangle set every step, so "exactly one owner per
+triangle" must be re-established after every rebuild.
+
+### 34.9 The KH question, and the experiment volume 1 already designed
+
+Zhenyu's question — Kelvin-Helmholtz behaves poorly on the static mesh, so does
+the moving mesh improve it? — has a sharper form than it appears, because
+volume 1 already measured the obstacle.
+
+The 2026-08-03 KH pilot in volume 1 found that **the seeded signal lies below
+the static mesh's own noise floor.** Zero-perturbation controls at `t = 0.2`:
+
+| background | LDA | N | B |
+| --- | ---: | ---: | ---: |
+| smooth uniform, zero-seed `E_ky` | 9.50e-5 | 4.84e-5 | 6.65e-5 |
+| sharp Morton, zero-seed `E_ky` | 9.97e-4 | 3.67e-4 | 6.23e-4 |
+
+Its conclusion was that any exponential slope fitted to the total transverse
+kinetic energy is **not** a growth-rate measurement, and it attributed the noise
+to the P1-Roe/contact defect on an irregular fixed mesh.
+
+**Advecting a contact through an irregular fixed mesh is the one mechanism a
+Lagrangian mesh certainly removes** — at `sigma` approximately `u` the contact
+does not traverse the mesh at all. This yields a specific falsifiable
+prediction:
+
+> On the moving mesh, the **zero-seed control's** `E_ky` should fall by orders
+> of magnitude.
+
+The measurement needs **only the control** — no seeded run, no exact
+eigenmode, no B, and no positivity mechanism — and both `Roe + N` and
+`contour + N` already complete KH on the moving mesh, so it is runnable now and
+doubles as a residual comparison on a metric with physical meaning.
+
+Two prerequisites, both cheap:
+
+1. Volume 1's pilot used the `Analysis/kh_2d` manager on a glass `48^2` mesh;
+   the campaign uses `IC_khjit64`. **Different initial conditions and
+   resolutions, so the published numbers above cannot be compared directly.**
+   The static baseline must be re-run on the campaign's initial condition, which
+   is the cheap half of the comparison.
+2. The campaign's KH carries a global `vy = 0.1 sin(4 pi x / L)`, an amplitude
+   larger than volume 1's sharp Morton case (0.05) and two orders above its
+   smooth cases (`5e-4`, `1e-3`). **It is a robustness test, not a growth-rate
+   test**, and the noise floor never arises on it. A zero-seed variant of the
+   generator is needed, which is one line.
+
+### 34.10 Revised order
+
+**On paper, no machine time, and each item gates what follows:**
+
+1. The `b_T` parameterisation of section 34.4 — `u' = u - b_T`,
+   `sigma' = sigma - b_T` — including the N similarity of section 34.5 and the
+   covariance of the contour lumped correction. **One derivation covering
+   LDA and N across laboratory and co-moving.**
+2. The contour form's nodal-flux quadrature against the exact boundary integral
+   (section 34.7). Required before the form is declared final.
+3. Campoli under non-uniform time slabs (section 34.7).
+
+**Implementation and cheap machine time:**
+
+4. Remove the guards at lines 82 and 95 and add the three bitwise gates of
+   section 34.4. On completion, "LDA and N both run" holds for every retained
+   form.
+5. The KH zero-seed noise floor, static against moving, under N, on one shared
+   initial condition (section 34.9).
+6. Add a resolution parameter to `create_mmrd_ics.py`, complete
+   `MMRD_ICS.sha256`, and re-run the `n=128` Sod (corrections 3 and section
+   34.2).
+
+**Afterwards:** the per-bin geometry problem of section 34.8, which is the
+phase's real integration risk.
+
+### 34.11 What this section does not do
+
+No source file, compile switch or production Config is changed. Section 33
+remains provisional; this section verifies its factual claims and accepts its
+direction on the residual, but the reasons given here for contour are
+portability and the hierarchy, which are not the reasons section 33 gave. The
+selections of section 34.7 are recommendations for Codex's review and for
+Zhenyu's decision, not adopted defaults.
