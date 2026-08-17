@@ -79,11 +79,18 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if defined(RD_ALE_CFL_TIMESTEP) && (!defined(RD_ALE_EQUALSTEP) || !defined(TREE_BASED_TIMESTEPS))
 #error "RD_ALE_CFL_TIMESTEP currently requires RD_ALE_EQUALSTEP and TREE_BASED_TIMESTEPS."
 #endif
-#if defined(RD_LDA_COMOVING_FRAME) && \
-    (!defined(RD_ALE_EQUALSTEP) || !defined(LDA_SCHEME) || defined(B_SCHEME) || defined(N_SCHEME) || \
-     defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR) || defined(RD_RK2_RATE_CONSISTENT_HEUN) || \
-     defined(RD_HIERARCHICAL_TIMESTEPS))
-#error "RD_LDA_COMOVING_FRAME currently covers only the equal-step two-pass LDA/F1 prototype."
+/* The element frame now covers N as well as LDA.  G(b_T) is a similarity of the
+ * ALE operator, K'_j = G K_j G^-1, so S'^- = G S^- G^-1 and Uhat'_in = G Uhat_in,
+ * whence phi'^N_i = K'^+_i (U'_i - Uhat'_in) = G phi^N_i: N's nodal flux maps
+ * back exactly like LDA's.  B stays out because its blend coefficient is built
+ * from the total residual and has no derivation in this frame, and the timestep
+ * hierarchy stays out because the frame must be held fixed over a complete
+ * element RK evaluation, which mixed bins do not guarantee. */
+#if defined(RD_LDA_COMOVING_FRAME) &&                                                                  \
+    (!defined(RD_ALE_EQUALSTEP) || (!defined(LDA_SCHEME) && !defined(N_SCHEME)) || defined(B_SCHEME) || \
+     defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR) ||                          \
+     defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_HIERARCHICAL_TIMESTEPS))
+#error "RD_LDA_COMOVING_FRAME covers the equal-step two-pass LDA/F1 and N prototypes."
 #endif
 #if defined(RD_LDA_COMOVING_FRAME) && defined(RD_ALE_CONDITION_DIAGNOSTIC)
 #error "Use separate builds for RD_LDA_COMOVING_FRAME and the lab-vs-frame diagnostic."
@@ -92,9 +99,10 @@ static lapack_int solve_system(int n, double *A, double *b);
     (!defined(RD_ALE_EQUALSTEP) || defined(B_SCHEME) || (!defined(LDA_SCHEME) && !defined(N_SCHEME)))
 #error "RD_ALE_CONTOUR_RESIDUAL covers the equal-step LDA and N experiments; B stays outside the ALE phase."
 #endif
-#if defined(RD_ALE_CONTOUR_RESIDUAL) && defined(N_SCHEME) && defined(RD_LDA_COMOVING_FRAME)
-#error "The N contour distribution is only derived in the laboratory frame; see RD_ALE_FORM_SELECTION.md."
-#endif
+/* N's contour reconciliation is covariant too: it distributes
+ * (Phi_contour - sum_i phi_i^N)/3, and G is linear, so both totals transform
+ * under G, their difference transforms under G, and division by three commutes
+ * with it.  The combination therefore needs no separate derivation. */
 #if !defined(N_SCHEME) && !defined(LDA_SCHEME)
 #error "RD_ALE_EQUALSTEP supports N/lumped and LDA/F1; B and its nonlinear sensor stay outside the ALE phase."
 #endif
@@ -2975,6 +2983,18 @@ void compute_residuals(tessellation *T)
                   U_fluid_shift[k][j] += rd_frame_G[k][p] * U_fluid[j][p];
                 }
             }
+
+        /* Rebase the working Roe state, in the same way this block already
+         * rebases Kmatrix and rhs.  N reads U_hat downstream of this block,
+         * outside the scope of U_hat_shift, to form its inflow bracket
+         * U_hat - Y_in.  Y_in is solved from the shifted rhs and is therefore
+         * already in the element frame, so leaving U_hat in laboratory
+         * variables would subtract a primed inflow state from an unprimed
+         * nodal state and give a quantity that is neither frame's N flux.
+         * That mixture, not any missing derivation, is what the N guard on
+         * RD_LDA_COMOVING_FRAME used to protect against.  LDA does not read
+         * U_hat after this point, so the rebase changes no LDA result. */
+        memcpy(U_hat, U_hat_shift, sizeof(U_hat));
 
         /* The direct co-moving Roe residual K'_j Uhat'_j is only the
          * transform of the Roe-linearised ALE term.  The production ALE
