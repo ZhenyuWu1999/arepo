@@ -16,8 +16,10 @@ Arepo*
 Arepo.dSYM
 .build*/
 *.o
+*.d
 *.check
 *.pyc
+__pycache__/
 
 # param, Config, Makefile.systype
 /param.txt
@@ -39,3 +41,21 @@ slurm-*.out
 
 #generated initial conditions
 examples/*/ic_*/
+
+# Run artefacts AREPO writes next to its inputs.  These are outputs of a run,
+# not inputs to one; the authoritative record of what a run used lives in that
+# run's own output directory under provenance-*/.
+*.txt-usedvalues
+
+# A generated build-time copy of the active Config, and one the validation
+# protocol explicitly forbids using for a citable run.
+/Config.current.build
+
+# Job and plotting logs left in the working tree by the Slurm wrappers.
+*.log
+
+# Initial conditions are large binaries and are deliberately not tracked.  The
+# record of record is the generator script plus the tracked *_ICS.sha256
+# manifest, which is what --verify checks the tree against.
+examples/**/IC_*.hdf5
+examples/**/IC_*.png
