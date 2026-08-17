@@ -88,7 +88,6 @@ static lapack_int solve_system(int n, double *A, double *b);
  * element RK evaluation, which mixed bins do not guarantee. */
 #if defined(RD_LDA_COMOVING_FRAME) &&                                                                  \
     (!defined(RD_ALE_EQUALSTEP) || (!defined(LDA_SCHEME) && !defined(N_SCHEME)) || defined(B_SCHEME) || \
-     defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR) ||                          \
      defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_HIERARCHICAL_TIMESTEPS))
 #error "RD_LDA_COMOVING_FRAME covers the equal-step two-pass LDA/F1 and N prototypes."
 #endif
@@ -122,9 +121,6 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if !defined(RD_RK2_TOTAL_RESIDUAL) || (!defined(N_SCHEME) && !defined(LDA_SCHEME))
 #error "RD_HIERARCHICAL_TIMESTEPS currently requires RD_RK2_TOTAL_RESIDUAL with N_SCHEME or LDA_SCHEME."
 #endif
-#if defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR)
-#error "The first hierarchical LDA+F1 experiment supports only the existing mixed stage-beta convention."
-#endif
 #ifdef LDA_SCHEME
 #define RD_RK2_STAGE_BETA_LABEL "two-call-LDA-F1-frozen"
 #else
@@ -148,23 +144,9 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "RD_RK2_TOTAL_RESIDUAL with B_SCHEME is an equal-bin experiment; the hierarchy has only been derived for the N and LDA temporal terms."
 #endif
 
-#if defined(RD_RK2_COHERENT_BETA_N) && defined(RD_RK2_COHERENT_BETA_STAR)
-#error "Select at most one coherent stage-beta experiment."
-#endif
-
 #if defined(RD_RK2_RATE_CONSISTENT_HEUN) && \
     (!defined(RD_RK2_TOTAL_RESIDUAL) || !defined(LDA_SCHEME) || defined(RD_HIERARCHICAL_TIMESTEPS))
 #error "RD_RK2_RATE_CONSISTENT_HEUN is an equal-bin LDA+F1 experiment and requires RD_RK2_TOTAL_RESIDUAL."
-#endif
-
-#if defined(RD_RK2_RATE_CONSISTENT_HEUN) && \
-    (defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR))
-#error "The rate-consistent Heun experiment is distinct from the stage-beta experiments."
-#endif
-
-#if(defined(RD_RK2_COHERENT_BETA_N) || defined(RD_RK2_COHERENT_BETA_STAR)) && \
-    (!defined(RD_RK2_TOTAL_RESIDUAL) || !defined(LDA_SCHEME))
-#error "The coherent stage-beta experiments require LDA_SCHEME and RD_RK2_TOTAL_RESIDUAL."
 #endif
 
 #if defined(RD_RK2_RATE_CONSISTENT_HEUN)
@@ -172,12 +154,6 @@ static lapack_int solve_system(int n, double *A, double *b);
 #define RD_UPWIND_NRHS 3
 #elif defined(RD_HIERARCHICAL_TIMESTEPS)
 #define RD_UPWIND_NRHS 3
-#elif defined(RD_RK2_COHERENT_BETA_N)
-#define RD_RK2_STAGE_BETA_LABEL "coherent-beta-n"
-#define RD_UPWIND_NRHS 7 /* Phi, N inflow, F1 target, and four identity columns for beta^n */
-#elif defined(RD_RK2_COHERENT_BETA_STAR)
-#define RD_RK2_STAGE_BETA_LABEL "coherent-beta-star"
-#define RD_UPWIND_NRHS 4 /* Phi(U*), N inflow, F1 target, and saved Phi(U^n) */
 #elif defined(B_SCHEME)
 #define RD_RK2_STAGE_BETA_LABEL "coherent-total-B"
 #define RD_UPWIND_NRHS 3
@@ -2064,7 +2040,7 @@ static void rd_rk2_prepare_corrector(void)
       SphP[i].Csnd = sqrt(GAMMA * press / rho);
 #endif
 
-#if !defined(RD_DIAG_NO_KICK) && !defined(RD_RK2_COHERENT_BETA_STAR) && !defined(B_SCHEME)
+#if !defined(RD_DIAG_NO_KICK) && !defined(B_SCHEME)
       /* the local +1/2 (Q* - Q^n) part of the corrector */
       P[i].Mass += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[0];
       SphP[i].Momentum[0] += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[1];
@@ -2163,17 +2139,6 @@ void compute_residuals(tessellation *T)
   int *thistask_triangles = set.element;
   tri_normals_list        = set.normals;
 
-#ifdef RD_RK2_COHERENT_BETA_N
-  /* The stage-0 distribution matrix is indexed by the persistent element-set
-   * slot, which is identical in both sweeps of this static-mesh experiment. */
-  double(*rd_beta_stage0)[3][4][4] =
-      (double(*)[3][4][4])mymalloc("RD_BetaStage0", Ndt_thistask * sizeof(*rd_beta_stage0));
-#endif
-#ifdef RD_RK2_COHERENT_BETA_STAR
-  /* beta(U*) must redistribute the old element residual explicitly; the
-   * assembled +dU/2 shortcut irreversibly carries beta(U^n). */
-  double(*rd_phi_stage0)[4] = (double(*)[4])mymalloc("RD_PhiStage0", Ndt_thistask * sizeof(*rd_phi_stage0));
-#endif
 #if defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
   /* A total-B corrector needs both spatial-stage distributions. The equal-bin
    * static element set has the same persistent ordering in both sweeps. */
@@ -2806,10 +2771,6 @@ void compute_residuals(tessellation *T)
 #endif
             }
 
-#ifdef RD_RK2_COHERENT_BETA_STAR
-          if(rd_stage == 0)
-            rd_phi_stage0[i][k] = Phi[k];
-#endif
         }
 
 #if defined(RD_ALE_CONTOUR_RESIDUAL) && !defined(RD_LDA_COMOVING_FRAME)
@@ -2891,14 +2852,6 @@ void compute_residuals(tessellation *T)
                            Kmatrix[k][2][j][kminus] * U_hat[2][j] + Kmatrix[k][3][j][kminus] * U_hat[3][j];
             }
 
-#ifdef RD_RK2_COHERENT_BETA_N
-          for(int column = 0; column < 4; column++)
-            rhs[k][3 + column] = (k == column) ? 1.0 : 0.0;
-#endif
-#ifdef RD_RK2_COHERENT_BETA_STAR
-          if(rd_stage == 1)
-            rhs[k][3] = rd_phi_stage0[i][k];
-#endif
         }
 
 #if defined(RD_RK2_TOTAL_RESIDUAL) && (defined(LDA_SCHEME) || defined(B_SCHEME))
@@ -3218,28 +3171,6 @@ void compute_residuals(tessellation *T)
           terminate_program("RD upwind solve failed");
         }
 
-#ifdef RD_RK2_COHERENT_BETA_N
-      if(rd_stage == 0)
-        {
-          if(solve_rank != 4)
-            {
-              printf("RD coherent beta^n undefined: task=%d triangle=%d numerical_rank=%d\n", ThisTask, thistask_triangles[i],
-                     (int)solve_rank);
-              terminate_program("RD coherent beta^n experiment requires full-rank S^- at stage 0");
-            }
-
-          /* beta_i = -K_i^+ (S^-)^-1. Identity columns 3,...,6 of rhs now
-           * contain (S^-)^-1, so save the complete operator for stage 1. */
-          for(j = 0; j < 3; j++)
-            for(k = 0; k < 4; k++)
-              for(int column = 0; column < 4; column++)
-                {
-                  rd_beta_stage0[i][j][k][column] = 0.0;
-                  for(p = 0; p < 4; p++)
-                    rd_beta_stage0[i][j][k][column] -= Kmatrix[k][p][j][kplus] * rhs[p][3 + column];
-                }
-        }
-#endif
 
       RD_stat_elements++;
 
@@ -3500,9 +3431,6 @@ void compute_residuals(tessellation *T)
            * suppress it and add the old element residual explicitly. */
           double T_time[4][3];
           double T_target[4];
-#ifdef RD_RK2_COHERENT_BETA_STAR
-          double Phi_old_time[4][3];
-#endif
           double rk2_scale = 0.0;
 
           for(k = 0; k < 4; k++)
@@ -3525,31 +3453,6 @@ void compute_residuals(tessellation *T)
            * Neumann series to a tolerance; Selective Lumping; F2) and what does
            * *not* work are in dev_log/mass_matrix_order_analysis.md. Not a
            * current priority. */
-#ifdef RD_RK2_COHERENT_BETA_N
-          /* Freeze the complete distribution operator from stage 0. This
-           * applies beta^n consistently to Phi(U*), the F1 target, and (via
-           * the predictor identity/+dU/2) Phi(U^n). */
-          for(k = 0; k < 4; k++)
-            for(j = 0; j < 3; j++)
-              {
-                Flux_RD[k][j] = 0.0;
-                T_time[k][j]  = 0.0;
-                for(p = 0; p < 4; p++)
-                  {
-                    Flux_RD[k][j] += rd_beta_stage0[i][j][k][p] * Phi[p];
-                    T_time[k][j] += rd_beta_stage0[i][j][k][p] * T_target[p];
-                    rk2_scale += fabs(rd_beta_stage0[i][j][k][p]) * (fabs(Phi[p]) + fabs(T_target[p]));
-                  }
-              }
-#else
-#ifdef RD_RK2_COHERENT_BETA_STAR
-          if(solve_rank != 4)
-            {
-              printf("RD coherent beta* undefined: task=%d triangle=%d numerical_rank=%d\n", ThisTask, thistask_triangles[i],
-                     (int)solve_rank);
-              terminate_program("RD coherent beta* experiment requires full-rank S^- at stage 1");
-            }
-#endif
           if(solve_rank == 4)
             {
               /* F1 mass matrix through the third right-hand side:
@@ -3569,25 +3472,6 @@ void compute_residuals(tessellation *T)
                       rk2_scale += fabs(Kmatrix[k][p][j][kplus]) * fabs(Z_f1[p]);
                   }
 
-#ifdef RD_RK2_COHERENT_BETA_STAR
-              /* Fourth solve column is (S^-*)^-1 Phi(U^n). Apply -K_i^+*
-               * explicitly: the old residual must not enter through +dU/2,
-               * which is the already assembled beta^n distribution. */
-              double Z_old[4];
-              for(k = 0; k < 4; k++)
-                Z_old[k] = rhs[k][3];
-
-              for(k = 0; k < 4; k++)
-                for(j = 0; j < 3; j++)
-                  {
-                    Phi_old_time[k][j] =
-                        -1.0 * (Kmatrix[k][0][j][kplus] * Z_old[0] + Kmatrix[k][1][j][kplus] * Z_old[1] +
-                                Kmatrix[k][2][j][kplus] * Z_old[2] + Kmatrix[k][3][j][kplus] * Z_old[3]);
-
-                    for(p = 0; p < 4; p++)
-                      rk2_scale += 0.5 * fabs(Kmatrix[k][p][j][kplus]) * fabs(Z_old[p]);
-                  }
-#endif
             }
           else
             {
@@ -3608,7 +3492,6 @@ void compute_residuals(tessellation *T)
                 for(j = 0; j < 3; j++)
                   T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
             }
-#endif /* !RD_RK2_COHERENT_BETA_N */
 #elif defined(B_SCHEME)
           /* Blended mass matrix, Arpaia & Ricchiuto (2015) eqs. 43-44:
            *
@@ -3789,9 +3672,6 @@ void compute_residuals(tessellation *T)
           for(k = 0; k < 4; k++)
             {
               total_target[k] = T_target[k] + 0.5 * Phi[k];
-#ifdef RD_RK2_COHERENT_BETA_STAR
-              total_target[k] += 0.5 * rd_phi_stage0[i][k];
-#endif
 #ifdef B_SCHEME
               total_target[k] += 0.5 * rd_b_phi_stage0[i][k];
 #endif
@@ -3801,9 +3681,6 @@ void compute_residuals(tessellation *T)
                 {
                   rk2_scale += fabs(T_time[k][j]);
                   Flux_RD[k][j] = T_time[k][j] + 0.5 * Flux_RD[k][j];
-#ifdef RD_RK2_COHERENT_BETA_STAR
-                  Flux_RD[k][j] += 0.5 * Phi_old_time[k][j];
-#endif
                 }
             }
 
@@ -4165,12 +4042,6 @@ void compute_residuals(tessellation *T)
 
 #ifndef RD_RK2_INTERNAL_LOOP
   myfree_movable(FluxRD_list);
-#endif
-#ifdef RD_RK2_COHERENT_BETA_N
-  myfree(rd_beta_stage0);
-#endif
-#ifdef RD_RK2_COHERENT_BETA_STAR
-  myfree(rd_phi_stage0);
 #endif
 #if defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
   myfree(rd_b_phi_stage0);
