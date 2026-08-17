@@ -96,6 +96,9 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 32 | the form-selection campaign, and the stress test that weakened it |
 | 33 | Codex audit: contour remains the provisional mathematical default, not Roe + split |
 | 34 | the audit verified; extensibility becomes the criterion and the frame becomes a parameter |
+| 35 | Codex: Arpaia + contour in a parameterised frame; Chapter 4 derives the frame map |
+| 36 | review of the rewritten Chapter 4: six defects and a patch list |
+| 37 | the implementation pass: guards, deletions, and three misreadings |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -5356,6 +5359,13 @@ measurement that produced the false bit-identity claim of correction 2.
 
 ### 34.5 N in the co-moving frame: the derivation is three lines
 
+> **Half of this subsection is wrong; corrected in section 37.1.** The
+> mathematics below is right and the guards were removed on it. But the claim
+> that the guards recorded *only* a missing derivation is not: one of them was
+> also holding back a genuine implementation defect, and removing it on the
+> strength of the derivation alone would have produced a wrong answer instead
+> of a compile error.
+
 The guards of section 34.3 look like mathematical obstacles and are not; they
 record what has not yet been derived. N reuses the same similarity that section
 4.2 of the campaign document already verified for LDA:
@@ -5550,3 +5560,545 @@ direction on the residual, but the reasons given here for contour are
 portability and the hierarchy, which are not the reasons section 33 gave. The
 selections of section 34.7 are recommendations for Codex's review and for
 Zhenyu's decision, not adopted defaults.
+
+---
+
+## 35. 2026-08-17: the mathematical default is Arpaia + contour in a parameterised frame, and Chapter 4 now derives the frame map
+
+- **Author:** Codex, recording Zhenyu's decisions and the subsequent
+  Chapter 4 mathematics review.
+- **Scope:** documentation only. The edited thesis source is
+  MyThesis/Zhenyu-PhDThesis/zhenyu_thesis/chapter4/chapter4.tex. No AREPO
+  source, compile switch, production Config or result is changed here.
+- **Status:** the mass-form decision below is adopted as the working default;
+  contour is the preferred mathematical spatial form while its quadrature and
+  frame derivation continue to be audited.
+
+### 35.1 Decisions, including one correction to section 34
+
+Zhenyu adopts the following order of work:
+
+1. **Use the Arpaia temporal-mass form as the default.** It is the mature,
+   published ALE-RD construction and is the safer thesis baseline. Campoli
+   remains a useful comparison, but section 34.7's tentative preference for
+   Campoli is not adopted.
+2. **Prefer the conservative-state contour residual over Roe + split** as the
+   mathematical spatial default. It is the more natural expression in the
+   element co-moving frame and does not make a mean-value linearisation part of
+   the definition of the total residual.
+3. **Do not run another broad Roe + split campaign.** Existing results did not
+   logically eliminate that branch, but they are sufficient to retain it only
+   as a frozen diagnostic/reference form. A new Roe run is warranted only if
+   it isolates a specific contour or frame defect.
+4. **Finish the equal-step mathematics and small physical tests before the
+   hierarchy.** Sod and Kelvin--Helmholtz tests are useful method-development
+   probes and need not wait for the final campaign.
+5. **Defer the hierarchical geometry ledger.** Arpaia's use of intermediate
+   and endpoint dual areas makes asynchronous time bins and MPI migration a
+   real design problem, but that uncertainty is not a reason to replace the
+   default equal-step method now.
+
+Thus the working combination is **Arpaia + conservative-state contour +
+parameterised element frame**, with the frame and contour mathematics still
+subject to explicit checks rather than treated as settled by experiment alone.
+
+### 35.2 The notation is now separated
+
+The thesis no longer uses one symbol for two different roles:
+
+- \(\boldsymbol{\sigma}_h(\mathbf{x},t)\) is the physical mesh-velocity field
+  used by AREPO;
+- \(\overline{\boldsymbol{\sigma}}_T
+  =\frac13\sum_{i\in T}\boldsymbol{\sigma}_i\) is its element mean;
+- \(\mathbf b_T\) is a freely selected, constant Galilean-frame velocity for
+  one element residual/RK evaluation.
+
+Therefore \(\mathbf b_T=0\) is the laboratory representation, while
+\(\mathbf b_T=\overline{\boldsymbol{\sigma}}_T\) is the element co-moving
+representation. This removes the earlier ambiguity in which \(\mathbf b_T\)
+could be read as if it were itself the mesh velocity.
+
+### 35.3 Where the matrix \(G(\mathbf b_T)\) comes from
+
+The frame map is now derived rather than introduced as an algebraic device.
+For
+
+\[
+ t'=t,\qquad
+ \mathbf x'=\mathbf x-\mathbf b_T t,\qquad
+ \mathbf u'=\mathbf u-\mathbf b_T,
+\]
+
+write the two-dimensional Euler state as
+
+\[
+ \mathbf U=(\rho,m_x,m_y,E)^T,\qquad
+ \mathbf m=\rho\mathbf u,\qquad
+ E=\rho e+\tfrac12\rho|\mathbf u|^2 .
+\]
+
+Direct substitution gives
+
+\[
+ \rho'=\rho,\qquad
+ \mathbf m'=\mathbf m-\rho\mathbf b_T,\qquad
+ E'=E-\mathbf b_T\!\cdot\!\mathbf m
+       +\tfrac12\rho|\mathbf b_T|^2 .
+\]
+
+Because \(\mathbf b_T\) is fixed during this element evaluation, every
+right-hand side is linear in the conservative components. Hence
+\(\mathbf U'=\mathbf G(\mathbf b_T)\mathbf U\), with
+
+\[
+\mathbf G(\mathbf b_T)=
+\begin{pmatrix}
+1&0&0&0\\
+-b_{T,x}&1&0&0\\
+-b_{T,y}&0&1&0\\
+\tfrac12|\mathbf b_T|^2&-b_{T,x}&-b_{T,y}&1
+\end{pmatrix}.
+\]
+
+The thesis also records
+\(\mathbf G^{-1}(\mathbf b_T)=\mathbf G(-\mathbf b_T)\) and
+\(\mathbf G(\mathbf b_1)\mathbf G(\mathbf b_2)
+=\mathbf G(\mathbf b_1+\mathbf b_2)\). The thermal energy
+\(E-|\mathbf m|^2/(2\rho)\), and therefore pressure and sound speed, are
+unchanged. \(G\) is consequently the conservative-variable representation of
+a Galilean coordinate change, not a new stabilisation or distribution matrix.
+
+### 35.4 Physical flux, ALE flux and the contour residual
+
+For a unit normal \(\mathbf n\), direct substitution into the Euler normal
+flux gives
+
+\[
+ \mathcal F_n(\mathbf G\mathbf U)
+ =
+ \mathbf G\left[
+ \mathcal F_n(\mathbf U)
+ -(\mathbf b_T\!\cdot\!\mathbf n)\mathbf U
+ \right].
+\]
+
+The mesh velocity transforms with the coordinates,
+\(\boldsymbol{\sigma}'_h=\boldsymbol{\sigma}_h-\mathbf b_T\). Defining
+
+\[
+ \mathcal F_{\boldsymbol{\sigma},n}(\mathbf U)
+ =
+ \mathcal F_n(\mathbf U)
+ -(\boldsymbol{\sigma}_h\!\cdot\!\mathbf n)\mathbf U
+\]
+
+then yields the central covariance identity
+
+\[
+ \mathcal F_{\boldsymbol{\sigma}',n}(\mathbf U')
+ =
+ \mathbf G(\mathbf b_T)
+ \mathcal F_{\boldsymbol{\sigma},n}(\mathbf U).
+\]
+
+Equivalently, \(\mathbf u'-\boldsymbol{\sigma}'
+=\mathbf u-\boldsymbol{\sigma}\): the physical relative velocity has not
+changed. For \(\mathbf b_T=\overline{\boldsymbol{\sigma}}_T\), the primed mesh
+velocity has zero element mean. With \(P^1\) states this removes the mean
+translation term from the element spatial residual, leaving the explicit
+basis-function contour form
+
+\[
+\widetilde{\Phi}^{\prime T}
+=
+\int_{\partial T}\sum_{j\in T}\psi_j
+  \mathcal F(\mathbf U'_j)\!\cdot\!\mathbf n\,{\rm d}s
+=
+\frac12\sum_{j\in T}
+  \mathcal F(\mathbf U'_j)\!\cdot\!\mathbf n_j .
+\]
+
+The disappearance of the explicit volume mesh-advection term does **not**
+remove mesh deformation from the scheme: the modified Arpaia mass still
+contains the geometric evolution, and the midpoint and endpoint dual areas
+remain time dependent.
+
+### 35.5 This does not conflict with the Chapter 3 linearised RD theory
+
+The contour construction defines the **total element residual** directly from
+conservative nodal fluxes. The \(K_i\) matrices are still required to
+**distribute** that total residual among the vertices. Differentiating the ALE
+flux covariance gives
+
+\[
+ \mathbf K_i'
+ =\mathbf G\mathbf K_i\mathbf G^{-1},\qquad
+ \mathbf K_i^{\prime\pm}
+ =\mathbf G\mathbf K_i^\pm\mathbf G^{-1},
+\]
+
+and hence
+\(\widetilde{\Phi}^{\prime T}
+=\mathbf G\widetilde{\Phi}^{T}\). Thus \(G\) does not replace \(K\), and using
+the contour form does not reject the Chapter 3 linearised distribution
+framework. It changes how the total residual is evaluated; the characteristic
+linearisation remains in the distribution step.
+
+### 35.6 Connectivity changes and the future ledger
+
+For an equal-step RK2 update across a flip, the current mathematical storage
+procedure remains:
+
+1. save \(U_i^n=Q_i^n/m_i^n\) before the connectivity change;
+2. on the new connectivity construct Arpaia's temporary mass \(\bar m_i\);
+3. rebase the temporary storage to \(\bar Q_i=\bar m_iU_i^n\);
+4. perform the RK2 update using the new connectivity;
+5. write endpoint storage
+   \(Q_i^{n+1}=m_i^{n+1}U_i^{n+1}\).
+
+The implementation should detect whether the simplex star actually changed;
+the rebase is a topology-transition operation, not an unconditional extra
+fluid update. Under the present global timestep the mass/storage value can be
+changed directly because every vertex crosses the same time slab together.
+That argument will not survive hierarchical bins. The hierarchical extension
+needs an explicit pending conservative ledger (the proposed L_pending or an
+equivalent object), together with per-bin geometry time levels and MPI
+migration rules, so that an inactive vertex does not silently absorb a dual
+area jump.
+
+### 35.7 Verification and next work
+
+The expanded Chapter 4 source passes git diff --check and a full
+pdflatex -halt-on-error build. The build reports the thesis's existing
+undefined citation/reference warnings but no error from these equations.
+
+The next work is:
+
+1. audit the contour nodal-flux quadrature against the exact moving-boundary
+   integral and the primary Arpaia derivation;
+2. use small Sod and KH/zero-seed tests during the audit, rather than postponing
+   all physical experiments;
+3. diagnose the \(n=128\) contour sliver as a geometry/degenerate-cell event;
+4. keep Roe + split only as a targeted diagnostic;
+5. design the hierarchical pending ledger only after the equal-step default is
+   mathematically and experimentally stable.
+
+---
+
+## 36. 2026-08-17: review of the rewritten Chapter 4, and a patch list
+
+- **Author:** Claude Code (Opus 5), reviewing section 35 and the Chapter 4
+  source at `MyThesis/Zhenyu-PhDThesis/zhenyu_thesis/chapter4/chapter4.tex`.
+- **Scope:** verification of the new mathematics, then six defects with a
+  per-item patch list. Chapter 4 itself is **not** edited here; the thesis tree
+  is Zhenyu's and the patches below are for Codex to apply or reject.
+- **Source change:** this log entry only.
+
+### 36.1 The Campoli preference of section 34.7 is withdrawn, on a better argument
+
+Section 34.7 preferred Campoli on two grounds: its divisor is the storage area,
+so the endpoint rebase is the identity, and conservation over a flip-free
+interval is `2.2e-16` against Arpaia's `1.5e-12`.
+
+Chapter 4 lines 825-842 give a stronger argument the other way, and it runs on
+the **extensibility criterion of section 34.6 item 2** rather than against it.
+For the diagonal N mass the endpoint form produces
+
+```text
+(|T^{n+1}| U_i^* - |T^n| U_i^n) / (3 dt)
+    = (|T^{n+1}|/3)(dU_i/dt) + ((|T^{n+1}| - |T^n|)/(3 dt)) U_i^n
+```
+
+whose last term requires an explicit centre-distributed geometric
+contribution. The Arpaia midpoint form contains only
+`|T^{n+1/2}| dU_i / (3 dt)` and needs no such term. Since N is mandatory, the
+form that needs no special N branch wins on the criterion this log adopted two
+sections ago. **Weighting a round-off constant above the structure of the N
+branch was the wrong call, and section 34.7's mass-pair preference is
+withdrawn.** Section 35.1 item 1 stands as the decision.
+
+The hierarchical concern of section 34.8 is not withdrawn; it is deferred, and
+section 35.6 records it correctly as the pending-ledger problem.
+
+### 36.2 What was verified
+
+Checked by hand against the source, not accepted from the summary:
+
+| claim | result |
+| --- | --- |
+| element covariance `Phi'^T = G Phi^T` | holds; the `b_T` terms from the physical flux and from the mesh term cancel exactly |
+| `b_T = sigma_bar` removes the mesh term | holds; `sigma'_h` has zero element mean and `grad U'_h` is constant on `T` |
+| the contour constant, `(1/2) sum_j F(U'_j).n_j` | consistent with `grad psi_j = n_j/(2|T|)` and `contour of psi_j n_out ds = n_j/2` |
+| `K'_i = G K_i G^-1`, and the same for `K^+-` | holds |
+| the Arpaia/Campoli scalar pair and `delta_T` | **both lines exact.** With `|T(t)| = A + Bt + Ct^2` and `C = (1/2)(sigma_1 - sigma_0) x (sigma_2 - sigma_0)`, the midpoint/trapezoid gap is `C dt^2/4`, which is `delta_T`; and `|T^{n+1}|` equals the Arpaia coefficient plus `delta_T` |
+| "coincide exactly for a rigid translation" | holds; rigid translation gives `delta_sigma = 0` |
+| the predictor/corrector arrangement | holds. The reviewer first read `+ (1/2) phi(U^n)` as a sign error. It is not: the temporal mass term is what rebases the left-hand side from `U^*` to `U^n`, and for N on a static mesh the pair collapses exactly to the trapezoidal rule |
+
+Section 35's mathematics is sound. The six items below are gaps, not errors.
+
+### 36.3 Defect 1: free-stream preservation is vacuous with respect to the mass
+
+`Phi_{P1-U}(U_0) = (1/2) sum_j [ F(U_0).n_j - (sigma_bar.n_j) U_0 ]`, and a
+closed triangle has `sum_j n_j = 0`, so **the residual vanishes identically —
+for any geometry, any mesh velocity, and any mass**. The predictor then gives
+`U^* = U_0`, the temporal term vanishes, and `U^{n+1} = U_0` follows for **any
+non-zero divisor, including a wrong one**.
+
+Chapter 4 lines 625-632 nevertheless *define* the discrete geometric
+conservation law to be exactly this free-stream property, and acceptance
+condition 3 tests only it. The chapter's DGCL clause therefore has no content
+for the residual the chapter selects. All of the geometric content lives in the
+modified mass, which free-stream cannot see, and equation
+`ALE_RD_median_DGCL` — the identity that *can* see it — is demoted to a
+corollary at lines 603-609.
+
+This is the Farhat, Geuzaine & Grandmont (2001) point already in the volume 2
+literature section: DGCL compliance has to be checked element by element rather
+than inferred from a uniform state.
+
+**Patch.** Split acceptance condition 3 into 3a and 3b. Keep free-stream as 3a,
+annotated as necessary but nearly trivial for this residual and explicitly not
+a test of the divisor. Add 3b: on a **non-uniform** state over a prescribed
+deforming mesh, the stored ledger `sum_i m_i U_i` must be conserved to
+round-off, with `ALE_RD_median_DGCL` restored from corollary to tested
+condition.
+
+### 36.4 Defect 2: the quadrature debt is stated but not in the acceptance list
+
+Lines 262-264 state plainly that `I_h F` is a specified nodal interpolation and
+not `F(U_h)` evaluated exactly. Acceptance condition 6 then asks that "the
+volume and contour forms of `Phi_{P1-U}` agree to round-off" — but those are two
+writings of the **same** quantity. Nothing in the list compares either of them
+with the exact moving-boundary integral.
+
+The structure of the gap, computed for this review: on an edge of length `l`
+the linear-interpolation error integrates to `(l^3/12) g''`, with
+`g'' = F''(U_h)[t_e.grad U, t_e.grad U]` because `U_h` is linear along the edge.
+Hence
+
+- the error is **`O(h^3)` per element, the same order as the P1 interpolation
+  error that RD already tolerates**; but its tensor structure,
+  `sum_e l_e^3 n_e F''[t_e.grad u, t_e.grad u]`, is different, so the
+  cancellation over a vertex star that gives P1-RD its second order is not
+  automatic. This is consistent with losing a fraction of an order rather than
+  a whole one — 1.64/1.71 against 1.78;
+- it **cannot break conservation**: on an interior edge both triangles use the
+  same nodal values with opposite normals, so the error cancels edgewise in
+  `sum_T Phi^T`. It does not cancel in the nodal distribution.
+
+That pattern — exact conservation, depressed order, negative pressure at a
+shock — is exactly what the campaign measured, which makes the quadrature the
+leading suspect for both remaining contour defects.
+
+**Patch.** Add an acceptance condition comparing `Phi_{P1-U}` against a
+high-order evaluation of `contour of [F(U_h).n - (sigma_bar.n) U_h] ds`, and
+report the ratio against `Phi` itself across a refinement ladder. If it
+confirms, the fix is cheap and preserves both properties that matter: replace
+the two-point trapezoid on each edge with a three-point Gauss rule on
+`F(U_h(s))`. `U_h` is linear along the edge so the integrand is well defined;
+covariance survives because `U_h(s) -> G U_h(s)` pointwise; telescoping survives
+because both triangles use the same edge and the same quadrature points. The
+cost is three flux evaluations per edge instead of one.
+
+### 36.5 Defect 3: acceptance condition 9 is not achievable as written
+
+> "results are invariant under MPI decomposition when compared by generator ID"
+
+Item 7 of section 11 of `RD_hierarchical_timestep_conservation_design.md`
+already records that the nodal accumulation `sum over T containing i` changes
+order with the decomposition, so bitwise invariance does not hold. As written
+the condition will fail and will read as a bug.
+
+**Patch.** Either state a tolerance tied to the conservation threshold, or
+require a canonical accumulation order and then claim bitwise. Naming which one
+is intended is the point; both are defensible, silence is not.
+
+### 36.6 Defect 4: N is mandatory but under-covered
+
+Section 34.6 made N a completion requirement. In Chapter 4:
+
+- the co-moving section never states that the frame map applies to N;
+- none of the eleven acceptance conditions mentions N;
+- the N-contour construction used throughout the campaign,
+  `phi_i^N += (Phi_contour - sum_i phi_i^N)/3`, **does not appear in the
+  chapter at all**. It is a scheme design choice, not a derived result, and it
+  is currently documented only in section 4.1 of the campaign document and
+  section 32.1 of this log.
+
+**Patch.** Add the three-line N covariance from section 34.5 —
+`K'_j = G K_j G^-1` gives `S'^- = G S^- G^-1` gives `Uhat'_in = G Uhat_in`
+gives `phi'^N_i = G phi^N_i`, and the lumped correction commutes with `G`
+because it is linear — and state the N-contour construction with its
+justification and its status as a choice.
+
+### 36.7 Defect 5: `b_T` denotes two different things
+
+`\mathbf{b}_T` is the frame velocity throughout the co-moving subsection, and
+`b_T` is the triangle timebin clock at equation `ALE_RD_triangle_clock`,
+`b_T = min_{i in T} b_i`. Only boldface separates them, they share the
+subscript, and both appear in the hierarchical subsection. Section 35.2 took
+care to separate the two roles of `sigma`; this collision was introduced in the
+same pass.
+
+**Patch.** Rename one. The timebin clock is the more local usage; `k_T` or
+`b^{\mathrm{bin}}_T` would do.
+
+### 36.8 Defect 6: two small ones
+
+- Lines 526-528 justify `K'^+- = G K^+- G^-1` by the eigenvalues being
+  unchanged. That is necessary but not sufficient; the argument needs the
+  eigenvector map `R' = G R`. One clause fixes it.
+- Acceptance condition 11 counts "pulled-back new triangles with non-positive
+  signed area". Section 34.2's failure was a median-dual mass of `3.06e-8`,
+  some 250 times below the lightest plausible cell, on a triangle that need not
+  have inverted. **A small-area/small-mass floor should be counted as well as a
+  sign change**, otherwise the diagnostic misses the failure that actually
+  occurred.
+
+### 36.9 Summary for Codex
+
+Nothing in section 35 needs to be retracted. Defects 1 and 2 are the ones that
+change what gets tested: as the acceptance list stands, a wrong modified mass
+and a quadrature-limited residual would both pass it. Defect 4 is scope
+compliance with section 34.6. Defects 3, 5 and 6 are editorial.
+
+---
+
+## 37. 2026-08-17: the implementation pass, and three misreadings it exposed
+
+- **Author:** Claude Code (Opus 5).
+- **Scope:** repository cleanup, the co-moving frame extended to N, and the
+  deletion of the two coherent stage-beta experiments. Commits `8d00fdf`,
+  `d8e74c5`, `4a495ec`, `da5fbe8`, `bdb8283`.
+- **Status:** done and verified. No production default is changed; section
+  35.1's position that production Configs wait for the remaining gates is
+  intact.
+
+### 37.1 The N guard was not only a missing derivation
+
+Section 34.5 argued that the guards excluding N from `RD_LDA_COMOVING_FRAME`
+recorded what had not been derived rather than something impossible, and gave
+the three-line similarity. That mathematics is correct and the guards are gone.
+
+The characterisation was still half wrong. Reading the code the guard protects
+showed a real defect. The co-moving block rebases `Kmatrix`, `rhs` and the
+nodal states, and `Y_in` is solved from the shifted right-hand side, so `Y_in`
+is in the element frame. N forms its inflow bracket *outside* that block, where
+`U_hat_shift` is out of scope:
+
+```c
+Bracket[k][j] = U_hat[k][j] - Y_in[k];   /* unprimed U_hat, primed Y_in */
+```
+
+Enabling N by deleting the guard alone would have subtracted a primed inflow
+state from an unprimed nodal state, giving a quantity that is neither frame's N
+flux — **and it compiles**. The fix is one line inside the block, in the same
+style the block already uses for `Kmatrix` and `rhs`:
+
+```c
+memcpy(U_hat, U_hat_shift, sizeof(U_hat));
+```
+
+`U_hat` is read downstream only at two sites, both inside
+`#if defined(N_SCHEME) || defined(B_SCHEME)`, so in an LDA build the rebase is
+not merely harmless but absent from the translation unit.
+
+**The general lesson is about what a guard records.** A `#error` can encode a
+missing derivation, a known-wrong code path, or both, and the text rarely says
+which. Deriving the mathematics is necessary and is not sufficient; the code
+the guard protects has to be read.
+
+### 37.2 Two kinds of change, two strengths of proof
+
+The deletion of `RD_RK2_COHERENT_BETA_N` and `_STAR` was verified by running
+the real C preprocessor over the solver, with `#include` lines stripped so no
+headers are needed, once per tracked Config that activates
+`RESIDUAL_DISTRIBUTION`, before and after. **All 109 retained configurations
+expand to byte-identical text.**
+
+That is a proof for a deletion, because the removed branches were already
+disabled in every retained Config. It is *not* available for enabling a
+combination, where the expansion changes by construction. Section 37.1 is the
+demonstration: the N path's expansion was perfectly legal and semantically
+wrong. The two halves of this pass happen to sit on either side of that line,
+which is worth remembering when the `b_T` work starts — that will be an
+enabling change, so the preprocessor gives it nothing.
+
+### 37.3 The deletion list was wrong on its largest item
+
+Section 34 and the cleanup survey proposed six switches for deletion. Checked
+one at a time against their own records rather than against a summary, four
+survive:
+
+| switch | verdict |
+| --- | --- |
+| `RD_RK2_COHERENT_BETA_N`, `_STAR` | deleted; all three beta conventions returned `p ~ 0.993` |
+| `RD_RK2_RATE_CONSISTENT_HEUN` | **kept — it is the fix, not the failure** |
+| `RD_DIFFERENCE_RESIDUAL` | kept; section 27 records an explicit decision to keep it |
+| `RD_ALE_CONDITION_DIAGNOSTIC` | kept; a live diagnostic on the actual singular values |
+| `RD_OUTPUT_DIAGNOSTICS` | kept; three print sites in `run.c`, outside this region |
+
+`RD_RK2_RATE_CONSISTENT_HEUN` is the serious one. Section 12.2 of
+`dev_log/LDA_F1_Heun_vs_standard_LDA_RK2.md` measures the Chapter-3 GL+F1
+staging at `p ~ 0.99` on triangular, glass and jittered meshes and the
+rate-consistent form at `p ~ 2.0003` on both a lattice and a glass. It carries
+9 Configs across five test problems. **It was on the deletion list because the
+hierarchical design document's phrase "mixed, coherent-beta-n, and
+coherent-beta-star all retain the defect" was read as covering it. That
+sentence is about the three beta conventions; the rate-consistent form is what
+repaired the defect they failed to repair.**
+
+### 37.4 An incident, and what it cost
+
+Regenerating the initial conditions to add `IC_sodjit128` to the manifest
+overwrote every family in place with no backup. Eight came back with different
+bytes: `IC_greshojit48_b{0,1,3,10}`, `IC_khjit64`, `IC_yeejit{32,64,128}`. The
+files had matched the committed manifest exactly beforehand, so this was not
+pre-existing drift.
+
+The generator is deterministic run to run and not reproducible across
+environments. The split is clean: every family whose state uses transcendental
+functions moved, every family built from arithmetic and comparisons alone
+reproduced exactly. The cause is the last bit of `exp`, `sin` and `tanh` under
+numpy 2.3.5. The originals are unrecoverable; the previous checksums survive in
+the `MMRD_ICS.sha256` of commit `d8e74c5`.
+
+The difference is about one unit in the last place, below every tolerance in
+use, but it is not bitwise: any Yee, KH or Gresho case re-run now starts from a
+slightly different initial condition, and the horizon rule of section 31.3
+applies to particlewise comparison across that boundary.
+
+Two changes so it cannot recur: the generator refuses to overwrite without
+`--force`, and the manifest carries an environment stamp that `--verify`
+reports on.
+
+`IC_sodjit128` reproduced byte for byte, `51a5412f5bc9...`, which confirms
+section 33.3's claim that the file was never contaminated.
+
+### 37.5 What the cleanup actually found
+
+Untracked entries fell from 112 to 7 and 332 MB was recovered, but the number
+that matters is different. **P4, open since section 14.2, is closed**: the
+entire Galilean campaign of sections 23, 25, 27, 28 and 30 had been run from
+Configs and parameter files that existed only in one working tree, and an
+actual regression test, `tests/rd/test_lda_f1_rank_deficiency.py`, was
+untracked and so could not have been run by anyone but its author.
+
+Six initial conditions remain outside any manifest, all from `create.py`, whose
+parameters are module-level globals. Two of them, `IC_gresho_v0_glass48` and
+`IC_gresho_v1e-8_ring48`, are referenced by `param_RD.txt` and
+`param_StaticMesh.txt` and still need coverage.
+
+### 37.6 The pattern
+
+Three of the errors in this pass — overwriting a tracked `.gitignore` instead
+of extending it, overwriting the initial conditions without a backup, and
+putting the temporal-order fix on a deletion list — are one mistake: **acting
+on a summary without opening the thing being changed.** The first two had
+already been paid for by the time they were noticed. The third was caught only
+because the switch had its own analysis document and it was opened first.
+
+The `b_T` parameterisation of section 34.4 is an enabling change, so section
+37.2 says the preprocessor will certify nothing about it, and section 37.1 says
+the derivation will not either. The derivation should be written and reviewed
+before the code is touched, not alongside it.
