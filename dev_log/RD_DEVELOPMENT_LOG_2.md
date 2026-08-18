@@ -100,6 +100,7 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 36 | review of the rewritten Chapter 4: six defects and a patch list |
 | 37 | the implementation pass: guards, deletions, and three misreadings |
 | 38-43 | Codex: cleanup safeguards, moving-mesh N and B campaigns, ALE isolation |
+| 44 | the Sod defect is mostly time integration; the N part is real and quantified |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -6817,3 +6818,162 @@ be, in order:
    m_i^{n+1}, contour correction and adjacent flip patches;
 4. only after these controls pass, design a conservative a-posteriori
    positivity limiter (or shock-sensor Bx) for the residual LDA oscillation.
+
+---
+
+## 44. 2026-08-18: the Sod "moving-mesh defect" is mostly the time integration; the N part is real and quantified
+
+- **Author:** Claude Code (Opus 5), reviewing sections 38-43.
+- **Scope:** an offline calculation of how upwind dissipation depends on the
+  mesh velocity, plus four new matched controls on the glass Sod.
+- **Source change:** three Configs under `examples/shocktube_2d/`, one analysis
+  script. No solver change.
+- **Status:** sections 41.3 and 42 need revising; the work order changes.
+
+### 44.1 The controls that were missing
+
+Sections 41 and 42 compare `static LDA1` and `static N1` against
+`moving LDA RK2` and `moving N RK2`. The published static controls are
+**first order**: their Configs carry no `RD_RK2_TOTAL_RESIDUAL`. The moving
+runs carry RK2+F1, the contour total, the element frame and the ALE mass. Three
+things change at once, and the conclusion "mesh motion moved the problem
+outside the static-LDA envelope" was drawn from that comparison.
+
+Four controls close the gap, all on the identical glass, the identical IC and
+2304 matched ParticleIDs:
+
+| | `rho_min` | `RMS(v_y)` | x previous |
+| --- | ---: | ---: | ---: |
+| static LDA1, first order | 0.1486 | 1.0966e-2 | |
+| **static LDA, RK2+F1** | **0.0711** | 1.9426e-2 | **1.77** |
+| **zero-mesh ALE, RK2+F1** | 0.0740 | 2.0389e-2 | 1.05 |
+| moving ALE, RK2+F1 | 0.0764 | 2.3514e-2 | 1.15 |
+| static N1, first order | 0.1486 | 8.4938e-3 | |
+| **static N, RK2** | 0.1497 | 8.4907e-3 | **1.00** |
+| moving N, RK2 | 0.1393 | 1.5323e-2 | **1.80** |
+
+The physical minimum density is 0.125.
+
+**The LDA density undershoot is a static-mesh result.** RK2+F1 on a stationary
+mesh reaches `rho_min = 0.0711`, a 43 per cent undershoot, which is *worse*
+than the moving run. Mesh motion contributes a factor 1.15 in transverse noise
+and slightly *improves* the minimum density. The ALE storage machinery with the
+mesh held still contributes 1.05. **Section 41.3's first bullet, the
+`rho_min = 0.01487` undershoot presented as an ALE defect, is a defect of
+LDA+F1 RK2 that the first-order control could not show.**
+
+**The N result is the opposite, and it is entirely mesh motion.** RK2 costs N
+nothing at all -- 8.4907e-3 against 8.4938e-3, and `rho_min` even improves --
+so the whole 1.80 is the moving mesh. Section 41.3's second bullet stands, and
+Zhenyu's reading of the figures was right: moving N really does oscillate more
+than static N, and it is not an LDA problem.
+
+### 44.2 Where the N factor of 1.80 comes from
+
+The ALE Jacobian is `A(n) - (sigma.n)I`, with eigenvalues
+`u.n - sigma.n` twice (entropy and shear) and `u.n - sigma.n +- c`. At
+`sigma = u` the first two vanish. Measured on one element of the Sod star
+state, sweeping the frame velocity:
+
+| `sigma/u` | entropy damping | shear damping |
+| ---: | ---: | ---: |
+| 0.00 | 1.000 | 1.000 |
+| 0.50 | 0.500 | 0.777 |
+| 0.90 | 0.100 | 0.599 |
+| 1.00 | **0.000** | **0.554** |
+
+The entropy vector `r = (1, u, v, |q|^2/2)` is the same for every direction, so
+at `sigma = u` it lies in the kernel of **every** `K_j` of the element; direct
+check gives `|K_j r|` of 2.5e-18, 2.5e-18, 8.7e-19 against 1.8e-2 on the static
+mesh. The shear eigenvector rotates with `n`, so the three edge kernels do not
+coincide and shear keeps 55 per cent of its damping.
+
+**Predicted transverse-noise amplification is therefore `1/0.554 = 1.81`, and
+the measured moving/static ratio for N is 1.80.**
+
+The entropy annihilation is *not* an error and does no harm here: a contact
+co-moving with the mesh is an exact steady state, so `Phi = 0` is correct. The
+thermodynamic scatter confirms it. In the two star regions, where `p` and `u`
+are constant, the moving mesh is *cleaner* than the static one:
+
+| | pressure scatter (acoustic) | `p/rho^gamma` scatter (entropy) |
+| --- | ---: | ---: |
+| moving N / static N | x0.74 | x0.70 |
+| moving LDA / static LDA | x0.52 | x0.68 |
+
+The excess is confined to the transverse velocity, which is the shear mode.
+An earlier draft of this analysis attributed the observable to the entropy
+mode; the measurement above refuted that and is why it is recorded here.
+
+Script: `Hydro_data_analysis/Analysis/moving_mesh/shear_mode_damping.py`.
+
+### 44.3 The F1 rank-deficiency avalanche is not mesh-related
+
+Section 43 did not examine `f1_lumped`, the count of elements whose F1 temporal
+mass falls back to the lumped mass on a rank-deficient `S^-`. On the moving LDA
+Sod it fires enormously in the first six steps -- 4027 elements out of roughly
+4600 -- decaying to zero by `t = 0.019`, and the predictor minimum density drops
+below the physical 0.125 inside exactly that window. That looked like the
+mechanism.
+
+It is not. The three runs give **identical counts**:
+
+```
+static LDA RK2    4027 3251 2477 1695 919 163   total 12532
+zero-mesh ALE     4027 3251 2477 1695 919 163   total 12532
+moving ALE        4027 3251 2477 1695 919 163   total 12532
+```
+
+The cause is the Sod initial condition: at `t = 0` the fluid is at rest, so the
+Jacobian eigenvalues are `0, 0, +-c` and `S^-` is rank deficient by
+construction, on any mesh. The avalanche is a startup transient of the test
+problem, not a property of the ALE path. It remains worth attention as a
+*static-mesh* LDA+F1 issue, and it is a candidate cause of the 0.0711
+undershoot, but it is not evidence about mesh motion.
+
+### 44.4 Kelvin--Helmholtz is properly controlled, and the finding stands
+
+Unlike Sod, the KH controls of section 41.1 all carry `RD_RK2_TOTAL_RESIDUAL`,
+so static and moving differ only in the mesh. The static run's generators were
+checked directly and do not move: maximum displacement between the first and
+last snapshot is exactly zero. Therefore
+
+> static LDA RK2+F1 completes to `t = 2`, while moving LDA RK2+F1 fails at
+> `t = 1.008` (Roe + split) and `t = 0.326` (contour),
+
+**is a genuine moving-mesh result and is now the only one.** It is also not
+explained by the factor of 1.8 above, which is far too small to turn a
+completed run into a negative mass.
+
+### 44.5 Revised reading, and the work order
+
+Section 41.3 declared a "priority moving-mesh defect" on four bullets. After
+these controls:
+
+| bullet | status |
+| --- | --- |
+| 1. moving contour-LDA `rho_min = 0.01487`, large ringing | **reattributed**: static LDA RK2+F1 is worse |
+| 2. moving N oscillates where static N does not | **stands**, x1.80, quantitatively explained by shear-mode damping |
+| 3. shared by two distributions, so not LDA alone | **stands**, and 44.2 gives the shared mechanism |
+| 4. both moving LDA branches fail KH where static completes | **stands**, and is now the priority |
+
+The single defect therefore splits into three items with different owners:
+
+1. **KH moving-LDA failure.** The real moving-mesh defect. Both residual forms
+   fail, so it is not a contour-quadrature pathology.
+2. **LDA+F1 RK2 positivity on a *static* mesh.** `rho_min` 0.1486 to 0.0711 at
+   fixed mesh. This predates the ALE work and was hidden by comparing against a
+   first-order control. The `f1_lumped` avalanche of 44.3 is the first suspect.
+3. **The intrinsic Lagrangian shear-damping loss.** A factor 1.8 in transverse
+   noise for any scheme, understood and quantified. The remedy is a floor on
+   `|u - sigma|/c`; AREPO's `CellShapingSpeed` is exactly that knob and is
+   currently switched off on round cells, which is where the loss is largest.
+
+The `sigma`-fraction sweep proposed earlier is still the right next
+measurement, because item 3 predicts a specific monotone curve while item 1
+does not. But it should now be run on KH, not Sod, since Sod has turned out to
+be dominated by item 2.
+
+Every published number in sections 41 and 42 that compares a moving RK2 run
+against a first-order static control needs the matched control before it is
+cited. The controls added here cover the glass Sod only.
