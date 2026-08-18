@@ -32,9 +32,11 @@ $(info )
 
 PYTHON = python3
 PERL   = /usr/bin/perl
+ifneq ($(MAKECMDGOALS),check_rd)
 RESULT     := $(shell CONFIG=$(CONFIG) PERL=$(PERL) BUILD_DIR=$(BUILD_DIR) make -f config-makefile)
 CONFIGVARS := $(shell cat $(BUILD_DIR)/arepoconfig.h)
 RESULT     := $(shell SRC_DIR=$(SRC_DIR) BUILD_DIR=$(BUILD_DIR) ./git_version.sh)
+endif
 
 # Default
 MPICH_INCL =
@@ -453,6 +455,11 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cu $(INCL) $(MAKEFILES)
 check: $(CONFIG_CHECK)
 
 check_docs: $(DOCS_CHECK)
+
+.PHONY: check_rd
+check_rd:
+	@$(PYTHON) tests/rd/test_lda_f1_rank_deficiency.py
+	@$(PYTHON) tests/rd/test_n_frame_covariance.py
 
 $(CONFIG_CHECK): $(TO_CHECK) $(CONFIG) check.py
 	@$(PYTHON) check.py 2 $(CONFIG) $(CONFIG_CHECK) defines_extra $(TO_CHECK)

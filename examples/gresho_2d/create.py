@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """ @package ./examples/Gresho_2d/create.py
 Code that creates 2d Gresho vortex initial conditions
 
@@ -5,12 +7,12 @@ created by Rainer Weinberger, last modified 20.03.2020 -- comments welcome
 modified by Zhenyu Wu
 """
 
+import argparse
 import os
 import re
 from math import floor
 
 import h5py
-import matplotlib.pyplot as plt
 import numpy as np
 from numpy.random import default_rng
 
@@ -19,19 +21,51 @@ IntType = np.int32
 
 Boxsize = FloatType(1.0)
 
+def format_velocity_label(value):
+    """Return the filename label historically used by this example."""
+
+    if value == 0.0:
+        return "v0"
+    text = f"{value:g}".replace("e-0", "e-").replace("e+0", "e+")
+    return f"v{text}"
+
+
+parser = argparse.ArgumentParser(
+    description="Generate one deterministic two-dimensional Gresho initial condition."
+)
+parser.add_argument("--mesh", choices=("ring", "random", "glass"), default="ring")
+parser.add_argument("--resolution", type=int, default=48,
+                    help="nominal cells per dimension for ring/random meshes")
+parser.add_argument("--bulk-velocity", type=float, default=1.0e-8)
+parser.add_argument("--velocity-label",
+                    help="override the filename velocity label, e.g. v1e-8")
+parser.add_argument("--glass-file",
+                    help="input SWIFT glass; alternatively set GRESHO_GLASS_FILE")
+parser.add_argument("--output-dir", default=os.path.dirname(os.path.abspath(__file__)),
+                    help="destination directory (default: this example directory)")
+parser.add_argument("--force", action="store_true",
+                    help="overwrite an existing HDF5 initial condition")
+parser.add_argument("--no-plot", action="store_true",
+                    help="do not write the point-distribution PNG")
+args = parser.parse_args()
+
 ## parameters
 density_0 = 1.0
-velocity_0 = 1.0e-8  # bulk velocity
-velocity_label = "v1e-8"
+velocity_0 = args.bulk_velocity
+velocity_label = args.velocity_label or format_velocity_label(velocity_0)
 gamma = 5.0 / 3.0
 gamma_minus_one = gamma - 1.0
-default_glass_file = (
-    "/home/zwu/SWIFT/examples/HydroTests/GreshoVortex_2D/glassPlane_48.hdf5"
-)
-mesh_type = "ring"  # "ring" or "random" or "glass"
-CellsPerDimension = IntType(48)
-glass_file = default_glass_file
-simulation_directory = os.path.dirname(os.path.abspath(__file__))
+mesh_type = args.mesh
+CellsPerDimension = IntType(args.resolution)
+glass_file = args.glass_file or os.environ.get("GRESHO_GLASS_FILE")
+simulation_directory = os.path.abspath(args.output_dir)
+
+if CellsPerDimension <= 0:
+    parser.error("--resolution must be positive")
+if mesh_type == "glass" and not glass_file:
+    parser.error("--mesh glass requires --glass-file or GRESHO_GLASS_FILE")
+if not os.path.isdir(simulation_directory):
+    parser.error(f"--output-dir is not a directory: {simulation_directory}")
 
 
 def load_swift_glass(glass_file, target_boxsize):
@@ -58,6 +92,8 @@ def load_swift_glass(glass_file, target_boxsize):
 
 
 def plot_point_distribution(Pos, boxsize, filepath):
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.scatter(Pos[:,0], Pos[:,1], s=4, c="k", linewidths=0)
     ax.set_xlim(0.0, boxsize)
@@ -84,9 +120,15 @@ else:
 FilePath = os.path.join(simulation_directory, filename)
 PlotFilePath = os.path.splitext(FilePath)[0] + ".png"
 
+if os.path.exists(FilePath) and not args.force:
+    raise SystemExit(
+        f"{FilePath} already exists; use --force to replace it"
+    )
+
 print("examples/Gresho_2d/create.py: creating ICs in directory " + simulation_directory)
 print("examples/Gresho_2d/create.py: writing " + FilePath)
-print("examples/Gresho_2d/create.py: writing " + PlotFilePath)
+if not args.no_plot:
+    print("examples/Gresho_2d/create.py: writing " + PlotFilePath)
 
 if mesh_type == "glass":
     print("examples/Gresho_2d/create.py: reading SWIFT glass " + glass_file)
@@ -233,4 +275,5 @@ part0.create_dataset("InternalEnergy", data=Uthermal)
 ## close file
 IC.close()
 
-plot_point_distribution(Pos, Boxsize, PlotFilePath)
+if not args.no_plot:
+    plot_point_distribution(Pos, Boxsize, PlotFilePath)

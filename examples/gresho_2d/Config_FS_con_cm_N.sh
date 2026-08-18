@@ -1,8 +1,9 @@
 #!/bin/bash
+# Gamma-1.4 N scheme: Arpaia mass, contour residual, element co-moving frame.
+# Shared by the small Sod, KH, and Yee moving-mesh regression campaign.
 
-# Non-rigid uniform-state gate: real AREPO face-angle regularisation and flips.
 TWODIMS
-GAMMA=(5.0/3.0)
+GAMMA=1.4
 READ_MASS_AS_DENSITY_IN_INPUT
 
 REGULARIZE_MESH_CM_DRIFT
@@ -10,7 +11,7 @@ REGULARIZE_MESH_CM_DRIFT_USE_SOUNDSPEED
 REGULARIZE_MESH_FACE_ANGLE
 
 RESIDUAL_DISTRIBUTION
-LDA_SCHEME
+N_SCHEME
 RD_RK2_TOTAL_RESIDUAL
 RD_DEBUG_ASSERTS
 RD_ALE_EQUALSTEP
@@ -32,6 +33,5 @@ HAVE_HDF5
 DEBUG
 RD_ALE_CONTOUR_RESIDUAL
 RD_ELEMENT_COMOVING_FRAME
-RD_ALE_CAMPOLI_MASS
 RD_ALE_CFL_TIMESTEP
 RD_ALE_CFL_DIAGNOSTIC

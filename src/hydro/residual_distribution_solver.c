@@ -79,31 +79,35 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if defined(RD_ALE_CFL_TIMESTEP) && (!defined(RD_ALE_EQUALSTEP) || !defined(TREE_BASED_TIMESTEPS))
 #error "RD_ALE_CFL_TIMESTEP currently requires RD_ALE_EQUALSTEP and TREE_BASED_TIMESTEPS."
 #endif
-/* The element frame now covers N as well as LDA.  G(b_T) is a similarity of the
+/* The element frame covers N, LDA and the conservative N/LDA B blend.
+ * G(b_T) is a similarity of the
  * ALE operator, K'_j = G K_j G^-1, so S'^- = G S^- G^-1 and Uhat'_in = G Uhat_in,
  * whence phi'^N_i = K'^+_i (U'_i - Uhat'_in) = G phi^N_i: N's nodal flux maps
- * back exactly like LDA's.  B stays out because its blend coefficient is built
- * from the total residual and has no derivation in this frame, and the timestep
- * hierarchy stays out because the frame must be held fixed over a complete
- * element RK evaluation, which mixed bins do not guarantee. */
-#if defined(RD_LDA_COMOVING_FRAME) &&                                                                  \
-    (!defined(RD_ALE_EQUALSTEP) || (!defined(LDA_SCHEME) && !defined(N_SCHEME)) || defined(B_SCHEME) || \
+ * back exactly like LDA's.  B forms both branches and its dimensionless theta
+ * entirely in this element frame before applying G^-1.  A global boost changes
+ * b_T with the fluid/generator velocity and therefore leaves those relative-
+ * frame inputs and theta unchanged; linear mapping then preserves both element
+ * conservation and covariance.  The timestep hierarchy stays out because the
+ * frame must be held fixed over a complete element RK evaluation, which mixed
+ * bins do not guarantee. */
+#if defined(RD_ELEMENT_COMOVING_FRAME) &&                                                              \
+    (!defined(RD_ALE_EQUALSTEP) || (!defined(LDA_SCHEME) && !defined(N_SCHEME) && !defined(B_SCHEME)) || \
      defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_HIERARCHICAL_TIMESTEPS))
-#error "RD_LDA_COMOVING_FRAME covers the equal-step two-pass LDA/F1 and N prototypes."
+#error "RD_ELEMENT_COMOVING_FRAME covers the equal-step two-pass LDA/F1, N and conservative B prototypes."
 #endif
-#if defined(RD_LDA_COMOVING_FRAME) && defined(RD_ALE_CONDITION_DIAGNOSTIC)
-#error "Use separate builds for RD_LDA_COMOVING_FRAME and the lab-vs-frame diagnostic."
+#if defined(RD_ELEMENT_COMOVING_FRAME) && defined(RD_ALE_CONDITION_DIAGNOSTIC)
+#error "Use separate builds for RD_ELEMENT_COMOVING_FRAME and the lab-vs-frame diagnostic."
 #endif
 #if defined(RD_ALE_CONTOUR_RESIDUAL) && \
-    (!defined(RD_ALE_EQUALSTEP) || defined(B_SCHEME) || (!defined(LDA_SCHEME) && !defined(N_SCHEME)))
-#error "RD_ALE_CONTOUR_RESIDUAL covers the equal-step LDA and N experiments; B stays outside the ALE phase."
+    (!defined(RD_ALE_EQUALSTEP) || (!defined(LDA_SCHEME) && !defined(N_SCHEME) && !defined(B_SCHEME)))
+#error "RD_ALE_CONTOUR_RESIDUAL covers the equal-step LDA, N and conservative B experiments."
 #endif
 /* N's contour reconciliation is covariant too: it distributes
  * (Phi_contour - sum_i phi_i^N)/3, and G is linear, so both totals transform
  * under G, their difference transforms under G, and division by three commutes
  * with it.  The combination therefore needs no separate derivation. */
-#if !defined(N_SCHEME) && !defined(LDA_SCHEME)
-#error "RD_ALE_EQUALSTEP supports N/lumped and LDA/F1; B and its nonlinear sensor stay outside the ALE phase."
+#if !defined(N_SCHEME) && !defined(LDA_SCHEME) && !defined(B_SCHEME)
+#error "RD_ALE_EQUALSTEP supports N/lumped, LDA/F1 and their conservative B blend."
 #endif
 #if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || defined(MHD) || \
     defined(PASSIVE_SCALARS)
@@ -437,7 +441,7 @@ static double RD_stat_max_backward_error_shift;
 static double RD_stat_max_shift_a2_defect;
 static lapack_int RD_stat_min_shift_rank;
 #endif
-#ifdef RD_LDA_COMOVING_FRAME
+#ifdef RD_ELEMENT_COMOVING_FRAME
 static double RD_stat_max_comoving_correction_covariance;
 static double RD_stat_max_comoving_phi_covariance;
 static double RD_stat_max_comoving_phi_covariance_relative;
@@ -539,7 +543,7 @@ static void rd_reset_solver_statistics(void)
   RD_stat_max_shift_a2_defect        = 0.0;
   RD_stat_min_shift_rank             = 5;
 #endif
-#ifdef RD_LDA_COMOVING_FRAME
+#ifdef RD_ELEMENT_COMOVING_FRAME
   RD_stat_max_comoving_correction_covariance = 0.0;
   RD_stat_max_comoving_phi_covariance = 0.0;
   RD_stat_max_comoving_phi_covariance_relative = 0.0;
@@ -1972,11 +1976,9 @@ static void rd_rate_consistent_prepare_pass(int pass)
  *      U^{n+1}_i = U*_i + 1/2 (U*_i - U^n_i)
  *                  - (dt/|S_i|) sum_T [ sum_j m_ij dU_j/dt + 1/2 phi_i^T(U*) ]
  *  (analysis document section 4); the +1/2 dU term is purely local and is
- *  added here, before the corrector sweep contributes the element sums. The
- *  The coherent-beta* experiment instead redistributes saved element Phi(U^n)
- *  with beta(U*) inside that sweep. B similarly needs the saved old N and LDA
- *  pieces so one total-residual theta can blend both stages. In either case
- *  the assembled shortcut has discarded information the corrector needs.
+ *  added here, before the corrector sweep contributes the element sums. B
+ *  instead needs the saved old N and LDA pieces so one total-residual theta can
+ *  blend both stages; the assembled shortcut has discarded that information.
  */
 static void rd_rk2_prepare_corrector(void)
 {
@@ -2280,7 +2282,7 @@ void compute_residuals(tessellation *T)
       double Pressure[DIMS + 1];
 
       double Velvertex_avg[3];  // moving mesh: average mesh velocity
-#ifdef RD_LDA_COMOVING_FRAME
+#ifdef RD_ELEMENT_COMOVING_FRAME
       double rd_frame_G[4][4], rd_frame_Ginv[4][4];
 #endif
       for(j = 0; j < 3; j++)
@@ -2773,7 +2775,7 @@ void compute_residuals(tessellation *T)
 
         }
 
-#if defined(RD_ALE_CONTOUR_RESIDUAL) && !defined(RD_LDA_COMOVING_FRAME)
+#if defined(RD_ALE_CONTOUR_RESIDUAL) && !defined(RD_ELEMENT_COMOVING_FRAME)
       /* Laboratory-coordinate control for the element-frame experiment below.
        * Use exactly the same nodal conservative P1 contour residual, including
        * the mean mesh-advection flux, but retain the laboratory K^+/- matrices,
@@ -2833,10 +2835,9 @@ void compute_residuals(tessellation *T)
        *   N:    y = (S^-)^dagger b,   b = sum_j K_j^- Uhat_j
        * One factorisation therefore serves both, and no regularisation of
        * S^- is required.  See dev_log/regularize_matrix_debug_report.md. */
-      /* The row stride must equal the LAPACK ldb/RD_UPWIND_NRHS. The default
-       * path has the historical three columns. Coherent beta^n appends an
-       * identity to construct beta explicitly at stage 0; coherent beta*
-       * appends saved Phi(U^n) at stage 1. */
+      /* The row stride must equal the LAPACK ldb/RD_UPWIND_NRHS. The three
+       * columns carry the element residual, the N inflow right-hand side and
+       * the LDA/F1 temporal target; unused columns remain zero in each scheme. */
       double rhs[4][RD_UPWIND_NRHS];
 
       for(k = 0; k < 4; k++)
@@ -2884,7 +2885,7 @@ void compute_residuals(tessellation *T)
         }
 #endif
 
-#ifdef RD_LDA_COMOVING_FRAME
+#ifdef RD_ELEMENT_COMOVING_FRAME
       /* Change only the algebraic coordinates of this element solve.  The
        * frame is the element-average generator velocity, so the directly
        * assembled ALE operator has sigma'=0 and velocities u'=u-sigma_bar.
@@ -2945,7 +2946,7 @@ void compute_residuals(tessellation *T)
          * variables would subtract a primed inflow state from an unprimed
          * nodal state and give a quantity that is neither frame's N flux.
          * That mixture, not any missing derivation, is what the N guard on
-         * RD_LDA_COMOVING_FRAME used to protect against.  LDA does not read
+         * RD_ELEMENT_COMOVING_FRAME used to protect against.  LDA does not read
          * U_hat after this point, so the rebase changes no LDA result. */
         memcpy(U_hat, U_hat_shift, sizeof(U_hat));
 
@@ -3260,13 +3261,6 @@ void compute_residuals(tessellation *T)
               Flux_N[k][j] = Kmatrix[k][0][j][kplus] * Bracket[0][j] + Kmatrix[k][1][j][kplus] * Bracket[1][j] +
                              Kmatrix[k][2][j][kplus] * Bracket[2][j] + Kmatrix[k][3][j][kplus] * Bracket[3][j];
 #endif
-              // #ifdef N_SCHEME
-              //               Flux_RD[k][j] = Kmatrix[k][0][j][kplus] * UminusX[0][j] + Kmatrix[k][1][j][kplus] * UminusX[1][j] +
-              //                               Kmatrix[k][2][j][kplus] * UminusX[2][j] + Kmatrix[k][3][j][kplus] * UminusX[3][j];
-              // #else
-              //               Flux_N[k][j] = Kmatrix[k][0][j][kplus] * UminusX[0][j] + Kmatrix[k][1][j][kplus] * UminusX[1][j] +
-              //                              Kmatrix[k][2][j][kplus] * UminusX[2][j] + Kmatrix[k][3][j][kplus] * UminusX[3][j];
-              // #endif
             }
 
           N_roundoff_scale = dmax(N_roundoff_scale, equation_scale);
@@ -3282,10 +3276,14 @@ void compute_residuals(tessellation *T)
        * would break sum_i phi_i = Phi. */
       for(int corr_k = 0; corr_k < 4; corr_k++)
         for(int corr_j = 0; corr_j < 3; corr_j++)
+#ifdef B_SCHEME
+          Flux_N[corr_k][corr_j] += rd_ale_mesh_velocity_correction[corr_k] / 3.0;
+#else
           Flux_RD[corr_k][corr_j] += rd_ale_mesh_velocity_correction[corr_k] / 3.0;
 #endif
+#endif
 
-#if defined(N_SCHEME) && defined(RD_ALE_CONTOUR_RESIDUAL)
+#if (defined(N_SCHEME) || defined(B_SCHEME)) && defined(RD_ALE_CONTOUR_RESIDUAL)
       /* Reconcile the N distribution with the contour element total.
        *
        * N does not distribute Phi. Its nodal flux is K_i^+(U_i - U_in), and the
@@ -3309,11 +3307,19 @@ void compute_residuals(tessellation *T)
        * RD_ALE_FORM_SELECTION.md measures. */
       for(int corr_k = 0; corr_k < 4; corr_k++)
         {
+#ifdef B_SCHEME
+          double distributed = Flux_N[corr_k][0] + Flux_N[corr_k][1] + Flux_N[corr_k][2];
+#else
           double distributed = Flux_RD[corr_k][0] + Flux_RD[corr_k][1] + Flux_RD[corr_k][2];
+#endif
           double residue     = (Phi[corr_k] - distributed) / 3.0;
 
           for(int corr_j = 0; corr_j < 3; corr_j++)
+#ifdef B_SCHEME
+            Flux_N[corr_k][corr_j] += residue;
+#else
             Flux_RD[corr_k][corr_j] += residue;
+#endif
         }
 #endif
 
@@ -3341,18 +3347,35 @@ void compute_residuals(tessellation *T)
             {
               Theta_E[k] = dmin(1.0, fabs(Phi[k]) / Sum_Flux_N[k]);
             }
+        }
+
+#ifdef RD_B_SCALAR_THETA
+      /* A component-wise blend can combine the density residual of one
+       * branch with momentum and energy residuals of another, so it has no
+       * invariant-domain interpretation even when the N update is admissible.
+       * Use the most dissipative component as one element-local scalar.  This
+       * preserves the full conservative-state coupling and makes every
+       * component the same convex blend of the N and LDA distributions. */
+      double theta_scalar = 0.0;
+      for(k = 0; k < 4; k++)
+        theta_scalar = dmax(theta_scalar, Theta_E[k]);
+      for(k = 0; k < 4; k++)
+        Theta_E[k] = theta_scalar;
+#endif
+
+      for(k = 0; k < 4; k++)
+        {
 #ifdef RD_DIAG_THETA
           rd_record_theta(0, Theta_E[k]);
 #endif
 
           double equation_scale = fabs(Phi[k]);
           for(j = 0; j < 3; j++)
-            equation_scale +=
-                fabs(Theta_E[k] * Flux_N[k][j]) + fabs((1.0 - Theta_E[k]) * Flux_LDA[k][j]);
-
-          Flux_RD[k][0] = Theta_E[k] * Flux_N[k][0] + (1.0 - Theta_E[k]) * Flux_LDA[k][0];
-          Flux_RD[k][1] = Theta_E[k] * Flux_N[k][1] + (1.0 - Theta_E[k]) * Flux_LDA[k][1];
-          Flux_RD[k][2] = Theta_E[k] * Flux_N[k][2] + (1.0 - Theta_E[k]) * Flux_LDA[k][2];
+            {
+              equation_scale +=
+                  fabs(Theta_E[k] * Flux_N[k][j]) + fabs((1.0 - Theta_E[k]) * Flux_LDA[k][j]);
+              Flux_RD[k][j] = Theta_E[k] * Flux_N[k][j] + (1.0 - Theta_E[k]) * Flux_LDA[k][j];
+            }
 
           B_roundoff_scale = dmax(B_roundoff_scale, equation_scale);
         }
@@ -3425,10 +3448,10 @@ void compute_residuals(tessellation *T)
 #if defined(RD_RK2_INTERNAL_LOOP) && !defined(RD_RK2_RATE_CONSISTENT_HEUN)
       if(rd_stage == 1)
         {
-          /* Corrector: replace the spatial distribution by the total nodal
-           * residual. The LDA mixed and coherent-beta^n paths use the local
-           * +dU/2 shortcut for the old spatial half; coherent-beta* and B
-           * suppress it and add the old element residual explicitly. */
+          /* Corrector: replace the stage-1 spatial distribution by the total
+           * nodal residual. LDA and N already carry the old spatial half through
+           * the local +dU/2 predictor increment; B stores and adds its separate
+           * stage-0 N/LDA distributions explicitly. */
           double T_time[4][3];
           double T_target[4];
           double rk2_scale = 0.0;
@@ -3510,6 +3533,7 @@ void compute_residuals(tessellation *T)
            * spatial-only B blend above remains the predictor distribution; it
            * is intentionally overwritten here for the corrector. */
           double T_f1[4][3], T_lumped[4][3];
+          double Theta_total[4];
 #ifdef RD_DIAG_THETA_MAP
           double theta_map[4] = {0.0, 0.0, 0.0, 0.0};
           double nlda_gap_map[4] = {0.0, 0.0, 0.0, 0.0};
@@ -3597,7 +3621,20 @@ void compute_residuals(tessellation *T)
 
               double total_k = theta_num;
 
-              double theta = (sum_n_tot == 0.0) ? 0.0 : dmin(1.0, fabs(total_k) / sum_n_tot);
+              Theta_total[k] = (sum_n_tot == 0.0) ? 0.0 : dmin(1.0, fabs(total_k) / sum_n_tot);
+            }
+
+#ifdef RD_B_SCALAR_THETA
+          double theta_total_scalar = 0.0;
+          for(k = 0; k < 4; k++)
+            theta_total_scalar = dmax(theta_total_scalar, Theta_total[k]);
+          for(k = 0; k < 4; k++)
+            Theta_total[k] = theta_total_scalar;
+#endif
+
+          for(k = 0; k < 4; k++)
+            {
+              double theta = Theta_total[k];
 #ifdef RD_DIAG_THETA
               rd_record_theta(1, theta);
 #endif
@@ -3758,7 +3795,7 @@ void compute_residuals(tessellation *T)
         }
 #endif
 
-#ifdef RD_LDA_COMOVING_FRAME
+#ifdef RD_ELEMENT_COMOVING_FRAME
       for(j = 0; j < 3; j++)
         {
           double lab_flux[4];
@@ -4017,7 +4054,7 @@ void compute_residuals(tessellation *T)
              (int)RD_stat_min_shift_rank);
 #endif
 
-#ifdef RD_LDA_COMOVING_FRAME
+#ifdef RD_ELEMENT_COMOVING_FRAME
     if(ThisTask == 0)
       printf("RD-COMOVING-SUMMARY time=%.8g max_correction_covariance=%.6e "
              "max_phi_covariance=%.6e max_phi_covariance_relative=%.6e\n",

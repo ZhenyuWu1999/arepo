@@ -99,6 +99,7 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 35 | Codex: Arpaia + contour in a parameterised frame; Chapter 4 derives the frame map |
 | 36 | review of the rewritten Chapter 4: six defects and a patch list |
 | 37 | the implementation pass: guards, deletions, and three misreadings |
+| 38-43 | Codex: cleanup safeguards, moving-mesh N and B campaigns, ALE isolation |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -6102,3 +6103,717 @@ The `b_T` parameterisation of section 34.4 is an enabling change, so section
 37.2 says the preprocessor will certify nothing about it, and section 37.1 says
 the derivation will not either. The derivation should be written and reviewed
 before the code is touched, not alongside it.
+
+---
+
+## 38. 2026-08-17: completion of the cleanup safeguards
+
+- **Author:** Codex, continuing the section 37 implementation review.
+- **Scope:** make the Gresho IC workflow reproducible and auditable, make the
+  co-moving switch scheme-neutral, and add the missing N-frame regression.
+- **Status:** implemented and locally verified in the working tree; not yet
+  committed. No numerical default or production Config choice is changed.
+
+### 38.1 IC generation and manifests are now fail-closed
+
+`examples/gresho_2d/create.py` is now a command-line generator rather than a
+file of module-level choices. Ring remains the default, but mesh family,
+resolution, bulk velocity, output directory and the glass input are explicit.
+The non-portable SWIFT glass path is gone: glass generation requires
+`--glass-file` or `GRESHO_GLASS_FILE`. Existing HDF5 files are protected unless
+`--force` is supplied, and plotting can be disabled with `--no-plot` so the
+generation path has no matplotlib dependency.
+
+The eight legacy `create.py` files that section 37.5 left outside the MMRD
+manifest are covered by `GRESHO_LEGACY_ICS.sha256`. Two representative
+reproductions were checked in a temporary directory: the default
+`IC_gresho_v1e-8_ring48.hdf5` and the externally seeded
+`IC_gresho_v0_glass48.hdf5` both reproduced their stored hashes exactly.
+
+`create_mmrd_ics.py --verify` now checks every `*_ICS.sha256` in the example
+directory and also scans in the reverse direction: an `IC_*.hdf5` with no
+manifest entry is an error. A temporary unmanifested probe was detected with a
+non-zero exit status. Manifest replacement is separate from generation behind
+`--update-manifest`, which refuses an incomplete generated set. The environment
+stamp is explicitly diagnostic; it is not presented as a portability
+guarantee for transcendental initial conditions.
+
+### 38.2 The frame switch now names the operation rather than one scheme
+
+`RD_LDA_COMOVING_FRAME` is renamed to `RD_ELEMENT_COMOVING_FRAME` in the live
+source, option lists and retained example Configs. The old name no longer
+occurs in live build inputs. This is a naming correction only: section 37.1's
+N-state rebase remains the substantive enabling change, and no production
+default has been selected by the rename.
+
+### 38.3 N plus contour has an algebraic Galilean regression
+
+`tests/rd/test_n_frame_covariance.py` exercises a non-uniform positive Euler
+state with non-zero mesh and unrelated frame velocities. It checks the
+similarity of both split K matrices, the N inflow state, the raw N
+distribution, the ALE contour total, and the reconciled distribution
+
+    phi_i = phi_i^N + (Phi_contour - sum_j phi_j^N) / 3.
+
+The test deliberately requires a non-zero reconciliation correction, so it
+cannot pass by exercising only a uniform or already-conservative special case.
+All covariance and conservation defects are at `O(10^-15)`. `make check_rd`
+now runs this test after the existing LDA/F1 rank-deficiency regression and
+does not require a generated `Config.sh` merely to run the Python checks.
+
+### 38.4 Verification boundary
+
+Both the N and LDA variants of `residual_distribution_solver.c` compile to an
+object with the locally installed LAPACKE-compatible Eigen header. The normal
+full build on this host still stops at `<lapacke.h>` because the system
+LAPACKE development header is absent; therefore no successful full link is
+claimed. Independently, both Config branches pass `make check`, their relevant
+preprocessed branches are valid, all IC manifests verify, Python files compile,
+the two RD algebraic tests pass, and `git diff --check` is clean.
+
+The seven unrelated untracked files present at the start of this pass were
+left untouched.
+
+---
+
+## 39. 2026-08-17: small moving-mesh N campaign
+
+- **Author:** Codex, at Zhenyu's request.
+- **Question:** can the final N combination reproduce the useful parts of the
+  earlier LDA campaign without repeating the full option matrix?
+- **Candidate:** Arpaia modified mass + conservative-state contour total +
+  element co-moving frame + N distribution, equal timesteps.
+- **Scope:** one rank; Gresho through boost 10, Sod, a shortened KH, and the
+  complete (32,64,128) Yee ladder. This is deliberately not a new
+  Roe/contour/Campoli matrix.
+- **Archive:** `Hydro_data_analysis/Data_MMRD_debug/N_contour_cm_small_20260817`.
+
+Two MKL-linked immutable binaries were used. The gamma-(5/3) artifact has
+SHA256 `a52ba897f7d5...`; the gamma-1.4 artifact has
+`a296a54031aa...`. The latter is defined reproducibly by the new
+`examples/gresho_2d/Config_FS_con_cm_N.sh`; it differs from the retained
+gamma-1.4 LDA candidate only by selecting N.
+
+### 39.1 Gresho: the LDA boost-10 result transfers to N
+
+The short (n=48, t=0.02) gate completed at boosts 0, 3 and 10. Against the
+de-boosted boost-0 result, boost 10 gives
+
+| field | L1 | Linf |
+| --- | ---: | ---: |
+| coordinates | (1.09e-16) | (1.55e-15) |
+| velocity | (5.12e-15) | (4.90e-14) |
+| density | (8.01e-15) | (3.95e-14) |
+| pressure | (2.93e-14) | (1.38e-13) |
+| internal energy | (8.52e-14) | (4.57e-13) |
+
+This matches the scale of section 27.3's LDA result and independently exercises
+the N state rebase whose omission section 37.1 found.
+
+The same three cases were extended to (t=0.1). Every run used exactly 512
+steps and 526 edge flips. All three give the same particle-level
+volume-weighted azimuthal-velocity error, (3.593461342e-3), and the same peak,
+(0.9754431137), to every printed digit. At boost 10 the de-boosted velocity
+difference from boost 0 remains (L1=2.03e-14), (Linf=5.67e-12).
+
+The laboratory conserved-ledger changes appear boost dependent, as they must
+when a common mass defect is multiplied by the boost. Transforming them back
+to the vortex frame gives the same vector for all three runs:
+
+    d(M, px, py, E)' =
+      (1.067046e-6, -3.310821e-5, 3.166655e-6, -1.022188e-4).
+
+Thus the residual and its topology error are Galilean covariant; the non-zero
+ledger change is not a frame defect.
+
+### 39.2 Sod and KH: N retains the robustness that LDA lacks
+
+Sod (n=64) completed to (t=0.2), through 658 steps and 4667 flips. Minimum
+((m,rho,p,u)) was
+((9.97e-6,0.3233,0.3049,1.705)); no pulled-back inversion, non-positive
+midpoint, or non-positive Arpaia divisor occurred. Its 200-bin density total
+variation is (1.5268046), against (1.5268044) in the old laboratory-frame
+contour-N run. Particle differences are small in the mean
+((L1(rho)=9.6e-8)) but not bitwise after thousands of topology decisions.
+
+KH (n=64) was deliberately shortened from (t=2) to (t=0.2). It completed
+512 steps and 2507 flips with minimum
+((m,rho,p,u)=(1.11e-4,0.9853,2.370,3.102)) and the same clean geometry
+counters. This is already about 800 times beyond the (t=2.4e-4) failure of
+laboratory-frame LDA and confirms that the newly enabled co-moving N path did
+not lose N's robustness. It is not a replacement for the old full-(t=2) N
+result.
+
+The endpoint ledger is not round-off on these discontinuous, heavily flipping
+meshes:
+
+| case | dM | dpx | dpy | dE |
+| --- | ---: | ---: | ---: | ---: |
+| Sod, (t=0.2) | (-4.82e-4) | (-4.17e-6) | (1.64e-5) | (-1.06e-3) |
+| KH, (t=0.2) | (1.49e-4) | (3.87e-5) | (-3.59e-6) | (4.33e-4) |
+
+This is the section 20 topology ledger defect amplified by discontinuities.
+Completion and positivity must not be reported as exact conservation.
+
+### 39.3 Yee: the expected boundary between N and LDA
+
+At (t=1), using the same volume-weighted density error against the analytic
+steady vortex:
+
+| scheme | n=32 | n=64 | n=128 | orders |
+| --- | ---: | ---: | ---: | --- |
+| N, contour + co-moving | (4.118e-3) | (2.441e-3) | (1.372e-3) | 0.75, 0.83 |
+| LDA campaign, section 33.2 | (2.290e-3) | (7.356e-4) | (2.252e-4) | 1.64, 1.71 |
+
+All N runs complete with positive density and pressure. N is 1.8, 3.3 and 6.1
+times less accurate as the grid is refined. That is not a regression: it is the
+expected first-order character of the monotone N distribution. N reproduces
+LDA's moving-mesh geometry, boost-10 covariance and discontinuous robustness
+gates, but it cannot reproduce LDA's smooth-flow order and should remain the
+robust control rather than the accuracy default.
+
+The Yee endpoint ledger also remains topology limited; for example
+(dM=(-2.93e-3,2.81e-4,8.10e-5)) at (n=(32,64,128)). The signs fluctuate, so
+these three deterministic samples are not a new convergence-order estimate.
+
+### 39.4 Decision from the small campaign
+
+No new option matrix is justified. The final N combination is now end-to-end
+validated for the role assigned to it:
+
+1. a frame-covariant boost-10 control;
+2. a positive/robust Sod and KH control;
+3. a first-order smooth-flow baseline for LDA.
+
+The useful next N experiment is the previously designed zero-seed KH
+static-versus-moving noise-floor test. Full (t=1) Gresho, full (t=2) KH,
+MPI, and a second boost ladder are not required before that targeted test.
+
+## 40. 2026-08-17: long N runs and visual solution-quality audit
+
+The short campaign in section 39 was deliberately extended after visual
+solution quality was judged more informative than another broad switch
+matrix.  Every plot and run in this section uses the same moving-mesh form:
+
+    N_SCHEME + RD_ALE_EQUALSTEP + RD_ALE_CONTOUR_RESIDUAL
+             + RD_ELEMENT_COMOVING_FRAME + RD_ALE_CFL_TIMESTEP,
+
+with Arpaia's modified-midpoint mass and the P1(U) contour total in the
+element frame,
+
+    Phi^T = 1/2 sum_j [ F(U_j).n_j - (sigma_bar_T.n_j) U_j ],
+    phi_i = phi_i^N + (Phi^T - sum_j phi_j^N)/3.
+
+The gamma-5/3 and gamma-1.4 binaries are the same immutable artifacts used in
+section 39.  The complete archive is
+`/home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_contour_cm_small_20260817`.
+
+### 40.1 Gresho to t=1: strong boost invariance, visible N diffusion
+
+The n=48 boost-0, boost-3, and boost-10 runs all reached t=1 in exactly 4096
+steps and 6836 edge flips.  No pulled-back inversion, non-positive midpoint,
+or non-positive Arpaia divisor was reported.  Their volume-weighted azimuthal
+velocity errors are
+
+| boost | L1(v_phi) | peak v_phi |
+| ---: | ---: | ---: |
+| 0 | 1.980441224e-2 | 0.8557168 |
+| 3 | 1.980445436e-2 | 0.8557168 |
+| 10 | 1.980430118e-2 | 0.8557168 |
+
+The three profiles are visually indistinguishable, and their L1 errors vary
+by less than 1e-5 relatively.  Thus boost 10 remains successful over a long
+run, not merely at the section-39 short gate.  Particle-ID equality is no
+longer at round-off because nearly seven thousand flip decisions amplify tiny
+trajectory differences.  After de-boosting, boost 10 versus boost 0 gives
+
+| field | L1 | Linf |
+| --- | ---: | ---: |
+| coordinates | 7.884e-8 | 1.211e-5 |
+| velocity | 8.033e-7 | 2.023e-4 |
+| density | 2.428e-7 | 7.511e-5 |
+| pressure | 2.049e-6 | 6.928e-4 |
+
+This is topology-sensitive trajectory branching, not a visible failure of
+the Galilean profile.  The frame-transformed endpoint ledgers are also close;
+for boost 0 and boost 10 respectively,
+
+    dQ'_b0  = (4.73561e-5, -8.08133e-6, 1.98958e-5, -9.25894e-4),
+    dQ'_b10 = (4.73687e-5, -8.01827e-6, 1.98636e-5, -9.25809e-4).
+
+The solution-quality verdict is less favourable.  The peak has fallen to
+about 0.856, while the previous long LDA run had L1 about 7.84e-3 and peak
+about 0.934.  N therefore preserves the boost behaviour but not LDA's lower
+diffusion.
+
+### 40.2 KH to t=2: robust completion with a thickened interface
+
+The n=64 KH run reached t=2 in 8192 steps and 33444 edge flips, safely past
+the co-moving LDA failure near t=0.98.  It retained positive geometry and
+thermodynamics throughout.  At the endpoint,
+
+    min(m,rho,p,u) = (9.2928e-5, 0.88798, 2.34028, 2.98554),
+    max(rho,p)     = (2.11694, 2.64664),
+    dQ             = (6.1126e-4, 6.8368e-4, 3.1817e-4, 3.3153e-4).
+
+The transverse kinetic energy grows from 3.74988e-3 to 4.40126e-3, so the
+perturbation does develop.  The density image contains rolled-up, multiscale
+structure, but the shear layers are visibly broad; density standard deviation
+falls from 0.47431 to 0.39953.  N is a robust control here, not evidence for
+LDA-level resolution.
+
+Against the old laboratory-frame contour-N t=2 snapshot, the new co-moving
+run differs materially (L1 velocity 1.122e-2 and L1 density 2.444e-2).  This
+late-time chaotic/topology-sensitive comparison is not a clean frame-
+covariance test and should not be interpreted as one.  The short Gresho
+boost ladder remains the controlled covariance diagnostic.
+
+### 40.3 Figures and revised conclusion
+
+The reproducible plotting script is
+`examples/gresho_2d/plot_n_moving_campaign.py`.  It writes both PNG and PDF
+versions of the summary and the individual Gresho, Sod, KH, and Yee figures
+under the archive's `figures/` directory.  Every figure labels both the
+mathematical ALE form and the exact compile switches, avoiding an ambiguous
+generic "moving mesh" caption.
+
+The long visual audit sharpens, rather than changes, section 39's decision:
+
+1. contour + element co-moving frame + Arpaia mass is a successful boost-10
+   and long-time robustness configuration for N;
+2. N does not reproduce LDA's Gresho or Yee accuracy and is substantially
+   more diffusive, as expected for the first-order monotone distribution;
+3. the non-round-off topology ledger defect remains present and must not be
+   hidden by the successful completion;
+4. N should be kept as the robust first-order control.  Arpaia remains the
+   moving-mesh default, while accuracy work should continue on the
+   contour/frame mathematics and LDA rather than tuning N to imitate LDA.
+
+## 41. 2026-08-18: matched LDA KH audit and Morton-2023 Sod benchmark
+
+The visual interpretation of section 40 is accepted: the long N Gresho result
+is consistent with the known first-order N dissipation even at boost zero and
+on a static mesh.  It is better than a heavily diffusive particle method but is
+not expected to match LDA or AREPO's MMFV result.  The KH run is correspondingly
+blurred, although its large-scale symmetry remains reasonable.  The useful
+question is therefore not whether N can be tuned to look like LDA, but whether
+moving LDA can retain its accuracy advantage in a matched long calculation.
+
+The archives for this section are
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/LDA_KH_static_moving_20260818
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Morton2023_Sod_ALE_20260818
+
+### 41.1 Matched n=64 LDA KH: moving is not yet a long-time improvement
+
+All three LDA runs use the same smooth-interface IC, gamma=1.4 and RK2.  The
+static control uses the K-matrix total; the moving cases use Arpaia's
+modified-midpoint mass, the element co-moving frame and either the Roe-plus-
+mesh-split total or the P1(U) contour total.  The completed co-moving contour-N
+run from section 40 is included as a robustness reference.
+
+At the matched t=0.2 snapshot the four calculations are nearly
+indistinguishable in global KH amplitude:
+
+| case | E_kin,y | reflected density L1 | rho range |
+| --- | ---: | ---: | ---: |
+| static LDA, K-matrix total | 2.7649e-3 | 4.4949e-2 | 0.9826--2.0434 |
+| moving LDA, Roe + mesh split | 2.7888e-3 | 4.3897e-2 | 0.9824--2.0428 |
+| moving LDA, P1(U) contour | 2.8008e-3 | 4.4871e-2 | 0.9715--2.0433 |
+| moving N, P1(U) contour | 2.7998e-3 | 4.0746e-2 | 0.9853--2.0462 |
+
+These small differences do not establish a moving-mesh accuracy advantage.
+The contour-LDA interface is already slightly more mesh-ragged at the common
+time.  More importantly, the long-time outcomes are qualitatively different:
+
+| case | last saved time | endpoint | rho range at last snapshot |
+| --- | ---: | --- | ---: |
+| static LDA | 2.0 | completed | 0.8605--2.3433 |
+| moving LDA, Roe + mesh split | 1.0 | negative endpoint mass at 1.0079346 | 0.1923--4.0795 |
+| moving LDA, P1(U) contour | 0.2002 | negative endpoint mass at 0.32582092 | 0.9715--2.0433 |
+| moving N, P1(U) contour | 2.0 | completed | 0.8880--2.1169 |
+
+The static LDA run develops clean large vortices and completes.  The moving
+Roe-LDA solution has severe mesh-scale extrema before it fails, while the
+contour-LDA run fails too early for a nonlinear-stage comparison.  The moving
+N run completes but its interface is thick and fragmented, as expected from
+the monotone first-order distribution.  At t=2 the reflected-density metric is
+0.131 for static LDA and 0.162 for moving N; this approximate nearest-generator
+diagnostic gives no evidence that moving N is more symmetric at late time.
+
+Thus the answer to "is long-time moving LDA better than static LDA?" is
+currently no: not because the moving formulation is demonstrably more
+diffusive, but because its topology/Arpaia endpoint-mass failure prevents the
+comparison.  The Roe-plus-split branch does not rescue the result, so no more
+parameter sweep of that branch is warranted.  The next focused KH test should
+be the already proposed zero-seed static-versus-moving noise-floor comparison,
+followed by a positivity/topology diagnosis for LDA rather than N tuning.
+
+### 41.2 Morton et al. (2023) Sod protocol reproduced
+
+The previous gamma=1.4, unit-box moving-N Sod run was a robustness smoke test,
+not a reproduction of Morton et al. (2023), section 5.1.1 and figure 7.  The new
+published controls use the actual pseudo-1D protocol:
+
+1. periodic 2 x 2 box with an n x n row-offset uniform generator lattice;
+2. (rho,v,p)_L=(1,0,1), (rho,v,p)_R=(0.125,0,0.1), gamma=5/3;
+3. central high-state slab, giving the two periodic Riemann fans in the paper;
+4. Courant factor 0.4, endpoint t=0.2, and n=64 and 128;
+5. first-order static LDA and N distributions with the K-matrix total.
+
+Both published controls complete and retain pseudo-1D symmetry at round-off.
+Their profiles reproduce the expected first-order smeared shock/contact and
+the close LDA1/N1 agreement.  The volume-weighted errors against the exact
+periodic Riemann solution are
+
+| scheme | L1(rho), n=64 | L1(rho), n=128 | two-level order | L1(vx), n=128 | L1(p), n=128 | RMS(vy), n=128 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| static LDA1, Morton form | 3.7653e-2 | 2.5843e-2 | 0.543 | 5.0003e-2 | 2.3176e-2 | 1.45e-16 |
+| static N1, Morton form | 3.8303e-2 | 2.6710e-2 | 0.520 | 5.0861e-2 | 2.4433e-2 | 1.68e-16 |
+| moving LDA RK2, contour + co-moving | 2.5546e-2 | 1.8622e-2 | 0.456 | 8.5572e-2 | 2.2640e-2 | 2.86e-2 |
+| moving N RK2, contour + co-moving | 3.3132e-2 | 2.4169e-2 | 0.455 | 5.5973e-2 | 2.9284e-2 | 5.29e-3 |
+
+The moving rows are an ALE extension, not part of Morton's published figure.
+An exactly regular moving lattice is massively co-circular and failed at the
+second AREPO triangulation with an invalid coordinate range.  The preserved
+failure is under `output_regular_mesh_failure`.  A deterministic 1e-6 h
+coordinate jitter was therefore applied only to the moving extension; the
+published static controls retain the exact regular lattice.
+
+All four moving runs then complete, but their interpretation differs.  Moving
+N remains bounded: at n=128, min(rho,p)=(0.12508,0.10011), and its transverse
+noise decreases from 1.06e-2 to 5.29e-3 as resolution doubles.  It is a useful
+robust ALE shock control, although not uniformly more accurate than static N.
+
+Moving LDA's smaller density L1 is misleading.  At n=128 it produces
+min(rho,p)=(0.01487,0.04582), rho_max=1.0291, RMS(vy)=2.86e-2, and its velocity
+L1 worsens slightly from n=64 to n=128.  The profile contains strong dispersive
+ringing around the shocks and contacts.  This is the expected lack of a
+monotonicity/positivity mechanism in pure LDA, not an accuracy win for the ALE
+form.  A blended/limited distribution will eventually be required for shocks;
+the present result should first remain a diagnostic of the unmodified schemes.
+
+### 41.3 Priority defect: moving-mesh oscillation amplification and loss of the static-LDA robustness envelope
+
+The Sod result must not be dismissed as the familiar statement that pure LDA
+is non-monotone.  Earlier static-mesh Sod calculations did show an LDA1
+oscillation, but it was localized mainly near the rarefaction/contact region,
+was much less prominent in the Morton-2023 presentation, and was removed in
+the experimental Bx1 calculation by the shock-sensor blend.  That historical
+result establishes the expected baseline: a limited local LDA defect for which
+the existing Bx mechanism is effective.
+
+The present ALE behaviour is qualitatively more severe:
+
+1. moving contour-LDA at n=128 reaches rho_min=0.01487 from a physical minimum
+   of 0.125, develops large ringing in density, velocity and pressure, and has
+   transverse RMS velocity 2.86e-2;
+2. moving N also develops visible discontinuity-correlated and transverse
+   oscillation even though the corresponding static N result is essentially
+   one-dimensional and monotone; its bounded extrema therefore do not make the
+   oscillation expected or acceptable;
+3. the effect is shared by two distributions with very different monotonicity
+   properties, so it cannot be attributed to the LDA distribution alone;
+4. in KH, both moving Roe-plus-split LDA and moving contour-LDA terminate with
+   negative endpoint mass, whereas the matched static LDA calculation reaches
+   t=2.  The contour formulation fails earlier, but the Roe branch failing as
+   well shows that this is not merely one contour-quadrature pathology.
+
+This is now a **priority moving-mesh defect**, not a secondary limiter-tuning
+issue.  LDA is not required to be as robust or as monotone as N, but mesh motion
+must not move a problem outside the established static-LDA robustness envelope
+without a diagnosed mathematical reason.  In particular, a test that static
+LDA completes must not fail solely after enabling the ALE residual, co-moving
+frame and Arpaia mass update.
+
+The investigation should isolate the common ALE machinery before applying Bx,
+because an early blend could hide rather than explain the defect.  The focused
+diagnostics are:
+
+1. locate the first departure from the static Sod profile and correlate it
+   element-by-element with edge flips, temporary/endpoint mass ratios, and the
+   Arpaia Q-to-U storage rewrites;
+2. separate continuous generator motion from topological change using a
+   short-time fixed-connectivity or no-flip diagnostic, then re-enable flips at
+   the same state;
+3. compare static and moving N at every RK stage.  Since N should supply the
+   monotone control, its first oscillatory stage is the cleanest indicator of a
+   contour total, frame transform, geometric-conservation, mass-ledger or time-
+   integration error shared with LDA;
+4. repeat the earliest failing window with Euler versus RK2 and a small CFL
+   ladder, recording whether the disturbance is temporal, topological, or
+   approximately step-size independent;
+5. only after the common ALE contribution is understood, restore Bx and verify
+   that the shock sensor removes the residual local LDA ringing without being
+   asked to stabilize an underlying mesh/ledger defect.
+
+Minimum acceptance criteria are correspondingly stronger than completion:
+
+- moving N Sod must remain bounded and approach the static-N pseudo-1D profile,
+  with transverse noise decreasing under refinement and without O(1) spikes;
+- moving LDA may retain its known local rarefaction/contact ringing, but it must
+  not create near-vacuum states or materially amplify the static-LDA extrema;
+- both moving LDA residual forms must carry the matched KH test at least through
+  the time interval completed by static LDA, unless a separately justified
+  positivity limiter is triggered rather than an endpoint-mass termination;
+- Bx is evaluated only after these ALE baselines pass, and is not counted as a
+  cure if it merely masks mass/topology inconsistency.
+
+This defect takes priority over the zero-seed KH noise-floor experiment and
+over further Roe-versus-contour parameter sweeps.  The latter become meaningful
+again only after the shared moving-Sod oscillation and KH endpoint-mass failure
+have been localized.
+
+### 41.4 Reproducibility and decision
+
+The preparation and plotting entry points are
+
+    examples/gresho_2d/prepare_lda_kh_comparison.py
+    examples/gresho_2d/plot_lda_kh_comparison.py
+    examples/shocktube_2d/create_morton2023.py
+    examples/shocktube_2d/plot_morton2023.py
+
+The figures explicitly distinguish the published static Morton controls from
+the Arpaia + P1(U) contour + element-frame ALE extension.  The combined verdict
+is:
+
+1. keep Arpaia + contour + co-moving frame as the intended moving-mesh default;
+2. keep N as the robust first-order discontinuous-flow control;
+3. do not infer ALE-LDA improvement from density L1 alone, because the Sod
+   extrema and transverse noise expose a non-monotone solution;
+4. resolve the LDA endpoint-mass/topology failure before claiming that moving
+   LDA improves long-time KH over static LDA;
+5. use Morton's static first-order LDA/N profiles as the published regression
+   baseline and label every ALE result explicitly as an extension.
+
+## 42. 2026-08-18: glass rerun supersedes jittered meshes for the ALE verdict
+
+Section 41 used Morton's regular row-offset mesh for the published static
+controls and a 1e-6 h jitter of that lattice for the ALE extension.  That was
+not an appropriate production moving-mesh comparison.  An infinitesimal jitter
+removes exact co-circularity but preserves a highly structured, nearly
+degenerate Delaunay topology.  It is useful as a geometry stress test, not as a
+proxy for the meshes used in astrophysical simulations.
+
+The rule from this point forward is:
+
+1. relaxed periodic glass is the default IC geometry for physical moving-mesh
+   tests and static-versus-moving decisions;
+2. static and moving variants use exactly the same normalized generators and
+   ParticleIDs;
+3. regular, row-offset and jittered lattices are retained only for published
+   reproduction or explicitly labelled geometry stress tests;
+4. conclusions from section 41 that depend on the magnitude of lattice/jitter
+   oscillations are superseded by this section.  Morton's regular static result
+   remains a valid reproduction of the paper, but its jittered ALE extension is
+   not the astrophysical-mesh baseline.
+
+### 42.1 Matched glass construction
+
+The rerun uses the manifest-covered relaxed SWIFT glass
+`IC_gresho_v0_glass48.hdf5`: 2304 generators, effective n=48, source SHA256
+
+    da76535f6f6366fa8d9b43d3e27f0f8b1bdfb461eead3c2d80aed401c935df64.
+
+For Sod the normalized points are scaled to a periodic 2 x 2 box; for KH they
+remain in the unit box.  Every scheme for a given problem uses identical
+coordinates and IDs.  No random displacement or lattice jitter is added.
+
+The campaign archive is
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Glass_Sod_KH_ALE_20260818
+
+and the reproducible entry points are
+
+    examples/shocktube_2d/prepare_glass_sod_kh.py
+    examples/shocktube_2d/plot_glass_sod_kh.py
+
+### 42.2 Sod on glass: the lattice amplified the defect, but did not create all of it
+
+All four glass Sod cases reach t=0.2.  The exact Morton fluid states, gamma=5/3
+and CFL=0.4 are retained, but this is explicitly a glass extension rather than
+Morton's published regular geometry.
+
+| scheme | L1(rho) | L1(vx) | L1(p) | rho range | p range | RMS(vy) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| static LDA1 | 4.6435e-2 | 1.0382e-1 | 4.9790e-2 | 0.1486--0.9948 | 0.1348--0.9913 | 1.096e-2 |
+| static N1 | 4.6588e-2 | 1.0198e-1 | 5.1054e-2 | 0.1486--0.9944 | 0.1350--0.9907 | 8.490e-3 |
+| moving LDA, contour + frame | 3.0156e-2 | 9.0402e-2 | 3.9872e-2 | 0.0764--1.0294 | 0.0409--1.0496 | 2.010e-2 |
+| moving N, contour + frame | 3.8859e-2 | 1.1033e-1 | 5.4722e-2 | 0.1393--0.9924 | 0.1202--0.9874 | 1.424e-2 |
+
+The interpretation is more precise than section 41's jitter result:
+
+- moving N is bounded on the glass and its point cloud is much closer to the
+  expected monotone control.  The very strong lattice-jitter spikes must not be
+  generalized to production meshes;
+- nevertheless, moving N has 1.68 times the transverse RMS velocity of static
+  N on the identical glass, so a smaller shared ALE noise increment remains;
+- moving LDA is also substantially improved relative to the jittered n=128
+  stress test, but still undershoots the physical minimum 0.125 to 0.0764 and
+  pressure to 0.0409.  Its transverse RMS is 1.83 times static LDA and the
+  density/pressure profiles retain visible dispersive extrema;
+- therefore the extreme rho_min=0.0149 of section 41 was partly a structured-
+  mesh artifact, while the moving-LDA amplification relative to its matched
+  static glass control is real.
+
+Glass itself is not pseudo-one-dimensional, so non-zero static RMS(vy) is an
+expected geometry noise floor.  The relevant diagnostic is the moving/static
+increment on the same glass, not comparison with round-off symmetry on a
+regular lattice.  Higher-resolution glass families are required before quoting
+a convergence rate for that increment.
+
+### 42.3 KH on glass: both moving-LDA failures persist
+
+The n=48-equivalent glass KH rerun gives an unambiguous robustness result:
+
+| scheme | outcome | failure/endpoint detail | latest saved rho range |
+| --- | --- | --- | ---: |
+| static LDA RK2 | completed t=2 | reference completes | 0.8415--2.7684 at t=2 |
+| moving LDA, Roe + split + frame | failed t=1.15515 | RK predictor rho=-0.01790 | 0.3060--2.3033 at t=1 |
+| moving LDA, contour + frame | failed t=0.46442 | negative endpoint mass; predictor rho approached 1.84e-5 | 0.4080--2.1331 at t=0.4001 |
+| moving N, contour + frame | completed t=2 | bounded robust control | 0.9090--2.0796 at t=2 |
+
+At the matched t=0.2 snapshot, static LDA and moving Roe-LDA remain close:
+their rho minima are 0.9688 and 0.9817.  Contour-LDA is already less controlled,
+with rho_min=0.8574, while moving N has rho_min=0.9856.  The contour failure is
+therefore preceded by a visible early extremum, not a purely silent bookkeeping
+termination.
+
+The glass improves both LDA failure horizons compared with the jittered
+campaign, but does not change the scientific verdict.  Static LDA completes;
+both moving LDA totals fail; moving N completes.  The contour failure is an
+endpoint-mass event, while the Roe failure is a non-physical RK predictor, so
+the common concern is broader than contour quadrature alone.  Because the
+result persists on a relaxed production-style glass, it is a genuine ALE
+robustness regression and remains the highest-priority defect.
+
+### 42.4 Revised work order
+
+1. Use the glass Sod campaign to locate the first moving/static departure,
+   including the smaller but measurable N noise increment.
+2. Correlate the glass contour-KH failure with temporary and endpoint masses,
+   topology changes, and the element that reaches near-vacuum.
+3. Diagnose Roe-KH separately at the RK predictor, since its glass failure is
+   not an endpoint-mass check.
+4. Do not use Bx to mask either common ALE defect.  Once N and the mass/frame
+   machinery pass, Bx can be restored for the residual local LDA oscillation.
+5. Acquire or generate relaxed glass96/glass128 families before drawing
+   resolution-scaling conclusions.  Do not substitute jittered lattices for
+   those missing glass resolutions.
+
+## 43. 2026-08-18: robustness limiter and first ALE-isolation controls
+
+The immediate engineering priority is now to keep the moving solver running,
+but the scientific priority is to distinguish an LDA monotonicity defect from
+an error in the moving-mesh construction.  A B/Bx-style blend is analogous to
+the limiter used by a moving-mesh finite-volume method: it may make an
+otherwise correct high-order update admissible, but success after limiting is
+not evidence that the unlimited ALE operator is correct.
+
+### 43.1 Classical component-wise B is not a positivity mechanism
+
+The existing conservative N/LDA B implementation was enabled experimentally
+for `RD_ALE_EQUALSTEP + RD_ALE_CONTOUR_RESIDUAL +
+RD_ELEMENT_COMOVING_FRAME`.  Both branches are built and reconciled to the
+same contour total in the element frame and mapped back only after blending.
+This is an experimental diagnostic path, not the default scheme and not the
+historical shock-sensor Bx.
+
+On glass KH, the component-wise B scheme delayed the contour-LDA negative-mass
+failure from t=0.46442 to t=0.81845, but still terminated with one negative
+endpoint mass.  Immediately beforehand the RK predictor remained positive
+(rho_min=1.12e-4, p_min=2.171), while the final stored mass of ID 971 became
+-2.53e-8.  The mean total-residual theta was only 0.2649 and 2.94% of the
+component samples were in the theta=1 histogram bin.  Component-wise B can mix
+density from one branch with momentum and energy from another and therefore
+has no invariant-domain interpretation.
+
+`RD_B_SCALAR_THETA` was added as a stricter diagnostic: each element uses
+
+    theta_T = max_k theta_{T,k}
+
+for all conserved components in both the predictor and the coherent RK2 total
+residual.  This retains element conservation and the full state-vector
+coupling.  It completed glass KH to t=2, with rho=0.8344--2.1331 and
+p=2.3443--2.6148.  However, mean theta_T rose to 0.761 at t=2, with 38.4% of
+samples in the theta=1 bin.  The run survives primarily by becoming strongly
+N-like; scalar B is a useful robustness safety path, not an explanation of the
+underlying failure.
+
+Glass Sod at t=0.2 gives the same distinction:
+
+| scheme | L1(rho) | L1(vx) | L1(p) | rho range | p range | RMS(vy) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| moving component-B | 2.5595e-2 | 6.4524e-2 | 3.1839e-2 | 0.1253--1.0000 | 0.1004--1.0000 | 1.865e-2 |
+| moving scalar-B | 2.7064e-2 | 7.2935e-2 | 3.5515e-2 | 0.1255--0.9999 | 0.1007--0.9998 | 1.472e-2 |
+
+Both B variants remove the large LDA undershoot, but their non-zero transverse
+noise remains comparable to the moving-N floor.  This is limiter evidence, not
+an ALE validation.
+
+### 43.2 Zero-mesh ALE separates storage from actual mesh motion
+
+The first isolation test uses identical glass Sod ICs and N-RK2 in two forms:
+
+1. a true static mesh;
+2. mesh velocity forced to zero while retaining `RD_ALE_EQUALSTEP`, Arpaia
+   modified-midpoint dual masses, contour residual and endpoint storage.
+
+At t=0.2 the results are close:
+
+| control | L1(rho) | L1(vx) | L1(p) | RMS(vy) |
+| --- | ---: | ---: | ---: | ---: |
+| static N-RK2 | 4.6794e-2 | 1.0149e-1 | 5.1082e-2 | 8.487e-3 |
+| zero-mesh ALE N-RK2 | 4.6602e-2 | 1.0101e-1 | 5.0788e-2 | 8.574e-3 |
+| moving ALE N-RK2 | 3.8859e-2 | 1.1033e-1 | 5.4722e-2 | 1.424e-2 |
+
+The stationary ALE/storage path does not reproduce the moving-N noise.  The
+small zero/static difference is consistent with their different contour versus
+static K-matrix spatial totals and is far below the actual moving/static
+increment.
+
+Setting `CellShapingSpeed=0` while retaining the normal quasi-Lagrangian mesh
+velocity gives L1=(3.8659e-2, 1.1051e-1, 5.4693e-2) and RMS(vy)=1.444e-2,
+essentially the regularised moving result.  By t=0.2 the regularised and
+speed-zero runs have 332 and 329 replaced edges respectively.  Face-angle
+regularisation velocity is therefore not the main cause.
+
+### 43.3 Flip timing: topology is not the sole initiating mechanism
+
+In the normal moving-N Sod run, the first edge replacement occurs at t=0.025.
+Matched short controls were therefore stopped at t=0.02 (zero flips) and
+t=0.03 (two flips).  Before any flip, moving versus zero-mesh RMS state
+differences by ParticleID are already
+
+    (rho, vx, vy, p) = (1.02e-2, 1.56e-2, 1.98e-3, 8.73e-3).
+
+After two flips they grow to
+
+    (rho, vx, vy, p) = (1.68e-2, 2.45e-2, 2.89e-3, 1.36e-2).
+
+Part of a per-ID difference is expected because moving generators sample a
+different material/spatial trajectory.  The symmetry diagnostic is more
+direct: RMS(vy) is 1.841e-2 moving versus 1.820e-2 zero-mesh at t=0.02, and
+1.951e-2 versus 1.904e-2 at t=0.03.  Thus smooth geometry motion changes the
+solution before topology changes, while the two early flips do not create a
+single discontinuous failure.  Flips may still amplify the late-time defect,
+but they are not its sole origin.
+
+### 43.4 Current conclusion and next discriminator
+
+The evidence no longer supports treating this as only an LDA problem.  Static
+LDA completes KH, moving N has excess Sod noise, stationary ALE N is close to
+static N, and disabling regularisation does not remove the moving result.  The
+remaining common suspect is the coupling among actual geometry motion,
+time-dependent dual masses and the ALE residual/update.  The next tests should
+be, in order:
+
+1. a prescribed rigid translating glass with unchanged connectivity, which
+   exercises non-zero b_T and the frame/contour algebra without dual-area
+   deformation;
+2. a smooth prescribed deforming velocity field stopped before the first flip,
+   to test the Arpaia mass identity independently of topology;
+3. per-step tracking of the worst Sod/KH cell, including m_i^n, bar m_i,
+   m_i^{n+1}, contour correction and adjacent flip patches;
+4. only after these controls pass, design a conservative a-posteriori
+   positivity limiter (or shock-sensor Bx) for the residual LDA oscillation.

@@ -1,6 +1,6 @@
+#!/bin/bash
 # N scheme, contour residual, element co-moving frame.  The combination the
 # guards used to reject; see log section 34.5 for the covariance derivation.
-#!/bin/bash
 
 # Non-rigid uniform-state gate: real AREPO face-angle regularisation and flips.
 TWODIMS
@@ -33,6 +33,6 @@ OUTPUT_PRESSURE
 HAVE_HDF5
 DEBUG
 RD_ALE_CONTOUR_RESIDUAL
-RD_LDA_COMOVING_FRAME
+RD_ELEMENT_COMOVING_FRAME
 RD_ALE_CFL_TIMESTEP
 RD_ALE_CFL_DIAGNOSTIC

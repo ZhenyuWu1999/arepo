@@ -45,6 +45,7 @@
 #RD_ALE_EQUALSTEP              # Experimental 2D periodic one-rank Arpaia ALE-RD path
 #RD_ALE_TEST_ZERO_MESH_VELOCITY # Test-only stationary mesh policy for RD_ALE_EQUALSTEP
 #RD_B_FROZEN_THETA             # B blend: freeze Theta from stage-0 data so the map is dt-smooth
+#RD_B_SCALAR_THETA             # B blend: use one max-over-components Theta per element
 #RD_B_SPATIAL_THETA            # B blend: steady-form indicator (Arpaia eq. 42) instead of the whole residual
 #LDA_SCHEME                    # Low Diffusion A scheme for residual distribution
 #N_SCHEME                      # N scheme for residual distribution
@@ -61,7 +62,7 @@
 #RD_ALE_CONDITION_DIAGNOSTIC     # Diagnose boosted LDA systems in lab and element co-moving conservative variables
 #RD_ALE_CFL_DIAGNOSTIC           # Compare the selected AREPO step with the element-based ALE-RD CFL bound
 #RD_ALE_CFL_TIMESTEP             # Experimental: include the current-mesh ALE-RD spectral bound in timestep selection
-#RD_LDA_COMOVING_FRAME           # Experimental LDA solve/distribution in element co-moving conservative variables
+#RD_ELEMENT_COMOVING_FRAME       # Experimental LDA/N solve and distribution in element co-moving conservative variables
 #RD_ALE_CONTOUR_RESIDUAL          # Experimental P1 conservative-state contour residual; laboratory or element frame
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
