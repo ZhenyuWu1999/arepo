@@ -101,6 +101,7 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 37 | the implementation pass: guards, deletions, and three misreadings |
 | 38-43 | Codex: cleanup safeguards, moving-mesh N and B campaigns, ALE isolation |
 | 44 | the Sod defect is mostly time integration; the N part is real and quantified |
+| 45 | numerical entropy production separates every KH outcome |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -6977,3 +6978,130 @@ be dominated by item 2.
 Every published number in sections 41 and 42 that compares a moving RK2 run
 against a first-order static control needs the matched control before it is
 cited. The controls added here cover the glass Sod only.
+
+---
+
+## 45. 2026-08-18: numerical entropy production separates every KH outcome
+
+- **Author:** Claude Code (Opus 5).
+- **Scope:** one diagnostic applied to the matched glass KH runs. No solver
+  change, no new run: this uses snapshots already on disk.
+- **Status:** it resolves section 44.5's item 1 and it bears directly on the
+  residual-form decision of section 35.1.
+
+### 45.1 An exact invariant, and why KH admits it
+
+Section 44.6 localises the moving-mesh Sod excess to the contact and predicts
+the entropy mode is responsible. Kelvin--Helmholtz can test that without any
+profile fit, interface tracking or tunable window.
+
+Its initial pressure is uniform and the flow is subsonic and shock-free, so the
+specific entropy `s = p/rho^gamma` is materially conserved by the exact Euler
+equations. **Its range over the domain is therefore an exact invariant**: no
+fluid element may acquire an `s` outside `[min s(0), max s(0)]`. Any excursion
+is purely numerical, is defined identically on a static and a moving mesh, and
+has no free parameter.
+
+Measured on the matched glass KH of section 42, in units of the initial
+entropy span, with `[0.9473, 2.5000]`:
+
+| `t` | static LDA | moving N | moving B-scalar | moving LDA Roe | moving LDA contour |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.20 | 2.920e-2 | 7.179e-5 | 3.180e-5 | 2.603e-5 | **3.113e-1** |
+| 0.40 | 1.402e-1 | 2.909e-4 | 2.714e-3 | 6.703e-2 | **4.271e+0** |
+| 0.60 | | 1.341e-2 | 5.086e-2 | 2.930e-1 | dead |
+| 0.80 | | 3.745e-2 | 1.530e-1 | **1.796e+0** | dead |
+| 1.00 | 3.398e-1 | 4.212e-2 | 5.451e-1 | **5.099e+0** | dead |
+| 1.40 | 4.614e-1 | 2.219e-1 | 3.445e-1 | dead | dead |
+| 2.00 | 4.246e-1 | 2.365e-1 | 5.036e-1 | dead | dead |
+
+Script: `Hydro_data_analysis/Analysis/moving_mesh/kh_entropy_drift.py`.
+
+### 45.2 What bounds the entropy error, and what does not
+
+The columns separate into bounded and unbounded, and the split is not
+static-against-moving:
+
+- **static LDA is bounded.** It has the *largest* early error of the
+  non-contour runs, `2.9e-2` at `t=0.2`, a thousand times moving LDA's, but it
+  saturates near 0.4 and stays there to `t=2`.
+- **moving N is bounded**, and is better than static LDA at every time,
+  0.237 against 0.425 at `t=2`.
+- **moving B-scalar is bounded**, 0.50 at `t=2`.
+- **moving LDA runs away.** Roe + split starts a thousand times *below* static
+  LDA and overtakes it by `t=0.6`: 2.6e-5, 6.7e-2, 0.293, 1.80, 5.10, then
+  negative mass at `t=1.008`. Five times the entire physical entropy span.
+
+That gives the mechanism its final form. On a Lagrangian mesh the entropy
+vector lies in the kernel of every `K_j` (section 44.2), so the upwind
+dissipation that bounds entropy error on a static mesh is gone. **Whatever
+bounds it must then come from the distribution itself.** N is monotone and
+supplies that bound; LDA is not and does not; B supplies it by blending toward
+N. On a static mesh `K^+` supplies it for both, which is exactly why static LDA
+saturates while moving LDA does not.
+
+This also explains section 43.1's observation that scalar B "survives primarily
+by becoming N-like", with mean theta rising to 0.761. That is not a
+disappointing accident of the limiter. Once the entropy dissipation is gone,
+becoming N-like is the *only* remaining mechanism, so any limiter that works
+must do it.
+
+### 45.3 The contour residual is a large entropy source
+
+The contour column is not a variant of the Roe column. At `t = 0.2`, on the
+same mesh at the same time,
+
+```text
+moving LDA, Roe + split      2.603e-05
+moving LDA, contour          3.113e-01     12000 times larger
+static LDA (K-matrix)        2.920e-02
+```
+
+The contour form produces more numerical entropy in one fifth of the run than
+static LDA accumulates in all of it, and reaches four times the physical
+entropy span by `t = 0.4` before dying at `t = 0.326`.
+
+This is new evidence and it did not exist when the mathematical default was
+chosen. The form-selection campaign of section 32 measured `L1`, covariance,
+conservation and completion, but never entropy production. Section 36.4 gave
+the mechanism in advance without knowing this number: the contour total uses a
+specified nodal-flux quadrature rather than the exact boundary integral, its
+error is `O(h^3)` with a tensor structure that does not cancel over a vertex
+star, and it cannot break conservation but can only damage accuracy and
+positivity. An `O(h^3)` residual error that is not annihilated for the entropy
+mode, on a mesh whose entropy dissipation is exactly zero, accumulates without
+any mechanism to remove it.
+
+**Section 35.1 item 2 makes contour the provisional mathematical default. This
+measurement is the strongest evidence against it so far**, and unlike the Sod
+robustness argument of section 8, it is not confounded by a first-order
+control: both moving columns here are the same scheme, the same mass, the same
+frame and the same mesh, differing only in the element total. The acceptance
+condition proposed in section 36.4, comparing the nodal quadrature against a
+high-order evaluation of the boundary integral, should now be run before
+contour is carried further.
+
+### 45.4 What this settles and what it leaves
+
+Settled: section 44.5's item 1, the KH moving-LDA failure, is entropy runaway
+caused by the loss of `K^+` entropy dissipation on a Lagrangian mesh combined
+with a non-monotone distribution. It is not a topology or storage defect, which
+is consistent with section 43's isolation controls finding neither.
+
+Consequences for the work order:
+
+1. The `sigma`-fraction sweep is still worth running on KH, and now has a
+   sharper prediction: the entropy excursion at fixed `t` should rise
+   monotonically with the Lagrangian fraction, and moving LDA should recover
+   boundedness below some threshold. That threshold is the design number for
+   any `|u - sigma|/c` floor.
+2. The contour-versus-Roe entropy gap needs the quadrature audit of section
+   36.4 before the residual form is settled.
+3. Moving LDA needs either a positivity mechanism or a floor on
+   `|u - sigma|/c`. Section 43.1 already shows the limiter route works by
+   becoming N-like, so the frame-velocity floor is the option that might
+   preserve LDA's accuracy, and it is untested.
+
+Not settled: whether the entropy runaway and the small-cell signature are the
+same event. Both KH failures occur on very light cells, `oldMass` 4.7e-6 and
+4.5e-8, the same signature as the `n=128` Sod sliver of section 34.2.
