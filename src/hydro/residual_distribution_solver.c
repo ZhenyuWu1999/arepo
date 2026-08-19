@@ -2284,6 +2284,12 @@ void compute_residuals(tessellation *T)
       double Velvertex_avg[3];  // moving mesh: average mesh velocity
 #ifdef RD_ELEMENT_COMOVING_FRAME
       double rd_frame_G[4][4], rd_frame_Ginv[4][4];
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
+      /* N is assembled in primed variables until the final nodal residual is
+       * mapped back below. Keep the split correction in those same
+       * coordinates for its conservative 1/3 distribution. */
+      double rd_frame_split_correction[4] = {0.0, 0.0, 0.0, 0.0};
+#endif
 #endif
       for(j = 0; j < 3; j++)
         {
@@ -2964,7 +2970,6 @@ void compute_residuals(tessellation *T)
          * this term does not vanish: it repairs the non-covariance introduced
          * by using the Roe parameter-vector interpolant Uhat for the physical
          * flux while the geometric transport uses the original nodal U. */
-        double correction_shift[4] = {0.0, 0.0, 0.0, 0.0};
 #if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
         double correction_expected[4] = {0.0, 0.0, 0.0, 0.0};
         double correction_covariance_scale = 0.0;
@@ -2975,7 +2980,7 @@ void compute_residuals(tessellation *T)
             for(k = 0; k < 4; k++)
               {
                 double delta_shift = U_fluid_shift[k][j] - U_hat_shift[k][j];
-                correction_shift[k] -= 0.5 * Mag[j] * sigma_dot_n * delta_shift;
+                rd_frame_split_correction[k] -= 0.5 * Mag[j] * sigma_dot_n * delta_shift;
                 correction_covariance_scale += 0.5 * Mag[j] * fabs(sigma_dot_n) * fabs(delta_shift);
               }
           }
@@ -2987,7 +2992,7 @@ void compute_residuals(tessellation *T)
         double correction_covariance_defect = 0.0;
         for(k = 0; k < 4; k++)
           correction_covariance_defect = dmax(correction_covariance_defect,
-                                               fabs(correction_shift[k] - correction_expected[k]));
+                                               fabs(rd_frame_split_correction[k] - correction_expected[k]));
         RD_stat_max_comoving_correction_covariance =
             dmax(RD_stat_max_comoving_correction_covariance, correction_covariance_defect);
 
@@ -3045,8 +3050,11 @@ void compute_residuals(tessellation *T)
 #else
         for(k = 0; k < 4; k++)
           {
-            Phi[k] = correction_shift[k];
-            phi_scale += fabs(correction_shift[k]);
+            Phi[k] = 0.0;
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
+            Phi[k] = rd_frame_split_correction[k];
+            phi_scale += fabs(rd_frame_split_correction[k]);
+#endif
             for(j = 0; j < 3; j++)
               for(p = 0; p < 4; p++)
                 {
@@ -3277,9 +3285,17 @@ void compute_residuals(tessellation *T)
       for(int corr_k = 0; corr_k < 4; corr_k++)
         for(int corr_j = 0; corr_j < 3; corr_j++)
 #ifdef B_SCHEME
+#ifdef RD_ELEMENT_COMOVING_FRAME
+          Flux_N[corr_k][corr_j] += rd_frame_split_correction[corr_k] / 3.0;
+#else
           Flux_N[corr_k][corr_j] += rd_ale_mesh_velocity_correction[corr_k] / 3.0;
+#endif
+#else
+#ifdef RD_ELEMENT_COMOVING_FRAME
+          Flux_RD[corr_k][corr_j] += rd_frame_split_correction[corr_k] / 3.0;
 #else
           Flux_RD[corr_k][corr_j] += rd_ale_mesh_velocity_correction[corr_k] / 3.0;
+#endif
 #endif
 #endif
 

@@ -7105,3 +7105,67 @@ Consequences for the work order:
 Not settled: whether the entropy runaway and the small-cell signature are the
 same event. Both KH failures occur on very light cells, `oldMass` 4.7e-6 and
 4.5e-8, the same signature as the `n=128` Sod sliver of section 34.2.
+
+---
+
+## 46. 2026-08-19: discontinuity-controlled mesh-velocity smoothing does not cure moving-N Sod
+
+- **Author:** Codex (GPT-5).
+- **Detailed report:** `dev_log/sod_n_mesh_sensor_20260819.md`.
+- **Campaign:**
+  `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_MeshSensor_20260819`.
+- **Profile figure:**
+  `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_MeshSensor_20260819/figures/sod-n-mesh-sensor-profiles.png`
+  (PDF with the same stem is stored beside it).
+- **Evolution figure:**
+  `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_MeshSensor_20260819/figures/sod-n-mesh-sensor-evolution.png`
+  (PDF with the same stem is stored beside it).
+- **Machine-readable metrics:**
+  `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_MeshSensor_20260819/analysis.json`.
+
+Zhenyu proposed using a shock/contact/rarefaction sensor to change the mesh
+velocity itself rather than modifying the N/LDA distribution. The tested,
+Galilean-covariant policy is
+
+\[
+\boldsymbol\sigma_i=\boldsymbol\sigma_i^{\rm QL}
++\alpha S_i(\overline{\boldsymbol u}_i-\boldsymbol u_i),\qquad\alpha=0.5,
+\]
+
+with a face-area-weighted neighbour velocity. The final `VelVertex` remains
+the unique velocity used everywhere in the ALE step. One variant uses
+compression times a pressure reconstruction defect; the other also activates
+on density, pressure and velocity reconstruction defects to include contacts
+and rarefaction edges. This is an ALE extension inspired by Paardekooper's
+sensor, not Paardekooper's published Bx formula.
+
+Matched glass48 moving-N results at `t=0.2` are:
+
+| policy | L1(rho) | volume RMS(vy) | raw RMS(vy) | max abs(vy) | flips |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | 3.88588e-2 | 1.42445e-2 | 1.53230e-2 | 1.29075e-1 | 332 |
+| shock, alpha=0.5 | 3.88656e-2 | 1.42697e-2 | 1.53545e-2 | 1.29319e-1 | 329 |
+| all-wave, alpha=0.5 | 4.29629e-2 | 1.42763e-2 | 1.47760e-2 | 1.12383e-1 | 280 |
+
+The shock sensor is effectively inert after the opening transient. The
+all-wave policy is not: around `t=0.02` its velocity correction has RMS
+`3.12e-2`, maximum `2.02e-1`; at the endpoint it still activates 54.8 per
+cent of the cells and changes the topology/step history. Nevertheless it does
+not reduce the volume- or mass-weighted transverse noise. It only reduces a
+few extremes while increasing L1(rho) by 10.6 per cent. Its RMS(vy) remains
+1.68 times the matched static-N value, the same gap as baseline.
+
+This supports Zhenyu's doubt. Reactive neighbour smoothing cannot act at the
+initial discontinuity because `ubar-u=0` while the initial fluid velocity is
+uniform; it responds only after noise exists. A prescribed sensor-normal
+drift could act earlier, but is a materially more invasive dissipation model
+and should not be conflated with this test.
+
+Decision: retain the compiled-out research switch for reproducibility, but do
+not adopt it and do not spend a Gresho boost campaign on this version. The KH
+entropy result of section 45 makes the controlled `sigma`-fraction/K-mode
+dissipation study the cleaner next experiment. Before starting it, review any
+alternative mechanism proposed by Claude Code against the matched static-N
+target and these figures. If no mechanism has a clearer mathematical basis
+than reactive mesh-velocity smoothing, stop tuning Sod and proceed to the KH
+instability campaign.

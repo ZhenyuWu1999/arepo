@@ -40,9 +40,213 @@
 #include "../main/proto.h"
 #include "../mesh/voronoi/voronoi.h"
 
+#if defined(RD_ALE_SENSOR_ALL_WAVES) && !defined(RD_ALE_SENSOR_MESH_SMOOTHING)
+#error "RD_ALE_SENSOR_ALL_WAVES requires RD_ALE_SENSOR_MESH_SMOOTHING."
+#endif
+
+#if defined(RD_ALE_SENSOR_MESH_SMOOTHING) && (!defined(RESIDUAL_DISTRIBUTION) || !defined(RD_ALE_EQUALSTEP))
+#error "RD_ALE_SENSOR_MESH_SMOOTHING is currently restricted to equal-step ALE-RD experiments."
+#endif
+
 #ifdef ONEDIMS_SPHERICAL
 static void validate_vertex_velocities_1d();
 #endif /* #ifdef ONEDIMS_SPHERICAL */
+
+#ifdef RD_ALE_SENSOR_MESH_SMOOTHING
+static double rd_ale_clamp_unit(double value)
+{
+  if(value < 0)
+    return 0;
+  if(value > 1)
+    return 1;
+  return value;
+}
+
+/*! \brief Locally de-Lagrangianize the mesh in non-smooth flow.
+ *
+ * The correction
+ *
+ *   sigma_i <- sigma_i + alpha S_i (ubar_i - u_i)
+ *
+ * uses a face-area weighted neighbour velocity ubar_i. Both ubar_i-u_i and
+ * the sensors below are invariant under a uniform velocity boost. The
+ * shock-only sensor combines compression with a pressure reconstruction
+ * defect. RD_ALE_SENSOR_ALL_WAVES additionally activates on reconstructed
+ * density, pressure, or velocity defects, so contacts and rarefaction edges
+ * can alter the mesh motion without penalising a locally linear smooth flow.
+ *
+ * This is an experimental ALE mesh-motion policy, not part of the published
+ * Paardekooper B scheme. The final VelVertex is nevertheless the unique mesh
+ * velocity subsequently used by the drift, ALE residual, K matrices, mass
+ * update, and timestep calculation.
+ */
+static void rd_ale_apply_sensor_mesh_smoothing(void)
+{
+  const double alpha = RD_ALE_SENSOR_MESH_SMOOTHING;
+  const double tiny  = 1.0e-30;
+  long long local_count = 0, local_active = 0;
+  double local_sum_sensor = 0, local_sum_correction2 = 0, local_max_correction = 0;
+  double local_sum_rel_before2 = 0, local_sum_rel_after2 = 0;
+
+  if(!(alpha > 0 && alpha <= 1))
+    terminate_program("RD_ALE_SENSOR_MESH_SMOOTHING must lie in (0,1], got %g", alpha);
+
+  for(int idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
+    {
+      int i = TimeBinsHydro.ActiveParticleList[idx];
+      if(i < 0)
+        continue;
+
+      double weighted_velocity[3] = {0, 0, 0};
+      double weight_sum = 0;
+      double max_pressure_defect = 0, max_wave_defect = 0;
+      int q = SphP[i].first_connection;
+
+      while(q >= 0)
+        {
+          int dp       = DC[q].dp_index;
+          int vf       = DC[q].vf_index;
+          int particle = Mesh.DP[dp].index;
+
+          if(particle >= 0 && Mesh.VF[vf].area > 1.0e-10 * SphP[i].SurfaceArea && Mesh.DP[dp].ID != P[i].ID)
+            {
+              const MyFloat *velocity_other;
+              const MyDouble *center_other;
+              double density_other, pressure_other, sound_other;
+
+              if(particle >= NumGas && Mesh.DP[dp].task == ThisTask)
+                particle -= NumGas;
+
+              if(Mesh.DP[dp].task == ThisTask)
+                {
+                  velocity_other = P[particle].Vel;
+                  center_other   = SphP[particle].Center;
+                  density_other  = SphP[particle].Density;
+                  pressure_other = SphP[particle].Pressure;
+                  sound_other    = get_sound_speed(particle);
+                }
+              else
+                {
+                  velocity_other = PrimExch[particle].VelGas;
+                  center_other   = PrimExch[particle].Center;
+                  density_other  = PrimExch[particle].Density;
+                  pressure_other = PrimExch[particle].Pressure;
+                  sound_other    = PrimExch[particle].Csnd;
+                }
+
+              double dx[3];
+              dx[0] = nearest_x(center_other[0] - SphP[i].Center[0]);
+              dx[1] = nearest_y(center_other[1] - SphP[i].Center[1]);
+              dx[2] = nearest_z(center_other[2] - SphP[i].Center[2]);
+
+              double density_predict  = SphP[i].Density;
+              double pressure_predict = SphP[i].Pressure;
+              double velocity_defect2 = 0;
+              for(int dim = 0; dim < NUMDIMS; dim++)
+                {
+                  density_predict += SphP[i].Grad.drho[dim] * dx[dim];
+                  pressure_predict += SphP[i].Grad.dpress[dim] * dx[dim];
+                }
+              for(int component = 0; component < NUMDIMS; component++)
+                {
+                  double velocity_predict = P[i].Vel[component];
+                  for(int dim = 0; dim < NUMDIMS; dim++)
+                    velocity_predict += SphP[i].Grad.dvel[component][dim] * dx[dim];
+                  double defect = velocity_other[component] - velocity_predict;
+                  velocity_defect2 += defect * defect;
+                }
+
+              double density_defect = fabs(density_other - density_predict) /
+                                      (fabs(density_other) + fabs(SphP[i].Density) + tiny);
+              double pressure_defect = fabs(pressure_other - pressure_predict) /
+                                       (fabs(pressure_other) + fabs(SphP[i].Pressure) + tiny);
+              double velocity_defect = sqrt(velocity_defect2) /
+                                       (fabs(sound_other) + fabs(get_sound_speed(i)) + tiny);
+              double wave_defect = dmax(density_defect, dmax(pressure_defect, velocity_defect));
+
+              if(pressure_defect > max_pressure_defect)
+                max_pressure_defect = pressure_defect;
+              if(wave_defect > max_wave_defect)
+                max_wave_defect = wave_defect;
+
+              double weight = Mesh.VF[vf].area;
+              for(int component = 0; component < NUMDIMS; component++)
+                weighted_velocity[component] += weight * velocity_other[component];
+              weight_sum += weight;
+            }
+
+          if(q == SphP[i].last_connection)
+            break;
+          q = DC[q].next;
+        }
+
+      double div_velocity = 0;
+      for(int dim = 0; dim < NUMDIMS; dim++)
+        div_velocity += SphP[i].Grad.dvel[dim][dim];
+
+      double sound = get_sound_speed(i);
+      double compression_speed = get_cell_radius(i) * dmax(-div_velocity, 0.0);
+      double compression = compression_speed / (fabs(sound) + compression_speed + tiny);
+      double sensor = rd_ale_clamp_unit(8.0 * compression * max_pressure_defect);
+
+#ifdef RD_ALE_SENSOR_ALL_WAVES
+      /* A reconstruction defect below 0.02 is treated as smooth. Defects at
+       * 0.20 and above receive the full correction. This second branch is
+       * deliberately broader than the compression sensor and is the part of
+       * the experiment that targets contacts and rarefaction edges. */
+      double all_wave_sensor = rd_ale_clamp_unit((max_wave_defect - 0.02) / 0.18);
+      sensor = dmax(sensor, all_wave_sensor);
+#endif
+
+      double correction2 = 0, rel_before2 = 0, rel_after2 = 0;
+      if(weight_sum > 0)
+        for(int component = 0; component < NUMDIMS; component++)
+          {
+            double relative_before = P[i].Vel[component] - SphP[i].VelVertex[component];
+            double mean_velocity = weighted_velocity[component] / weight_sum;
+            double correction = alpha * sensor * (mean_velocity - P[i].Vel[component]);
+            SphP[i].VelVertex[component] += correction;
+            double relative_after = P[i].Vel[component] - SphP[i].VelVertex[component];
+            correction2 += correction * correction;
+            rel_before2 += relative_before * relative_before;
+            rel_after2 += relative_after * relative_after;
+          }
+
+      double correction_norm = sqrt(correction2);
+      local_count++;
+      if(sensor > 1.0e-12)
+        local_active++;
+      local_sum_sensor += sensor;
+      local_sum_correction2 += correction2;
+      local_sum_rel_before2 += rel_before2;
+      local_sum_rel_after2 += rel_after2;
+      if(correction_norm > local_max_correction)
+        local_max_correction = correction_norm;
+    }
+
+  long long global_count = 0, global_active = 0;
+  double local_values[5] = {local_sum_sensor, local_sum_correction2, local_max_correction, local_sum_rel_before2,
+                            local_sum_rel_after2};
+  double global_values[5] = {0, 0, 0, 0, 0};
+  MPI_Reduce(&local_count, &global_count, 1, MPI_LONG_LONG_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_active, &global_active, 1, MPI_LONG_LONG_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(local_values, global_values, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_values[2], &global_values[2], 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_values[3], &global_values[3], 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  if(ThisTask == 0 && global_count > 0)
+    mpi_printf("RD_ALE_MESH_SENSOR: time=%g alpha=%g active_fraction=%.9g mean_sensor=%.9g corr_rms=%.9g corr_max=%.9g rel_rms_before=%.9g rel_rms_after=%.9g mode=%s\n",
+               All.Time, alpha, (double)global_active / global_count, global_values[0] / global_count,
+               sqrt(global_values[1] / global_count), global_values[2], sqrt(global_values[3] / global_count),
+               sqrt(global_values[4] / global_count),
+#ifdef RD_ALE_SENSOR_ALL_WAVES
+               "all-waves"
+#else
+               "shock-only"
+#endif
+    );
+}
+#endif
 
 /*! \brief Sets velocities of individual mesh-generating points.
  *
@@ -114,6 +318,10 @@ void set_vertex_velocities(void)
           SphP[i].VelVertex[2] += 0.5 * dt * acc[2];
         }
     } /* for loop of active particles */
+
+#ifdef RD_ALE_SENSOR_MESH_SMOOTHING
+  rd_ale_apply_sensor_mesh_smoothing();
+#endif
 
 #ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
   /* Snapshot the quasi-Lagrangian velocity before the optional centroid/face
