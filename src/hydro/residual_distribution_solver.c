@@ -677,6 +677,72 @@ static void rd_build_characteristic_matrices(double velx, double vely, double en
     }
 }
 
+#ifdef RD_ALE_ENTROPY_DISSIPATION
+/*! \brief Restore the entropy-mode dissipation a Lagrangian mesh loses.
+ *
+ *  Derivation and the meaning of every symbol: dev_log/RD_ALE_entropy_dissipation.md.
+ *
+ *  A_sigma(n) = A(n) - (sigma.n)I differs from A(n) by a multiple of the
+ *  identity, so the two share eigenvectors and the ALE eigenvalues are
+ *  u.n - sigma.n, twice, and u.n - sigma.n +- c.  The entropy right eigenvector
+ *  r_e = (1, u, v, |q|^2/2) is the SAME for every direction, while the shear
+ *  eigenvector rotates with the tangent.  At sigma = u the intersection of the
+ *  three face kernels of an element is therefore exactly span{r_e}: the entropy
+ *  mode gets no upwind dissipation on any face, and S^- is singular along it.
+ *
+ *  This adds  eta_j P_e  to K_j^+ and subtracts it from K_j^-, with
+ *  P_e = r_e l_e^T the spectral projector and
+ *
+ *      eta_j = (1/2) |n_j| max(0, eps c - |u - sigmabar_T|).
+ *
+ *  Three properties, all proved in the derivation:
+ *    - K^+ + K^- = K is untouched, so sum_i phi_i = Phi and conservation are
+ *      exact.  The term changes only the dissipation, never the flux.
+ *    - sum_i K_i^+ = -S^- survives, so sum_i beta_i = I exactly and LDA stays
+ *      linearity-preserving, hence formally second order.
+ *    - the eigenvalues and r_e are Galilean covariant, so G(b_T) still gives a
+ *      similarity and the element-frame covariance is unchanged.
+ *
+ *  The gate is the ELEMENT relative speed, not the per-face one: w_j vanishes
+ *  on any face whose normal is perpendicular to the flow, which happens
+ *  routinely on a static mesh, so a per-face gate would fire there and change
+ *  every validated static-mesh result.
+ *
+ *  \param velx,vely,enthalpy,cs  element-average state in the frame Kmatrix
+ *         was assembled in.
+ *  \param rel_velx,rel_vely  u - sigmabar_T in that same frame.  In the element
+ *         co-moving frame this is just (velx, vely), since sigma' has zero mean.
+ */
+static void rd_add_entropy_dissipation(double velx, double vely, double enthalpy, double cs,
+                                       double rel_velx, double rel_vely, const double magnitude[3],
+                                       int kplus, int kminus, double Kmatrix[4][4][3][3])
+{
+  const double relative_speed = sqrt(rel_velx * rel_velx + rel_vely * rel_vely);
+  const double floor_speed    = RD_ALE_ENTROPY_DISSIPATION * cs;
+  const double deficit        = floor_speed - relative_speed;
+  if(!(deficit > 0.0))
+    return; /* the mesh is far enough from Lagrangian: exactly no change */
+
+  const double q2 = velx * velx + vely * vely;
+  const double r_e[4] = {1.0, velx, vely, 0.5 * q2};
+  const double l_e[4] = {1.0 - GAMMA_MINUS1 * q2 / (2.0 * cs * cs), GAMMA_MINUS1 * velx / (cs * cs),
+                         GAMMA_MINUS1 * vely / (cs * cs), -GAMMA_MINUS1 / (cs * cs)};
+  (void)enthalpy;
+
+  for(int vertex = 0; vertex < 3; vertex++)
+    {
+      const double eta = 0.5 * magnitude[vertex] * deficit;
+      for(int row = 0; row < 4; row++)
+        for(int col = 0; col < 4; col++)
+          {
+            const double d = eta * r_e[row] * l_e[col];
+            Kmatrix[row][col][vertex][kplus] += d;
+            Kmatrix[row][col][vertex][kminus] -= d;
+          }
+    }
+}
+#endif
+
 /*! \brief Solve  S^- X = B  for the residual-distribution upwind system.
  *
  *  S^- = sum_{j in T} K_j^- is singular whenever the element is stagnant with
@@ -2817,6 +2883,13 @@ void compute_residuals(tessellation *T)
 #endif
 
             /* S^- = sum_{j in T} K_j^-  (thesis notation, chapter 3) */
+#ifdef RD_ALE_ENTROPY_DISSIPATION
+      /* Laboratory frame: the mesh velocity is explicit, so the element
+       * relative velocity is u - sigmabar_T directly. */
+      rd_add_entropy_dissipation(velx_avg, vely_avg, h_avg, Cs_avg, velx_avg - Velvertex_avg[0],
+                                 vely_avg - Velvertex_avg[1], Mag, kplus, kminus, Kmatrix);
+#endif
+
       double Sminus[4][4];
 
       for(k = 0; k < 4; k++)
@@ -2922,6 +2995,13 @@ void compute_residuals(tessellation *T)
         rd_build_characteristic_matrices(velx_shift, vely_shift, h_shift, Cs_avg, 0.0, 0.0,
                                          N_X, N_Y, Mag, lambda_shift, K_shift);
         memcpy(Kmatrix, K_shift, sizeof(Kmatrix));
+
+#ifdef RD_ALE_ENTROPY_DISSIPATION
+        /* Element frame: sigma' has zero element mean by construction, so the
+         * relative velocity is the shifted velocity itself. */
+        rd_add_entropy_dissipation(velx_shift, vely_shift, h_shift, Cs_avg, velx_shift, vely_shift, Mag,
+                                   kplus, kminus, Kmatrix);
+#endif
 
         for(k = 0; k < 4; k++)
           for(p = 0; p < 4; p++)

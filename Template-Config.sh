@@ -44,6 +44,8 @@
 #RD_DIAG_THETA_MAP             # Diagnostic only: final-step element map of Theta and B-minus-LDA correction
 #RD_ALE_EQUALSTEP              # Experimental 2D periodic one-rank Arpaia ALE-RD path
 #RD_ALE_TEST_ZERO_MESH_VELOCITY # Test-only stationary mesh policy for RD_ALE_EQUALSTEP
+#RD_ALE_ENTROPY_DISSIPATION=0.2   # Lagrangian-limit entropy-mode dissipation; eps is a mesh-relative Mach floor
+#RD_ALE_MESH_VELOCITY_FRACTION=1.0 # Test only: scale VelVertex, the sigma-fraction control axis
 #RD_ALE_SENSOR_MESH_SMOOTHING=0.5 # Experimental: locally smooth mesh velocity in sensor-flagged ALE-RD cells
 #RD_ALE_SENSOR_ALL_WAVES        # Include contact/rarefaction-edge reconstruction defects; default sensor is shock-only
 #RD_B_FROZEN_THETA             # B blend: freeze Theta from stage-0 data so the map is dt-smooth

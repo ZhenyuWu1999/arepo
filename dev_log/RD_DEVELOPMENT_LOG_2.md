@@ -102,6 +102,8 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 38-43 | Codex: cleanup safeguards, moving-mesh N and B campaigns, ALE isolation |
 | 44 | the Sod defect is mostly time integration; the N part is real and quantified |
 | 45 | numerical entropy production separates every KH outcome |
+| 46 | Codex: mesh-velocity smoothing does not cure the moving-N Sod noise |
+| 47 | the entropy term is refuted; the sigma fraction rescues KH completely |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -7169,3 +7171,102 @@ alternative mechanism proposed by Claude Code against the matched static-N
 target and these figures. If no mechanism has a clearer mathematical basis
 than reactive mesh-velocity smoothing, stop tuning Sod and proceed to the KH
 instability campaign.
+
+---
+
+## 47. 2026-08-19: the entropy term is refuted; the sigma fraction rescues KH completely
+
+- **Author:** Claude Code (Opus 5).
+- **Campaign:** `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_EntropySweep_20260819`.
+- **Figures:** `figures/kh-entropy-sweep-density.{png,pdf}` (2-D density, six arms
+  x four times) and `figures/kh-entropy-sweep-curves.{png,pdf}`.
+- **Status:** the mechanism proposed in `dev_log/RD_ALE_entropy_dissipation.md`
+  is **not** the cause of the KH failure. That document's algebra stands; its
+  causal claim does not.
+
+### 47.1 The two switches
+
+`RD_ALE_ENTROPY_DISSIPATION=eps` implements the term of the derivation:
+`K_j^+ += eta_j P_e`, `K_j^- -= eta_j P_e`, with the element-level gate
+`eta_j = (1/2)|n_j| max(0, eps c - |u - sigmabar_T|)`.
+`RD_ALE_MESH_VELOCITY_FRACTION=f` scales `VelVertex` by `f`, so `f=1` is
+quasi-Lagrangian and `f=0` reproduces the existing zero-mesh test.
+
+Six arms on the section-41 KH, all else matched: `eps` = 0, 0.1, 0.2, 0.3 and
+`f` = 0.5, 0.75.
+
+### 47.2 Result
+
+| arm | outcome | entropy excursion at `t=0.8` | min cell mass at `t=1.0` |
+| --- | --- | ---: | ---: |
+| `eps = 0` (baseline) | fails `t=1.008` | 1.015 | 5.46e-5 |
+| `eps = 0.1` | fails `t=1.084` | 0.661 | 5.54e-5 |
+| `eps = 0.2` | fails `t=0.978` | 3.937 | -- |
+| `eps = 0.3` | fails `t=1.022` | 1.421 | 3.46e-5 |
+| **`f = 0.5`** | **completes `t=2`** | **0.188** | 8.50e-5 |
+| **`f = 0.75`** | **completes `t=2`** | **0.114** | 8.61e-5 |
+
+The initial minimum cell mass is `1.106e-4`.
+
+**The entropy term does act, and it does not matter.** At `t=0.4` it reduces
+the entropy excursion sixfold, `4.35e-2` to `6.26e-3`, so the implementation is
+not inert and the entropy mode really is what it targets. But the failure time
+moves by less than ten per cent and is not monotone in `eps`, the 2-D density
+maps at `t=0.8` are indistinguishable between `eps=0`, `0.1` and `0.3` -- all
+three show the roll-ups disintegrating into mesh-scale fragments -- and every
+arm dies near `t=1`.
+
+**The sigma fraction rescues it completely.** Both `f=0.5` and `f=0.75` produce
+clean cat's-eye vortices at `t=0.8` and `t=1.2` and run to `t=2`. Their entropy
+stays bounded at 0.36 and 0.22, comparable to static LDA's 0.42. A 25 per cent
+reduction in how Lagrangian the mesh is turns a run that dies at `t=1` into one
+that completes.
+
+### 47.3 What actually fails
+
+The minimum cell mass separates the arms where nothing else does. Every `eps`
+arm collapses from `1.1e-4` to `3.5-5.5e-5` by `t=1.0` and then loses a cell
+entirely within a few steps -- the failing cell has `oldMass = 4.7e-6`, an
+order of magnitude below the last recorded minimum, so the collapse is abrupt
+rather than gradual. Both `f` arms stay at `8.5-10.4e-5` through `t=2` and
+never form such a cell.
+
+So the causal chain is **Lagrangian mesh, plus KH shear, produces mesh
+distortion and cell collapse, which produces the negative mass.** The entropy
+runaway measured in section 45 is real, and it is a co-symptom of the same mesh
+degradation rather than its cause. That is why restoring entropy dissipation
+without touching the mesh changes the entropy number and nothing else.
+
+Section 45.4 listed as unsettled "whether the entropy runaway and the
+small-cell signature are the same event". They are not, and the small-cell
+signature is the one that matters.
+
+### 47.4 What this costs the earlier reasoning
+
+Sections 44 to 46 and the derivation document argued that changing `sigma` was
+the wrong route because it surrenders the Lagrangian property the moving mesh
+exists for, and that an operator-side fix was preferable because it leaves the
+mesh alone. **The operator-side fix was implemented, is provably correct in the
+sense the derivation claims, measurably does what it was designed to do, and
+does not solve the problem.** The route argued against is the one that works.
+
+The derivation is not retracted. Its algebra is verified and its account of the
+Sod transverse noise stands. What is retracted is section 3's implication that
+the mesh-velocity route only helps by surrendering something valuable: at
+`f=0.75` the surrender is 25 per cent, and the Galilean advantage at that value
+is now a measurement to be made rather than an assumption. Section 46's
+negative result also reads differently now: Codex's sensor failed because it
+was reactive, not because the mesh-velocity axis is the wrong one.
+
+### 47.5 Next
+
+1. **Measure what `f` costs.** The Gresho boost-3 and boost-10 covariance
+   study at `f = 0.75` and `f = 0.5`, against `f = 1`. If the boost-10
+   advantage largely survives at `f=0.75`, that is the practical default.
+2. **Find the threshold.** `f = 0.9` and `f = 0.95` on KH, to locate where the
+   rescue stops working; the useful default is the largest `f` that completes.
+3. **Confirm the mechanism directly** by recording cell aspect ratio or minimum
+   dual area against `f`, rather than inferring it from the failure signature.
+4. Keep `RD_ALE_ENTROPY_DISSIPATION` compiled out. It is a working
+   implementation of a correct piece of mathematics that addresses a real but
+   non-fatal defect, and it should not be adopted on the strength of that.

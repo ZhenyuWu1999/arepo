@@ -465,6 +465,26 @@ void set_vertex_velocities(void)
         }
     } /* for loop of active particles */
 
+#ifdef RD_ALE_MESH_VELOCITY_FRACTION
+#ifndef RD_ALE_EQUALSTEP
+#error "RD_ALE_MESH_VELOCITY_FRACTION is only a test policy for RD_ALE_EQUALSTEP."
+#endif
+  /* sigma <- f * sigma, the control axis of the Lagrangian-limit study.  f = 1
+   * is the quasi-Lagrangian default and f = 0 reproduces
+   * RD_ALE_TEST_ZERO_MESH_VELOCITY.  The relative velocity u - sigma, whose
+   * vanishing removes the entropy and shear dissipation, scales as (1 - f) for
+   * a mesh that would otherwise follow the fluid exactly.  See
+   * dev_log/RD_ALE_entropy_dissipation.md. */
+  for(idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
+    {
+      i = TimeBinsHydro.ActiveParticleList[idx];
+      if(i < 0)
+        continue;
+      for(j = 0; j < 3; j++)
+        SphP[i].VelVertex[j] *= (double)(RD_ALE_MESH_VELOCITY_FRACTION);
+    }
+#endif
+
 #ifdef RD_ALE_TEST_ZERO_MESH_VELOCITY
 #ifndef RD_ALE_EQUALSTEP
 #error "RD_ALE_TEST_ZERO_MESH_VELOCITY is only a test policy for RD_ALE_EQUALSTEP."
