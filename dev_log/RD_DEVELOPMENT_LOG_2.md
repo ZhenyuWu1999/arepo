@@ -104,6 +104,7 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 45 | numerical entropy production separates every KH outcome |
 | 46 | Codex: mesh-velocity smoothing does not cure the moving-N Sod noise |
 | 47 | the entropy term is refuted; the sigma fraction rescues KH completely |
+| 48 | the Lagrangian-fraction threshold, the t=10 test, and regularisation's failure |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -7270,3 +7271,100 @@ was reactive, not because the mesh-velocity axis is the wrong one.
 4. Keep `RD_ALE_ENTROPY_DISSIPATION` compiled out. It is a working
    implementation of a correct piece of mathematics that addresses a real but
    non-fatal defect, and it should not be adopted on the strength of that.
+
+---
+
+## 48. 2026-08-19: the Lagrangian-fraction threshold, the long-time test, and regularisation does not help
+
+- **Author:** Claude Code (Opus 5).
+- **Campaign:** `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_FracLong_20260819`.
+- **Figures:** `figures/kh-fraction-threshold.{png,pdf}` and
+  `figures/kh-fraction-long.{png,pdf}`.
+
+### 48.1 The switch was confounded and is now clean
+
+`RD_ALE_MESH_VELOCITY_FRACTION` originally scaled the final `VelVertex`, which
+also scaled the regularisation drift, so section 47's `f` mixed two effects. It
+now multiplies the fluid-following assignment `VelVertex = P[i].Vel` **before**
+the `REGULARIZE_MESH_CM_DRIFT` loop. `f` is therefore exactly the fraction of
+the fluid velocity the mesh follows, and mesh regularisation keeps its full
+configured strength at every `f`. All results below use the corrected switch.
+
+### 48.2 Results
+
+| arm | outcome | entropy excursion | min cell mass |
+| --- | --- | ---: | ---: |
+| `f = 1.00` | fails `t=1.008` | 1.02 at `t=0.8` | 1.12e-4 at `t=0.8` |
+| `f = 1.00`, `CellShapingSpeed = 2.0` | **fails `t=1.064`** | 1.67 at `t=0.8` | **6.59e-5** at `t=0.8` |
+| `f = 0.95` | **fails `t=1.687`** | 4.54 at `t=1.6` | 6.57e-5 at `t=1.6` |
+| `f = 0.90` | completes `t=2` | 0.12 at `t=2` | 1.04e-4 |
+| **`f = 0.75`** | **completes `t=10`** | 0.20 at `t=2`, 0.00 at `t=8` | 9.9e-5 to 1.24e-4 throughout |
+| static LDA | completes `t=2` | 0.37 at `t=2` | 1.04e-4 |
+
+Initial minimum cell mass is `1.106e-4`.
+
+**The threshold lies between 0.90 and 0.95.** Zhenyu's concern is correct at
+`f = 0.95`: it does not fix anything, it postpones. The run survives to
+`t=1.69` instead of `t=1.01` and then produces exactly the same failure, with a
+full entropy runaway to 4.5 entropy spans and the same collapse of the minimum
+cell mass to `6.6e-5`.
+
+**At `f = 0.75` it is not a postponement.** Ten seconds of evolution, five
+times the baseline failure time, with the failure indicator flat: the minimum
+cell mass ends at `1.24e-4`, *above* its initial value, and never approaches
+the `4.7e-6` of a failing cell. The collapse mechanism is not operating slowly;
+it is not operating.
+
+### 48.3 Mesh regularisation does not rescue it, at any strength tested
+
+`CellShapingSpeed = 0.5` is the value every parameter file in the repository
+uses, so the failing runs were already at the AREPO default. Raising it to
+`2.0` at `f = 1` **fails at `t = 1.064` against the baseline `t = 1.008`** --
+within six per cent -- and makes the minimum cell mass *worse* at `t=0.8`,
+`6.59e-5` against `1.12e-4`.
+
+This matters beyond the negative result. Zhenyu's stated requirement was that
+the scheme should not depend on a narrow parameter window, and the regularisation
+knob turns out not to open one at all: four times the default strength moves the
+failure time by six per cent. Together with section 46's sensor result, two
+independent attempts to fix this from the mesh-velocity *correction* side have
+now failed, while scaling the fluid-following *fraction* works. The distinction
+is that regularisation and the sensor are both reactive -- they respond to
+distortion after it exists -- whereas `f` reduces the rate at which the mesh is
+dragged into the shear layer in the first place.
+
+### 48.4 A caveat on the entropy metric
+
+The `f = 0.75` entropy excursion falls to `0.000` at `t = 8` and `t = 10`. That
+must not be read as accuracy. The metric is **one-sided**: it detects states
+outside the initial entropy range and is blind to diffusion inside it. By
+`t = 10` the density contrast has decayed substantially,
+
+```
+t        rho range        std(rho)   |grad rho| p95
+0.0    [1.000, 2.000]      0.4743         1.0000
+2.0    [0.921, 2.210]      0.3783         1.0089
+6.0    [1.087, 2.174]      0.2301         0.5790
+10.0   [1.103, 1.849]      0.1609         0.4514
+```
+
+so the excursion vanishes because the solution has moved inside the bounds, not
+because it is converged. Whether that decay is physical mixing of a fully
+nonlinear KH or numerical diffusion is **not decided by any measurement here**
+and needs a resolution study.
+
+### 48.5 Where this leaves the moving mesh
+
+The honest summary is narrower than "f = 0.75 fixes it":
+
+- moving LDA fails on KH for every `f` above about 0.9, including at `f = 1`;
+- it survives to `t = 10` at `f = 0.75` with a flat failure indicator;
+- neither mesh regularisation nor a discontinuity sensor changes this;
+- the price of `f = 0.75` in Galilean invariance has still not been measured,
+  and that measurement is now the deciding one. Section 47.5 item 1 stands and
+  should be run before `f` is proposed as anything.
+
+An `f` of 0.75 means the mesh follows three quarters of the fluid velocity. That
+is no longer a quasi-Lagrangian scheme, and calling it one would be misleading;
+what it costs on Gresho with boost is the number that decides whether it is a
+moving-mesh method worth having.
