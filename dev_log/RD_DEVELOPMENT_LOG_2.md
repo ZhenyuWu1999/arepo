@@ -105,6 +105,7 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 46 | Codex: mesh-velocity smoothing does not cure the moving-N Sod noise |
 | 47 | the entropy term is refuted; the sigma fraction rescues KH completely |
 | 48 | the Lagrangian-fraction threshold, the t=10 test, and regularisation's failure |
+| 49 | what the Lagrangian fraction costs on Gresho with boost: too much |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -7368,3 +7369,103 @@ An `f` of 0.75 means the mesh follows three quarters of the fluid velocity. That
 is no longer a quasi-Lagrangian scheme, and calling it one would be misleading;
 what it costs on Gresho with boost is the number that decides whether it is a
 moving-mesh method worth having.
+
+---
+
+## 49. 2026-08-19: what the Lagrangian fraction costs, measured on Gresho with boost
+
+- **Author:** Claude Code (Opus 5).
+- **Campaign:** `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Gresho_Boost_Fraction_20260819`.
+- **Status:** this is the deciding measurement section 48.5 asked for. It
+  decides against `f = 0.75`.
+
+### 49.1 The measurement
+
+Nine runs, Gresho vortex at `n=48` to `t=1` on the moving mesh with LDA, at
+boosts 0, 3 and 10 and Lagrangian fractions 1.00, 0.90 and 0.75. All nine
+complete. The metric is the mass-weighted `L1` of the azimuthal velocity against
+the analytic Gresho profile, evaluated in the vortex frame, so a perfectly
+Galilean-invariant scheme returns the same number at every boost.
+
+| | boost 0 | boost 3 | boost 10 | `b3/b0` | `b10/b0` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `f = 1.00` | 9.3116e-3 | 9.4464e-3 | 9.7385e-3 | **1.01** | **1.05** |
+| `f = 0.90` | 9.1088e-3 | 1.0516e-2 | 2.0735e-2 | 1.15 | **2.28** |
+| `f = 0.75` | 9.0706e-3 | 1.5841e-2 | 7.1418e-2 | 1.75 | **7.87** |
+
+Section 25 records the static mesh losing a factor of about 14 over the same
+range, which is the other end of the scale.
+
+### 49.2 Reading
+
+**At boost zero the three are indistinguishable**, 9.07e-3 to 9.31e-3. Lowering
+`f` costs nothing when there is no bulk motion. Everything below is purely the
+loss of Galilean invariance, which is exactly the property the moving mesh
+exists to provide.
+
+**`f = 1.00` is essentially Galilean invariant**: 1.05 at boost 10.
+
+**`f = 0.75` surrenders most of the advantage.** Measured logarithmically
+between the moving-mesh value 1.05 and the static-mesh value 14, `f = 0.90`
+gives up about 30 per cent of the advantage and `f = 0.75` about 78 per cent.
+A method that keeps 22 per cent of its Galilean advantage is not a
+quasi-Lagrangian method with a small correction; it is most of the way back to
+a static mesh, while still paying the whole cost of moving-mesh machinery.
+
+### 49.3 The trade, stated plainly
+
+| `f` | KH outcome | boost-10 `L1` penalty | advantage retained |
+| ---: | --- | ---: | ---: |
+| 1.00 | fails `t=1.008` | 1.05 | 100% |
+| 0.95 | fails `t=1.687` | not measured | -- |
+| 0.90 | completes `t=2` | 2.28 | ~70% |
+| 0.75 | completes `t=10` | 7.87 | ~22% |
+| static | completes `t=2` | ~14 | 0% |
+
+**There is no value of `f` that is both robust and Galilean invariant in this
+data.** The fraction that survives the long KH run gives up most of the reason
+for running a moving mesh, and the fraction that keeps the invariance dies on
+KH at `t = 1`. `f` is a diagnostic that has now told us something real about the
+failure, not a solution.
+
+Zhenyu's judgement on first seeing the section 48 result -- that `f = 0.75` is
+a temporary workaround, that it is unlikely to be a universal constant, and
+that it probably weakens the quasi-Lagrangian advantage -- is confirmed on all
+three counts by this table.
+
+### 49.4 What is actually established
+
+Six sections of work reduce to a short list.
+
+**Established:**
+
+1. Moving LDA fails on KH by cell collapse under Lagrangian shear, at every
+   `f` above about 0.9 (sections 47, 48).
+2. The failure is not the entropy mode. A correct, targeted, conservation- and
+   covariance-exact entropy dissipation was implemented, demonstrably acts, and
+   does not change the outcome (section 47).
+3. It is not mesh regularisation either, at four times the default strength
+   (section 48.3), and not a discontinuity-driven mesh-velocity sensor
+   (section 46).
+4. Reducing how far the mesh follows the fluid does prevent it, and the price
+   in Galilean invariance is now quantified and is too high (this section).
+5. N and B do not fail on KH at all. The problem is specific to LDA's
+   non-monotone distribution on a Lagrangian mesh.
+
+**Not established:** any mechanism that keeps `f = 1` and prevents the
+collapse. That is the open problem, and the evidence now points at it being a
+property of the LDA distribution rather than of the ALE construction, since
+every ALE-side intervention has failed while changing the distribution (to N,
+or to B, or blending toward N) works.
+
+### 49.5 Next
+
+The remaining untried direction is the one section 43.1 already showed works
+empirically without understanding why: a limiter that makes LDA locally
+N-like where the mesh is about to degenerate. Section 43.1 found scalar B
+completing KH with mean `theta` rising to 0.761, which was read there as B
+"surviving by becoming N-like" and treated as disappointing. In light of
+sections 47 to 49 it should be read as the only intervention that has worked
+while keeping `f = 1`, and it deserves the Gresho boost measurement that `f`
+has just been given. If scalar B holds `b10/b0` near 1.05 while completing KH,
+it is the answer and `f` can be retired to a diagnostic.
