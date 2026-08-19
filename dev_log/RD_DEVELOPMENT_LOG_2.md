@@ -7414,19 +7414,40 @@ a static mesh, while still paying the whole cost of moving-mesh machinery.
 
 ### 49.3 The trade, stated plainly
 
+`f = 0.90` was subsequently run to `t = 10` as well, and completes. Its health
+indicators are not marginal, and on the entropy metric it is **better** than
+`f = 0.75`:
+
+| `t` | min cell mass, `f=0.90` | entropy, `f=0.90` | entropy, `f=0.75` |
+| ---: | ---: | ---: | ---: |
+| 1.0 | 8.31e-5 | 0.082 | 0.140 |
+| 2.0 | 1.01e-4 | 0.134 | 0.204 |
+| 4.0 | 8.49e-5 | 0.081 | 0.311 |
+| 10.0 | 1.11e-4 | 0.000 | 0.000 |
+
+against an initial minimum cell mass of `1.106e-4`. The complete trade:
+
 | `f` | KH outcome | boost-10 `L1` penalty | advantage retained |
 | ---: | --- | ---: | ---: |
 | 1.00 | fails `t=1.008` | 1.05 | 100% |
-| 0.95 | fails `t=1.687` | not measured | -- |
-| 0.90 | completes `t=2` | 2.28 | ~70% |
+| 0.95 | **fails `t=1.687`** | not measured | -- |
+| **0.90** | **completes `t=10`** | **2.28** | **~70%** |
 | 0.75 | completes `t=10` | 7.87 | ~22% |
 | static | completes `t=2` | ~14 | 0% |
 
-**There is no value of `f` that is both robust and Galilean invariant in this
-data.** The fraction that survives the long KH run gives up most of the reason
-for running a moving mesh, and the fraction that keeps the invariance dies on
-KH at `t = 1`. `f` is a diagnostic that has now told us something real about the
-failure, not a solution.
+So `f = 0.90` is a materially better operating point than `f = 0.75`: it keeps
+about seventy per cent of the Galilean advantage, survives ten seconds, and
+carries less entropy error. An earlier draft of this section concluded that no
+`f` was both robust and Galilean invariant; with the long `f = 0.90` run that
+statement is too strong and is withdrawn.
+
+**The qualitative verdict does not change, for a different reason.** `f = 0.90`
+sits 0.05 away from `f = 0.95`, which fails at `t = 1.687` with a full entropy
+runaway. A parameter that works at 0.90 and fails catastrophically at 0.95 is
+exactly the narrow operating window Zhenyu asked the scheme not to depend on,
+and nothing in this data says where the cliff sits for a different problem,
+resolution, or Mach number. `f` remains a diagnostic that has told us something
+real about the failure, not a solution.
 
 Zhenyu's judgement on first seeing the section 48 result -- that `f = 0.75` is
 a temporary workaround, that it is unlikely to be a universal constant, and
