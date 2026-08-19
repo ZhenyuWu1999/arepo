@@ -59,3 +59,8 @@ examples/*/ic_*/
 # manifest, which is what --verify checks the tree against.
 examples/**/IC_*.hdf5
 examples/**/IC_*.png
+
+# Slurm job logs, collected out of the repository root.  Run jobs duplicate
+# what each output directory already holds in run-*.log; build jobs hold the
+# compiler output, which is not preserved anywhere else.
+/_slurm_logs/

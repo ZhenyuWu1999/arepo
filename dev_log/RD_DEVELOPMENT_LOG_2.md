@@ -106,6 +106,7 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 47 | the entropy term is refuted; the sigma fraction rescues KH completely |
 | 48 | the Lagrangian-fraction threshold, the t=10 test, and regularisation's failure |
 | 49 | what the Lagrangian fraction costs on Gresho with boost: too much |
+| 50 | status: the failure is a three-way intersection, and which side to attack |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -7509,3 +7510,68 @@ sections 47 to 49 it should be read as the only intervention that has worked
 while keeping `f = 1`, and it deserves the Gresho boost measurement that `f`
 has just been given. If scalar B holds `b10/b0` near 1.05 while completing KH,
 it is the answer and `f` can be retired to a diagnostic.
+
+---
+
+## 50. 2026-08-19: status of the moving-mesh LDA problem
+
+A consolidation, not new work. Sections 44 to 49 spent six campaigns on one
+failure, and the useful output is a sharp statement of what the failure needs.
+
+### 50.1 The failure is a three-way intersection
+
+Moving LDA fails on long-time KH only when **all three** of the following hold.
+Removing any one of them gives a run that completes:
+
+| drop this | result | price |
+| --- | --- | --- |
+| `f = 1` becomes `f <= 0.90` | completes `t = 10` | 30 to 78 per cent of the Galilean advantage (section 49) |
+| LDA becomes N or B | completes `t = 2` | first-order dissipation, or a blend that becomes N-like |
+| long-time shear becomes Sod, Gresho or Yee | completes | none; `f = 1` with LDA is fine on all of them |
+
+So this is not "the moving mesh has a problem" -- static LDA fails nothing here
+and moving N and B fail nothing here -- and it is not "KH is hard", since static
+LDA completes it. It is the intersection.
+
+### 50.2 Which side the evidence points at
+
+| intervention | side | `f = 1` kept | works |
+| --- | --- | :-: | :-: |
+| targeted entropy dissipation (section 47) | ALE | yes | **no** |
+| mesh regularisation, 4x default (section 48.3) | ALE | yes | **no** |
+| discontinuity mesh-velocity sensor (section 46) | ALE | yes | **no** |
+| Lagrangian fraction `f` (sections 47--49) | ALE | **no** | yes, too expensively |
+| N instead of LDA (section 40) | distribution | yes | yes |
+| component-wise B (section 43.1) | distribution | yes | partly |
+| scalar-theta B (section 43.1) | distribution | yes | yes |
+
+**Every ALE-side intervention that preserves `f = 1` has failed, and every
+distribution-side intervention has worked.** Four attempts against three. That
+is the clearest signal in the whole phase, and it says the remedy is a property
+of the distribution, not of the ALE construction.
+
+### 50.3 The one option nobody has tried
+
+The failure is extraordinarily localised. At the moment of death a **single**
+cell has collapsed to `oldMass = 4.7e-6` against a typical `1.1e-4`, a factor
+of 24, while the several thousand others are healthy; the last recorded
+snapshot minimum, one or two steps earlier, is still `5.5e-5`.
+
+The only intervention that currently works at `f = 1` answers that single cell
+by making the **entire domain** N-like: section 43.1 measures scalar B's mean
+`theta` rising to 0.761 with 38 per cent of samples fully N.
+
+An a-posteriori fallback triggered only on cells that are actually degenerating
+would leave the LDA distribution untouched in the other 99.9 per cent of the
+domain, and so should cost almost nothing in accuracy or in Galilean
+invariance. Codex listed this as item 4 of section 43.4 and it has never been
+built. It is a different object from B, which acts globally through a smooth
+`theta`, and it is the outstanding candidate.
+
+### 50.4 Recorded position
+
+`f = 1` remains the right default: it is the only value at which the moving
+mesh delivers what it exists for, `1.05` against a static mesh's `14` at boost
+10. The cost of that choice is that long-time shear with LDA is currently
+unavailable, and that limitation should be stated rather than papered over with
+a parameter that works at 0.90 and fails at 0.95.
