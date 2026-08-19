@@ -167,20 +167,81 @@ The last two lines are the content of section 1: `r_e` and `l_e` are the right
 and left entropy eigenvectors *for every direction simultaneously*, which is
 what makes a single element-local projector legitimate.
 
-The proposal is, per face,
+The proposal is
 
 ```
 K_j^+  <-  K_j^+ + eta_j P_e ,
 K_j^-  <-  K_j^- - eta_j P_e ,
-eta_j  =  (1/2) |n_j| * max(0, delta - |w_j|) ,      delta = epsilon * c .
+eta_j  =  (1/2) |n_j| * max(0, epsilon*c - |u - sigmabar_T|) .
 ```
 
-`epsilon = 0` recovers the present scheme exactly.
+`epsilon = 0` recovers the present scheme exactly, bit for bit.
 
-The `max(0, delta - |w_j|)` factor is the Harten-Hyman idea restricted to one
-direction: the term is **inert wherever the entropy eigenvalue is already well
-separated from zero**, so a static mesh away from stagnation is untouched, and
-it switches on smoothly as the mesh becomes Lagrangian.
+**The gate is the element-level relative speed `|u - sigmabar_T|`, not the
+per-face `|w_j|`.** This is not cosmetic and a first draft of this document had
+it wrong. Per-face gating fails, because `w_j = (u - sigma).nhat_j` vanishes
+on any face whose normal is perpendicular to the flow, which happens routinely
+on a *static* mesh. Gating per face would therefore fire everywhere and change
+every already-validated static-mesh result. Measured on the Sod star-state
+element, damping relative to the unmodified static mesh:
+
+| `epsilon` | entropy damping, Lagrangian | entropy damping, static | static mesh changed |
+| ---: | ---: | ---: | ---: |
+| | | | *per-face gate* |
+| 0.10 | 0.3727 | 1.1242 | 1.2e-1 |
+| 0.30 | 1.1180 | 1.3727 | 3.7e-1 |
+| | | | *element gate* |
+| 0.10 | 0.3727 | 1.0000 | **0** |
+| 0.30 | 1.1180 | 1.0000 | **0** |
+| 1.00 | 3.7266 | 1.2625 | 2.6e-1 |
+
+With the element gate the term is **identically zero** on the static mesh for
+every `epsilon` below that element's relative Mach number, while supplying the
+full effect in the Lagrangian limit.
+
+### 4.1 What `epsilon` means
+
+Every quantity in the term is fixed by `epsilon`, which is the only free
+parameter. Its meaning is a **mesh-relative Mach number**.
+
+Define the element's mesh-relative Mach number
+
+```
+M_rel = |u - sigmabar_T| / c .
+```
+
+`M_rel` measures how far this element's mesh is from Lagrangian: it is
+`|u|/c` on a static mesh, and exactly `0` when the generators follow the fluid.
+It is frame-invariant, which is why the whole construction stays Galilean
+covariant. The rule is then
+
+> **`epsilon` is the smallest mesh-relative Mach number the scheme is willing
+> to attribute to the entropy wave when computing its dissipation.**
+
+- `M_rel >= epsilon` -- the term is exactly zero and nothing changes;
+- `M_rel < epsilon` -- the entropy mode is dissipated as though the relative
+  flow were at Mach `epsilon`, while the acoustic and shear modes keep their
+  true eigenvalues.
+
+Dimensionally `eta_j` is `[length] x [velocity]`, matching `K_j = (1/2)|n_j|
+A_sigma`, so `epsilon` is dimensionless and `epsilon*c` is a velocity floor.
+
+The scale that matters is set by how much damping the static mesh had. For the
+Sod star-state element the measured Lagrangian entropy damping is
+`epsilon / 0.268` of the static value, so `epsilon` of about **0.27** restores
+exactly what the static mesh supplied. That coefficient is not universal -- it
+is the ratio of `(1/2) sum_j |n_j| max(u.nhat_j, 0)` to `(1/2) sum_j |n_j| c`,
+so it depends on the element shape and on the flow direction relative to the
+faces -- but it fixes the scale. **The interesting range is `epsilon` of order
+0.1 to 0.3**, and the KH campaign should sweep it there.
+
+Two values have a fixed meaning independent of the problem:
+
+- `epsilon = 0` is the present scheme, bit for bit, and is the regression
+  baseline;
+- `epsilon = 1` demands sonic relative flow, so it also modifies subsonic
+  *static* configurations. That is the upper end of anything defensible, and
+  is a diagnostic rather than a candidate default.
 
 ## 5. The four properties that make this the right shape
 
