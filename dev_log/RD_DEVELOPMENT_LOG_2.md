@@ -7376,6 +7376,9 @@ moving-mesh method worth having.
 
 - **Author:** Claude Code (Opus 5).
 - **Campaign:** `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Gresho_Boost_Fraction_20260819`.
+- **Figure:** `figures/gresho-boost-fraction-profiles.{png,pdf}`, a 3x3 grid of
+  azimuthal-velocity profiles, rows the Lagrangian fraction and columns the
+  boost. Script `examples/gresho_2d/plot_gresho_boost_fraction.py`.
 - **Status:** this is the deciding measurement section 48.5 asked for. It
   decides against `f = 0.75`.
 
@@ -7395,6 +7398,22 @@ Galilean-invariant scheme returns the same number at every boost.
 
 Section 25 records the static mesh losing a factor of about 14 over the same
 range, which is the other end of the scale.
+
+The ratio columns are the quantity the figure annotates as "x N vs boost 0":
+each panel's `L1` divided by the `L1` of the **boost-zero panel in its own
+row**. Since the boost is subtracted before the azimuthal velocity is formed,
+and a boosted Gresho vortex is the same vortex, that ratio is the frame
+dependence with the ordinary discretisation error divided out. The first column
+is 1.00 by construction, and the three rows share a denominator to within two
+per cent, so the ratios are comparable across rows as well as along them.
+
+The figure makes the same point without the numbers. Along the top row the
+three panels are indistinguishable. At `f = 0.90` the boost-10 panel visibly
+broadens at the peak and develops structure in the `r > 0.4` region that should
+be exactly at rest. At `f = 0.75` and boost 10 the Gresho profile is no longer
+recognisable: the peak is flattened and displaced inward, the scatter runs from
+`r = 0` to `r = 0.65`, and a clear negative-velocity band appears beyond
+`r = 0.4`.
 
 ### 49.2 Reading
 
