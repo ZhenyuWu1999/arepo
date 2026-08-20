@@ -107,6 +107,10 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 48 | the Lagrangian-fraction threshold, the t=10 test, and regularisation's failure |
 | 49 | what the Lagrangian fraction costs on Gresho with boost: too much |
 | 50 | status: the failure is a three-way intersection, and which side to attack |
+| 51 | Kimi: proposed shear-mode floor for Sod, and discriminators for the KH failure |
+| 52 | Codex: the MOOD fallback fires too late; local N cannot repair the precursor |
+| 53 | the three-day stopping-rule sprint: LF control, Bmax, Bx |
+| 54 | review of that plan: two gaps; scalar-B boost first, eigenvalue floor second |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -7575,3 +7579,669 @@ mesh delivers what it exists for, `1.05` against a static mesh's `14` at boost
 10. The cost of that choice is that long-time shear with LDA is currently
 unavailable, and that limitation should be stated rather than papered over with
 a parameter that works at 0.90 and fails at 0.95.
+
+
+---
+
+## 51. 2026-08-19: review of the two open moving-mesh problems, with proposed next experiments
+
+- **Author:** Kimi (K3).
+- **Scope:** review of sections 41-50 and of the current solver code, at
+  Zhenyu's request for recommendations on (1) the moving-N Sod discontinuity
+  oscillation and (2) the moving-LDA KH long-time failure. No code change, no
+  new run: this section records proposed experiments and their quantitative
+  predictions, not results.
+- **Status:** advisory. Every item below is a proposal to be reviewed by
+  Zhenyu before any campaign is launched.
+
+### 51.1 Sod: extend the existing dissipation floor from the entropy mode to the full linearly degenerate subspace
+
+Section 44.2 localised the moving-N transverse-noise excess to the shear mode
+(0.554 residual damping at `sigma = u`, predicting 1/0.554 = 1.81 against the
+measured 1.80), and showed the entropy-mode annihilation is benign. Section 47
+built `RD_ALE_ENTROPY_DISSIPATION`, which adds `eta_j P_e` to `K_j^+` and
+subtracts it from `K_j^-`, and proved it acts (sixfold entropy-excursion
+reduction) -- but it projects onto the entropy mode only, while the Sod excess
+lives in the shear mode.
+
+The proposed change is to add the shear projector `P_s` alongside `P_e` in the
+same construction (`rd_add_entropy_dissipation`,
+`src/hydro/residual_distribution_solver.c:716`), i.e.
+`K^+ += eta (P_e + P_s)`, `K^- -= eta (P_e + P_s)`, with the existing
+element-level gate `eta_j = (1/2)|n_j| max(0, eps c - |u - sigmabar_T|)`
+unchanged. The three properties proved in the derivation carry over unchanged,
+because they depend only on the term being a symmetric `K^+/K^-` pair built
+from spectral projectors:
+
+1. `K^+ + K^- = K` is untouched, so conservation is exact;
+2. `sum_i K_i^+ = -S^-` survives, so LDA stays linearity-preserving;
+3. the construction is Galilean covariant.
+
+A fourth property is the one that matters for Sod: a steady contact and a
+steady shear layer co-moving with the mesh both have `Phi = 0`, so the added
+dissipation acts only on non-zero residuals -- it damps the noise without
+diffusing the exact steady states.
+
+**Quantitative prediction, to be verified offline before any run.** Extending
+`shear_mode_damping.py` to the modified `K` should show the shear damping
+rising from 0.554 toward 1 as `eps` approaches `1 - 0.554 = 0.446`, so
+`eps ~= 0.45` should bring the moving/static `RMS(v_y)` ratio from 1.80 back
+to about 1.0. The simulation campaign should only be launched after this
+offline check passes.
+
+Physical reading: this is not a patch but a floor -- it restores, for the
+linearly degenerate modes on a near-Lagrangian mesh, the dissipation those
+modes have on a static mesh through `|u.n|`. The cost is confined to
+`|u - sigma| < eps c` and is of exactly the magnitude a static mesh would
+have paid there.
+
+Independently of whether the fix is adopted, a glass64/96 resolution sequence
+for the moving/static `RMS(v_y)` ratio should be run: the factor 1.80 is an
+eigenvalue property and is predicted to be resolution-independent. Confirming
+that converts the defect from an open problem into a bounded, explained and
+optionally repairable one that can be stated in the thesis as such.
+
+### 51.2 KH: a decisive diagnostic before any further fix is built
+
+Sections 47-49 eliminated the entropy mode, mesh regularisation and the
+discontinuity sensor as causes, and section 50.3 identified the a-posteriori
+fallback as the outstanding candidate. Before building it, one cheap
+discriminator should decide between the two remaining causal families, because
+they imply different remedies.
+
+**Geometry-first versus solution-first.** Track the worst cell step by step
+(section 43.4 item 3, apparently never executed): record its dual area
+`A_i(t)`, its mass `m_i(t)`, and the purely geometric predicted area obtained
+from the vertex-drift trajectory alone, independently of the solution update.
+
+- If the dual area collapses first, the root cause is the mesh motion: LDA's
+  dispersive velocity noise pollutes `P[i].Vel`, and the vertices are dragged
+  into a sliver. The supporting observation is that moving N completes the
+  same KH under the same mesh-motion rule, differing only in the smoothness
+  of the velocity field. The remedy must then act on the mesh velocity --
+  and since both reactive corrections (sections 46, 48.3) failed, it would
+  need to be a stronger constraint, e.g. a direct limit on the vertex
+  displacement relative to its star.
+- If the area stays healthy while the mass goes negative, it is a positivity
+  failure of the distribution/update, and the a-posteriori fallback below is
+  exactly the right remedy.
+
+**Timestep check.** The failure is abrupt -- one cell drops from `5.5e-5` to
+`4.7e-6` within a few steps -- which is the signature of a local CFL violation
+on a collapsing cell. Whether the RD timestep uses a length scale based on the
+median-dual area and the ALE signal speed `|u - sigma| + c`, or a Voronoi-based
+or otherwise less local scale, should be checked in the code. If the latter,
+adding `min(h_dual / (|u - sigma| + c))` to the timestep is a principled fix
+that keeps `f = 1` and keeps LDA everywhere, and it should be tested before
+any limiter work.
+
+### 51.3 KH: design notes for the a-posteriori (MOOD-type) fallback
+
+Section 50.3 identified this as the one option nobody has tried. Design
+details to be settled before implementation:
+
+1. **Detector.** After the RK predictor, flag a vertex if its update gives
+   density or pressure below a small multiple of the physical floor, or if
+   the predicted dual mass satisfies `m_i^{n+1} < delta m_i^n` with
+   `delta ~ 0.5`. Cascade the flag to the star neighbours, since a degenerate
+   vertex receives residuals from every element of its star.
+2. **Fallback.** Recompute the distribution of every element in the flagged
+   stars with the N distribution (`theta_T = 1`), consistently in both RK
+   stages. N is element-conservative, so global conservation is preserved
+   exactly.
+3. **Cost control.** Section 50.3 records that the failure involves one cell
+   in several thousand, so the expected accuracy and Galilean-invariance cost
+   is negligible. But the fraction of flagged elements per step must be
+   logged; if it settles above a few per cent, the scheme has effectively
+   become N and that must be reported rather than presented as LDA.
+4. **Acceptance test.** The fallback must reproduce the section-43.1
+   scalar-B completion of KH to `t = 2` while keeping the flagged fraction at
+   the per-mille level, and then pass the section-49 Gresho boost measurement
+   with `b10/b0` near 1.05. Only then is it a solution rather than a
+   global-limiter in disguise.
+
+### 51.4 A mathematical check available offline: the conditioning of `S^-`
+
+LDA requires solving `S^- x = phi`; the code already handles the singular case
+with the minimum-norm pseudo-inverse (`rd_solve_upwind_system`,
+`src/hydro/residual_distribution_solver.c:773`), and the
+`RD_ALE_CONDITION_DIAGNOSTIC` switch already exists. On a Lagrangian mesh
+`S^-` loses rank in the linearly degenerate subspace, so the minimum-norm
+solution discards information along exactly those directions. The proposal is
+to instrument a failing KH run to record, for the few steps before failure,
+the numerical rank and condition number of `S^-` per element. If the
+collapsing cell correlates with ill-conditioning, "fall back to N when `S^-`
+is ill-conditioned" is a local trigger with a mathematical basis, and it
+fires earlier than any mass-based detector. This is a diagnosis first; it
+becomes a remedy only if the correlation is found.
+
+### 51.5 Position on the Lagrangian fraction
+
+Section 50.4 is endorsed: `f = 1` remains the default, the `f` sweep has
+completed its diagnostic mission, and `f = 0.90` is not a solution -- a
+parameter that works at 0.90 and fails catastrophically at 0.95 is the narrow
+operating window Zhenyu explicitly asked the scheme not to depend on, and
+nothing says where the cliff sits for a different problem, resolution or Mach
+number.
+
+### 51.6 Suggested order of work
+
+The shear-projector extension for Sod (51.1, offline prediction first) and
+the geometry-first versus solution-first discriminator for KH (51.2) are
+independent, both are about a day of work each, and each directly decides the
+next investment: 51.1 either retires the Sod-N defect or bounds it as a
+known constant, and 51.2 selects between a mesh-velocity remedy and the MOOD
+fallback (51.3), with the timestep check (51.2) and the `S^-` conditioning
+audit (51.4) as near-free additions to the same instrumented run.
+---
+
+## 52. 2026-08-20: a-posteriori local LDA-to-N fallback on glass48 KH
+
+- **Author:** Codex.
+- **Purpose:** execute the section-51.3 MOOD-type proposal: keep the full
+  f=1 moving-LDA candidate, reject a bad RK trial, and recompute only the
+  flagged element star with the N branch.
+- **Status:** diagnostic prototype built and exercised. The retry mechanism
+  works, but the mass/positivity detector does **not** pass the KH acceptance
+  test. It fires after a slowly accumulated LDA undershoot has already
+  contaminated the state; local N rescues two steps but cannot repair that
+  history on the third.
+
+### 52.1 Configuration and implementation boundary
+
+True glass48 KH IC:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Glass_Sod_KH_ALE_20260818/inputs/IC_kh_glass48
+
+Switches: Arpaia equal-step ALE, full mesh velocity f=1, co-moving element
+frame, Roe residual plus split mesh-velocity term, internal two-pass RK2+F1
+total residual, RD CFL selection, one MPI rank, snapshots every 0.2, and
+requested TimeMax=2.
+
+Experimental switch:
+
+    RD_ALE_APOSTERIORI_FALLBACK=0.5
+
+Relevant source/configuration files:
+
+    src/hydro/residual_distribution_solver.c
+    defines_extra
+    examples/shocktube_2d/Config_KH_APOSTERIORI_f050.sh
+    examples/shocktube_2d/param_KH_APOSTERIORI_glass48.txt
+
+The ordinary B sensor is bypassed. The coherent B implementation is used only
+as a two-branch engine: mask 0 is LDA and mask 1 is N/lumped. Each timestep
+freezes the same mesh velocity, geometry and connectivity, saves the Arpaia
+stage-0 state, tries both RK stages with LDA, inspects predictor and endpoint
+candidates, restores Q and primitives on rejection, marks every element
+incident on a bad vertex, and retries both stages.
+
+A density ratio below 0.5 is a soft detector. Once that vertex star has
+switched to N, the low-order candidate is judged only by hard density/pressure
+positivity; the arbitrary 0.5 warning threshold is not treated as an
+admissibility theorem. If a complete N star is still non-physical, a second
+diagnostic variant expands the N patch by successive element rings.
+
+This is intentionally a global algebraic retry on one rank. It is compiled out
+by default and is **not** the future pending-ledger/MPI/hierarchical design.
+
+### 52.2 Empty-mask validation
+
+At time 0.2001953125, the new path was compared by ParticleID with the earlier
+glass48 moving Roe-LDA snapshot. IDs and times are identical.
+
+| field | maximum absolute difference | mean absolute difference |
+| --- | ---: | ---: |
+| coordinates | 2.80e-11 | 1.81e-14 |
+| density | 1.62e-10 | 4.37e-13 |
+| pressure | 2.12e-11 | 1.49e-13 |
+| velocity | 7.48e-11 | 1.17e-13 |
+| stored mass | 3.67e-13 | 1.19e-15 |
+| volume | 3.11e-13 | 9.35e-16 |
+
+An empty fallback mask therefore introduces no hidden B/N dissipation. The
+differences are floating-point ordering only.
+
+### 52.3 Failure sequence
+
+The pure-LDA history contains a long precursor that the per-step 0.5 ratio test
+does not detect:
+
+| snapshot time | min density | max density | min pressure |
+| ---: | ---: | ---: | ---: |
+| 0.0000 | 1.0000 | 2.0000 | 2.5000 |
+| 0.2002 | 0.9817 | 2.0430 | 2.3754 |
+| 0.4004 | 0.9425 | 2.0517 | 2.2659 |
+| 0.6001 | 0.8398 | 2.0529 | 2.1929 |
+| 0.8003 | 0.5250 | 2.1405 | 2.1096 |
+| 1.0000 | 0.3060 | 2.3033 | 1.9852 |
+
+The detector finally acts at ID 1837:
+
+1. At time 1.1550293, the endpoint test gives min density 5.75e-3 and
+   rho(new)/rho(old)=0.146. Six of 4608 triangles (0.1302 per cent) switch
+   to N and the retry is accepted.
+2. At time 1.1552734, the predictor test gives min density 6.30e-3 and ratio
+   0.231. The same six-triangle star switches to N and is accepted.
+3. At time 1.1555176, the LDA predictor is negative at -1.34e-2. The complete
+   six-element N star gives endpoint min density -1.0836e-2, so hard
+   positivity fails.
+
+Eleven halo retries grow the N patch from 6 to 1128 of 4608 triangles
+(24.48 per cent), while the bad density remains -1.083637e-2 to printed
+precision. A larger fallback ring therefore does not repair the already
+contaminated nodal history once every element incident on ID 1837 is N.
+
+The final step is not an invalid-mesh event in the global diagnostics:
+min triangle area / mean area = 0.2617, minimum triangle angle = 0.3498 rad,
+inverted=0, nonpos_Sbar=0, ALE coverage differs from one by about 1e-15, and
+pullback error is 8.7e-19. This rules out a sliver, inverted triangle, or
+negative endpoint dual area as the immediate cause. It does not replace
+Kimi's requested per-ID history of dual area and mass, which is still needed
+to establish which quantity began drifting first.
+
+The selected timestep had already halved to 2.4414e-4. On the first complete
+N-star retry, the reported RD midpoint limit was 2.4954e-4, so the existing RD
+CFL condition was nominally satisfied, although only marginally.
+
+### 52.4 Matched global-N control
+
+A global N_SCHEME control used the same IC and the same moving Roe+split,
+co-moving, Arpaia, RK2+F1, RD-CFL and f=1 switches:
+
+    examples/shocktube_2d/Config_KH_GLOBAL_N_ROE_RK2.sh
+
+It completes to time 2. At the local-LDA failure time it remains healthy
+(min density about 0.87 and min pressure about 2.21). At time 2:
+
+    density range = [0.87375, 2.22331]
+    pressure range = [2.37266, 2.63436]
+
+Static LDA also completes to time 2, with density range
+[0.84152, 2.76838] and min pressure 2.06468.
+
+N can therefore prevent the moving-LDA runaway when present from a clean
+history. It cannot reconstruct the lost state when introduced only after the
+density has drifted from 1 to order 1e-2. The result is not “moving N fails”
+and not “fallback wiring is inert”; it is “the proposed mass-ratio/positivity
+detector fires too late.”
+
+### 52.5 Archives and figures
+
+Reproducible analysis:
+
+    examples/shocktube_2d/analyze_kh_aposteriori.py
+
+Fallback halo build and run:
+
+    artifact: build_artifacts/KH_APOSTERIORI_f050_halo/8e0a7715111f-02d4f4982ad31dfe
+    binary SHA256: 4f6c793235b69440e4b54aaef5ad41de4b926837daee49ad83dccf647f5eca3d
+    run: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/glass48_roe_f050_halo_v3/output
+    log: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/glass48_roe_f050_halo_v3/output/arepo-20260820T101548Z.1391307.log
+
+Matched global-N build and run:
+
+    artifact: build_artifacts/KH_GLOBAL_N_ROE_RK2/8e0a7715111f-8f8353f628323874
+    binary SHA256: c446c56bbf0d387550ad9e5e769803f6bf3b5dabe57e78675e43de954ffa5da8
+    run: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/glass48_global_N_roe_RK2/output
+    log: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/glass48_global_N_roe_RK2/output/arepo-20260820T102150Z.1395014.log
+
+Generated figures, all labelled “glass48 KH; Arpaia ALE; co-moving
+Roe+split; RK2+F1; mesh f=1”:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/figures/kh_aposteriori_density_comparison.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/figures/kh_aposteriori_minima_history.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/figures/kh_aposteriori_halo_growth.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/figures/kh_aposteriori_summary.json
+
+Earlier diagnostic archives are preserved separately. The first identified the
+mistaken treatment of the 0.5 warning ratio as a hard N condition; the second
+demonstrated the two accepted six-element retries before the hard failure.
+Neither is used as the reported final result.
+
+### 52.6 Decision and next experiment
+
+The section-51.3 acceptance criterion is not met: the run stops at 1.15552,
+and enlarging the fallback patch to 24.5 per cent does not change the bad
+value. This implementation remains a debug-only switch and must not become the
+default or be translated into a production pending ledger.
+
+If the a-posteriori direction continues, the detector must act on the
+precursor, not only final positivity. The most informative candidate is a
+relaxed local discrete-maximum/entropy test or the proposed S-minus
+conditioning trigger, followed by a persistent local N/B state over several
+steps. It should begin acting while the density floor is about 0.9--0.8
+(time 0.4--0.6 here), not after it reaches 1e-2. The flagged fraction and
+Gresho boost penalty would decide whether this is genuinely local or merely
+B/N under another name.
+
+Independently, record the stepwise m_i, temporary Arpaia mass, dual area and
+mesh trajectory for ID 1837. The present global geometry diagnostics establish
+that the terminal mesh is admissible, but only that per-cell record can close
+Kimi's geometry-first versus solution-first question.
+
+## 53. Three-day stopping-rule experiment for alternative distributions
+
+### 53.1 Scope and decision rule
+
+The remaining distribution-scheme investigation is time-boxed to three working
+days. It is a small-cost diagnostic sprint, not the start of a new open-ended
+stabilisation project. The reference mathematical configuration is held fixed:
+
+    Arpaia ALE time form
+    contour element residual
+    co-moving frame
+    mesh-velocity factor f = 1
+    glass initial conditions
+    low resolution
+
+No broad switch matrix or parameter scan is permitted. The objective is to
+answer two questions:
+
+1. Does a clean low-order ALE distribution remain admissible on the same moving
+   geometry?
+2. Can a cheap nonlinear LDA blend act early enough to prevent the precursor
+   without destroying the quasi-Lagrangian Gresho advantage?
+
+If no candidate produces a material improvement within three days, freeze the
+current Arpaia + contour + co-moving baseline and move development effort to
+moving-mesh hierarchical timestepping and MPI parallelisation. Sensor tuning,
+SUPG variants and rigorous convex limiting are then deferred.
+
+### 53.2 Attempt 1: local ALE Lax--Friedrichs control
+
+The first and most decisive experiment is a globally applied, globally lumped
+local-LF distribution of the same contour residual,
+
+\[
+  \Phi_{i,T}^{\rm LF}
+  =
+  \frac{1}{3}\widetilde\Phi^T
+  +\alpha_T\left(U_i-\overline U_T\right),
+\]
+
+with
+
+\[
+  \alpha_T \geq
+  \max_{j\in T}\rho\!\left(K_j^{\rm ALE}\right).
+\]
+
+This requires no new Roe inverse or SUPG parameter and uses the already
+available ALE-relative spectral information. Accuracy is not the purpose of
+this control.
+
+- If local LF fails at the same time and place, stop distribution tuning: the
+  leading suspect becomes moving mass, RK geometry/GCL or connectivity change.
+- If LF survives while the current N branch shows anomalous behaviour, the
+  present N implementation is not an adequate moving low-order floor.
+- If LF survives, it may also replace N as the low-order side of one subsequent
+  blend.
+
+### 53.3 Attempt 2: full residual-ratio Bmax
+
+The cheapest all-wave nonlinear candidate is the full residual-based LDA--N
+blend,
+
+\[
+  \Phi_{i,T}^{B}
+  =
+  \Theta_T\Phi_{i,T}^{N}
+  +(I-\Theta_T)\Phi_{i,T}^{\rm LDA},
+\]
+
+\[
+  (\Theta_T)_{kk}
+  =
+  \frac{|\Phi^T_k|}
+       {\sum_i|\Phi^N_{i,k}|+\epsilon},
+  \qquad
+  \theta_T^{B\max}=\max_k(\Theta_T)_{kk}.
+\]
+
+Use the scalar Bmax value for all equations. Unlike a compression-only sensor,
+this construction can respond to shock, contact, rarefaction and non-compressive
+moving-mesh residual noise. It must blend the complete RK residual and the
+associated mass treatment, not only the spatial fluctuation:
+
+\[
+  m_{ij}^{B\max}
+  =
+  (1-\theta_T)m_{ij}^{\rm LDA,ALE}
+  +\theta_T\,\bar m_{i,T}\delta_{ij}.
+\]
+
+### 53.4 Attempt 3: Dobeš--Deconinck Bx
+
+The pressure-sensor Bx scheme from the Dobeš--Deconinck 2005 work (published
+in its final forms in 2008, including DOI 10.1007/978-3-540-75712-2_44) is
+
+\[
+  \Phi_{i,T}^{Bx}
+  =
+  \theta_T\Phi_{i,T}^{N}
+  +(1-\theta_T)\Phi_{i,T}^{\rm LDA},
+  \qquad
+  \theta_T=\min(1,h_Ts_T^2).
+\]
+
+For an unsteady ALE computation, the intended pressure sensor is based on the
+physical material derivative,
+
+\[
+  s_T\propto
+  \left[
+    \left.\frac{\partial p}{\partial t}\right|_{\chi}
+    +(v-\sigma)\cdot\nabla p
+  \right]^+.
+\]
+
+If the RK-stage pressure derivative is not already cheap to expose, the
+three-day diagnostic may use the smooth-Euler identity
+
+\[
+  \frac{Dp}{Dt}=-\gamma p\,\nabla\cdot v
+\]
+
+as a clearly labelled simplified sensor. Only one normalisation and at most
+one factor-of-four variation are allowed; do not begin a sensor parameter scan.
+As in the original unsteady construction, Bx must blend the LDA consistent/ALE
+mass contribution with the N lumped contribution. A spatial-residual-only
+blend is not a faithful test.
+
+Expected interpretation:
+
+- Gresho and smooth vortical flow should have \(\theta_T\simeq0\), retaining
+  LDA accuracy.
+- Sod shocks should activate N, but an isobaric contact and the expansion side
+  of a rarefaction normally do not.
+- Smooth KH is nearly isobaric. Bx can help only if the moving-LDA precursor
+  develops a spurious pressure-compression signal before failure. Failure to
+  activate is therefore informative rather than a reason to tune indefinitely.
+
+### 53.5 Three-day execution schedule
+
+Day 1:
+
+1. At the first bad candidate, dump density and pressure minima, endpoint and
+   temporary Arpaia mass ratios, dual-area ratio, triangle area/minimum angle,
+   local CFL, current/previous-step flip count and Bx sensor value.
+2. Run one lower-CFL reference; do not perform a CFL scan.
+3. Implement and run the pure ALE local-LF control on low-resolution Sod and
+   glass KH.
+
+Day 2:
+
+1. If LF survives, implement full Bmax with complete residual/mass blending and
+   run static/moving Sod plus moving KH.
+2. If LF fails, do not spend the day on Bmax. Run a fixed-connectivity/no-flip
+   control if an existing low-cost switch permits it, and determine whether the
+   failure follows a flip or mass jump.
+
+Day 3:
+
+1. Implement or port the Dobeš--Deconinck Bx experiment.
+2. Run Gresho boost 10, Sod and KH with the fixed reference switches.
+3. Generate labelled plots and archive exact configurations and paths in this
+   log. Do not add another distribution or sensor variant.
+
+### 53.6 Acceptance and stopping criteria
+
+Continue the robustness direction only if at least two of the following are
+met:
+
+1. Moving KH at \(f=1\) passes at least twice the previous failure time.
+2. Moving Sod oscillations become visibly and quantitatively comparable to the
+   static control.
+3. Gresho boost-10 error increases by no more than approximately 10--20 per cent
+   relative to moving LDA.
+4. The experiment identifies a reproducible causal separation between a
+   distribution failure and a flip/mass/GCL failure.
+
+The following do not count as progress: substantially reducing \(f\), requiring
+an extremely small CFL, postponing failure only briefly, eliminating a negative
+state while retaining the KH runaway, or requiring a sensor sweep.
+
+Within this sprint do not implement pure SUPG, LLxF--SUPG, a system PSI scheme,
+convex limiting, a new mesh-velocity shock modification, space--time positive RD
+or another a-posteriori rollback. They either have a lower probability of
+answering the immediate question or exceed the three-day budget.
+
+If the stopping criterion is reached, preserve all diagnostics and proceed in
+this engineering order:
+
+1. moving equal-step MPI;
+2. moving hierarchical ledger on one MPI rank;
+3. combined hierarchical timestepping and MPI;
+4. return later to high-order moving-RD robustness.
+
+---
+
+## 54. 2026-08-20: review of the three-day plan — two gaps, and the recommended order
+
+- **Author:** Claude Code (Fable 5), at Zhenyu's request.
+- **Scope:** advisory review of sections 41-53 before the section-53 sprint
+  starts. No code change, no new run.
+- **Status:** proposals for Zhenyu to accept or strike. Where this section
+  conflicts with section 53, section 53's stopping rule still governs the
+  budget: nothing below extends the three days.
+
+### 54.1 Gap 1: no section-53 attempt addresses the diagnosed Sod mechanism
+
+Section 44.2 attributed the moving-N Sod transverse noise to the loss of
+shear-mode damping at `sigma = u`: residual damping 0.554, predicted
+amplification 1/0.554 = 1.81 against the measured 1.80. That is an eigenvalue
+property of `K^{ALE}`, independent of the distribution. The section-43.1 data
+already confirm the independence: moving scalar-B has `RMS(v_y) = 1.472e-2`
+against moving N's `1.424e-2` and static N's `8.49e-3` — the blend keeps the
+noise. **A blend cannot fix problem 1, because N is already its robust end.**
+LF, Bmax and Bx are all blends or low-order controls, so section 53 as written
+can at best *diagnose* the Sod defect, never meet its own acceptance criterion
+53.6(2).
+
+The only mechanism-grounded fix on the table is Kimi's section-51.1 shear
+projector, with its falsifiable offline prediction (`eps ~= 0.45` restores the
+ratio to ~1.0). As far as this log records, not even the offline check has
+been executed.
+
+### 54.2 Gap 2: scalar-theta B already completes KH at `f = 1`, and its deciding measurement was never run
+
+Section 43.1's scalar-B run completes glass KH to `t = 2` with `f = 1`, and
+section 49.5 named its Gresho boost measurement as the decision: "if scalar B
+holds `b10/b0` near 1.05 while completing KH, it is the answer and `f` can be
+retired to a diagnostic." That measurement has not been made. It requires no
+code at all.
+
+The objection on record — mean `theta = 0.761`, 38 per cent of samples fully
+N, "survives by becoming N-like" — was measured **on KH**, where LDA is
+failing anyway; theta statistics are problem-dependent, and on the smooth
+Gresho vortex theta should stay near zero with LDA accuracy retained. That
+expectation is exactly what the measurement tests, and it is the cheapest
+possibly-decisive experiment in the whole candidate set.
+
+### 54.3 Recommended additions, ranked
+
+**A. Day 1, before building anything new: the scalar-B campaign.** Gresho
+boost 0/3/10 under the section-49 protocol, plus one KH long run to `t = 10`,
+all under the section-53.1 reference switches. Pass condition: `b10/b0` in
+1.05-1.2 meets criteria 53.6(1) and 53.6(3) simultaneously, and problem 2 is
+closed at the engineering level — the blend is the production scheme, and pure
+LDA's long-time-shear limitation is recorded rather than fixed. Per-arm theta
+statistics must be published with the result either way.
+
+**B. The eigenvalue floor on the full linearly degenerate subspace.** Extend
+`rd_add_entropy_dissipation` from `P_e` alone to `P_e + P_s` — or,
+equivalently and more simply, apply a Harten-type fix
+`|lambda| -> max(|lambda|, eps c)` to the two degenerate eigenvalues inside
+the `K^+/K^-` construction, which needs no explicit projectors. One change,
+both problems:
+
+- **Sod:** run section 51.1's offline check first, by extending
+  `shear_mode_damping.py` to the modified `K`; prediction: damping rises from
+  0.554 toward 1 as `eps` approaches 0.446, so the moving/static `RMS(v_y)`
+  ratio falls from 1.80 to ~1.0. This is the only candidate that can meet
+  criterion 53.6(2).
+- **KH:** section 47 tested the floor on the entropy mode only. The shear
+  mode — the one KH drives — was never tested, so section 47's "operator-side
+  fixes fail" must not be extrapolated to it. The floor also makes `S^-`
+  uniformly invertible, bounding LDA's `beta = K^+ (S^-)^{-1}` and retiring
+  the pseudo-inverse branch, which is precisely section 51.4's conditioning
+  suspicion.
+- **Risk to measure, not assume:** the floor adds dissipation to the shear
+  mode, and Gresho's azimuthal profile *is* a shear structure. The mitigation
+  is that the term acts only on non-zero residuals, so exact co-moving steady
+  states (`Phi = 0`) are untouched; how much a resolved vortex pays is an
+  open number. The run set must therefore include Gresho boost-0 with the
+  floor on and off, against the `9.3116e-3` baseline of section 49.1.
+
+**C. One amendment to the LF control (53.2).** If LF fails under the contour
+total, add a single Roe+split LF run before concluding "moving mass, RK
+geometry/GCL or connectivity": section 45.3's factor-12000 contour entropy
+source is a confounder for exactly that inference.
+
+**D. Near-free instrumentation to piggyback on the day-1 runs.**
+
+1. per-ID stepwise `m_i`, Arpaia temporary mass, dual area and vertex
+   trajectory for the worst cell (section 52.6's outstanding request; closes
+   section 51.2's geometry-first versus solution-first question);
+2. per-element `S^-` numerical rank and condition number near failure
+   (section 51.4; the diagnostic switch already exists);
+3. one half-CFL KH reference — section 52.3 found the RD limit only
+   marginally satisfied at the death of ID 1837, and one run separates the
+   abrupt terminal failure from the slow precursor.
+
+**E. Conditional demotion of attempts 2 and 3.** If A passes, Bmax (53.3) is
+an accuracy refinement rather than a rescue and may be compressed or skipped;
+Bx (53.4) stays capped at one day, with non-activation on the nearly isobaric
+KH treated as information, per section 53.4's own reading.
+
+### 54.4 Post-sprint candidates, recorded so they are not relitigated
+
+If the stopping rule fires, these are the candidates worth carrying to the
+"return later" item, in order:
+
+1. **FCT/Zalesak limiting** of the `(LDA - N)` antidiffusive part under
+   relaxed local bounds — the principled version of the early-acting detector
+   section 52.6 asked for, acting at the `rho ~ 0.9-0.8` precursor rather
+   than at positivity failure; both branches already exist in the B engine.
+2. **MOOD with a relaxed DMP-plus-persistence detector** (section 52.6).
+3. **Space-time RD / Guardone-Isola topology-change formalism** —
+   thesis-scale, not a sprint item.
+4. **The section-36.4 contour quadrature audit**: offline, decides the
+   residual-form default independently of robustness, and worth an evening
+   whenever one is free.
+
+### 54.5 Probability assessment
+
+Problem 1 is likely solvable within the budget: the mechanism is
+quantitatively understood and the fix has a falsifiable offline prediction.
+Its floor outcome is also acceptable — a resolution-independent, explained
+factor 1.80 (to be confirmed on glass64/96) statable in the thesis as a
+bounded property rather than an open defect.
+
+Problem 2's honest bet is scalar B: it is the only intervention that has
+worked at `f = 1`, and its single unknown — the Gresho boost cost — is
+obtainable in a day. If A and B both pass, both problems close inside the
+sprint. If only one does, the stopping rule still hands hierarchical
+timestepping and MPI a baseline whose limitation is recorded rather than
+papered over.
