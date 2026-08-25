@@ -111,6 +111,30 @@ to 10 and renumbered without moving text; their dates therefore interleave.
 | 52 | Codex: the MOOD fallback fires too late; local N cannot repair the precursor |
 | 53 | the three-day stopping-rule sprint: LF control, Bmax, Bx |
 | 54 | review of that plan: two gaps; scalar-B boost first, eigenvalue floor second |
+| 55 | Kimi: reading of 52-54, ranked low-cost candidates, restart calibration idea |
+| 56 | Codex: accepted sprint order, corrections to 54/55, scalar-B acceptance gates |
+| 57 | Codex: scalar-B sprint -- Gresho boost-invariant, KH to t=10, measured cost |
+| 58 | Codex: Chapter 4 distribution derivation; component-B is the accuracy control |
+| 59 | Codex: matched pure-N KH control; the time term belongs to the B blend |
+| 60 | KH consolidated: scalar B is the temporary f=1 solution; visualisation audit |
+| 61 | offline shear-floor check: mechanics verified, eps ~= 0.45 prediction refuted |
+| 62 | Codex: Sermeus-Deconinck and ALE-DG precedents for the eigenvalue fix |
+| 63 | Codex: online shear floor restores moving-N Sod transverse noise to static |
+| 64 | Codex: LDA floor extension; Gresho/Yee rejection tests pass; rarefaction reading |
+| 65 | Codex: entropy-mode floor is a decisive negative; Sod operator tuning closed |
+| 66 | Kimi: close the testing phase; one discriminator; two notes for the next phase |
+| 67 | phase-entry assessment: concur on closure, plus the conservation-drift prerequisite |
+| 68 | Codex: local conservative topology-transfer operator proposed, with fallback |
+| 69 | Codex: offline flip-patch audit passes — O(h^2), cascades, periodic seams |
+| 70 | Codex: online repair slice — uniform flow exact, short-KH drift down x4400 |
+| 71 | Codex: KH t=10 — conservation passes, the KH trajectory moves materially |
+| 72 | Codex: plan for exact triangle-key patches and non-invasive dual diagnostics |
+| 73 | review of 68-72: maths verified, second hypothesis added, plan approved amended |
+| 68 | Codex: topology-conservation repair proposed for review; local high-order patch correction with an admissible fallback |
+| 69 | Codex: conservative flip-patch repair passes the offline go/no-go audit |
+| 70 | Codex: one-rank equal-step online repair passes uniform flow and matched short-KH gates |
+| 71 | Codex: KH t=10 repair is robust and conservative, but provisional support patches materially shift the solution |
+| 72 | review plan: exact old/new triangle-key patches, non-invasive dual diagnostics and cost gates |
 
 Section 32's campaign has its own document,
 `dev_log/RD_ALE_FORM_SELECTION.md`: it states the five compile switches and
@@ -8245,3 +8269,3435 @@ obtainable in a day. If A and B both pass, both problems close inside the
 sprint. If only one does, the stopping rule still hands hierarchical
 timestepping and MPI a baseline whose limitation is recorded rather than
 papered over.
+
+
+---
+
+## 55. 2026-08-20: Kimi's review of sections 52-54 — updated reading and low-cost candidates
+
+- **Author:** Kimi (K3), at Zhenyu's request.
+- **Scope:** review of sections 52-54; proposals only. No code change. One
+  numerical experiment (the scalar-B Yee convergence study) is launched from
+  this session and will be reported in its own section.
+- **Status:** advisory, subject to the section-53 stopping rule.
+
+### 55.1 What section 52 changes
+
+Two points from the a-posteriori experiment deserve a sharper reading than
+they have received.
+
+1. **The geometry-first hypothesis is now largely excluded, at least at the
+   terminal event.** Section 52.3 records a healthy mesh at the moment of
+   death: minimum triangle area / mean area = 0.2617, minimum angle 0.3498
+   rad, no inverted triangles, no non-positive endpoint dual areas, pullback
+   error 8.7e-19. What collapses is the *mass* (`4.7e-6` against a typical
+   `1.1e-4`), not the *area*. The section-51.2 discriminator is therefore
+   already answered for the terminal event in favour of solution-first. What
+   remains open is only whether the slow precursor (density floor drifting
+   1.0 to 0.31 over `t = 0.2` to `1.0`) is *driven* by noisy vertex motion.
+2. **The precursor is secular, monotone and single-signed** (minimum density
+   0.98, 0.94, 0.84, 0.53, 0.31 at `t = 0.2` to `1.0`). That is the
+   signature of a systematic error of fixed sign being amplified by LDA's
+   non-monotonicity, not of an oscillatory instability. A per-step density
+   *ratio* detector (the section-52 trigger) is structurally blind to such a
+   drift, which is exactly why it fired too late. One further observation:
+   the bad value being unchanged to printed precision while the halo grows
+   from 6 to 1128 triangles is *expected*, not a bug — an RD vertex update
+   depends only on its own star, which the first halo ring already covers.
+   The informative fact is instead that the complete N-star update *computed
+   from the contaminated star state* is itself negative.
+
+### 55.2 Low-cost candidates, ranked
+
+**1. The scalar-B Gresho boost campaign (zero code, run first).** Section
+54.2's gap: scalar B already completes KH at `f = 1`, and its deciding
+measurement — Gresho boost 0/3/10 under the section-49 protocol, with
+per-arm theta statistics published — was never run. The recorded objection
+(mean theta 0.761) was measured on KH, where LDA is failing anyway; theta
+is problem-dependent and should stay near zero on smooth flow. If `b10/b0`
+stays in 1.05-1.2, problem 2 is closed at the engineering level and pure
+LDA's long-time-shear limitation is recorded as a known restriction.
+
+**2. The eigenvalue floor on the full linearly degenerate subspace (offline
+prediction, then 3-4 runs).** Section 51.1's shear projector, in section
+54.3-B's simpler Harten form `|lambda| -> max(|lambda|, eps c)` applied to
+the two degenerate eigenvalues inside the `K^+/K^-` construction: no explicit
+projectors, `K^+ + K^- = K` preserved, and `S^-` becomes uniformly
+invertible, retiring the pseudo-inverse branch (the section-51.4 suspicion).
+Section 47 refuted the entropy-mode floor only; the shear mode — the one KH
+drives — has never been tested, so "operator-side fixes fail" must not be
+extrapolated to it. Risk to measure: Gresho's azimuthal profile *is* a shear
+structure, so the run set must include boost-0 with the floor on and off
+against the `9.3116e-3` baseline. This is the only candidate that addresses
+both open problems at once, and the only one that can meet criterion
+53.6(2).
+
+**3. Restart-from-snapshot calibration of the point of no return (near-zero
+code).** Section 52.6's open question is *when* the detector must act. Take
+the pure-LDA snapshots at `t = 0.4, 0.6, 0.8, 1.0` (density floors 0.94,
+0.84, 0.53, 0.31), convert them to ICs with the existing glass tooling, and
+restart the global-N control from each. If N recovers the run from `t = 0.8`,
+the a-posteriori direction is alive and needs only an earlier, persistent
+trigger. If N cannot recover even from `t = 0.6`, the precursor is already
+fatal while the density floor looks benign, the a-posteriori route is
+effectively dead, and the blend/floor routes become the only ones. This is
+an afternoon of post-processing plus four short runs, and it decides whether
+any further MOOD investment is justified at all.
+
+**4. Free post-processing on existing snapshots (no runs).**
+
+- **Where the drained mass goes.** Element conservation is exact, so the
+  mass lost by the failing cell reappears somewhere. Mapping the per-cell
+  mass anomaly at `t = 0.6, 0.8` distinguishes two regimes: if the lost mass
+  sits in the immediate star (undershoot beside overshoot), the mechanism is
+  anti-diffusive pairwise exchange and local dissipation (candidate 2) is
+  the right fix; if it is transported coherently along the shear layer, the
+  mechanism is an advection bias and candidate 2 will not help.
+- **Per-element histogram of `|u - sigma|/c`** on the KH and Sod snapshots:
+  measures what fraction of the domain sits in the low-damping regime and
+  sizes the `eps` of candidate 2.
+- **Drain location versus the shear-rate field:** whether the density drain
+  is locked to the braids where the Lagrangian shear is maximal.
+
+**5. A rigorous, parameter-free early trigger for KH, if MOOD survives
+candidate 3.** Section 45.1 established that the specific-entropy range
+`[0.9473, 2.5]` is an *exact invariant* of this problem. A local
+entropy-bounds DMP detector needs no tuning and, per section 45's table,
+already separates moving LDA from moving N at `t = 0.4` (6.7e-2 against
+2.9e-4) while the density floor is still benign. Note that section 47
+refuted entropy *dissipation as a fix*; it says nothing against entropy
+*excursion as a detector*.
+
+**6. Endorsed piggyback items:** section 54.3-D's per-ID stepwise history
+for the failing cell and the single half-CFL reference; and section
+54.4(4)'s contour quadrature audit as an offline evening task, since it
+decides the residual-form default independently of the robustness question.
+
+**Not worth further spending:** any reactive mesh-velocity correction
+(sections 46 and 48.3 are two independent failures of that idea), further
+`f` sweeps (the narrow-window verdict is final), and starting Bmax/Bx before
+candidates 1 and 2 report — if scalar B passes, they are accuracy
+refinements rather than rescues.
+
+### 55.3 Overall assessment
+
+Problem 1 is likely to close inside candidate 2, with the acceptable floor
+outcome being a resolution-independent, explained factor 1.80 (to be
+confirmed on glass64/96). Problem 2's honest bet remains scalar B
+(candidate 1); candidate 3 decides whether MOOD survives as a long-term
+direction or is written off. Candidates 1 and 2 are independent and together
+cost about a day.
+
+---
+
+## 56. 2026-08-20: accepted sprint order and corrections to the section-54/55 reviews
+
+- **Author:** Codex, after discussion with Zhenyu.
+- **Decision:** start the scalar-B campaign immediately. Scalar B may become a
+  temporary engineering solution if it keeps the fully quasi-Lagrangian
+  (`f = 1`) moving mesh robust without materially degrading smooth-flow
+  accuracy or Galilean invariance. This would close the immediate production
+  problem, but would not explain or repair pure moving-LDA's KH failure.
+- **User expectation:** scalar B should not strongly change boost-10 Gresho
+  because a smooth vortex ought to activate little N blending. The more
+  credible cost is a lower Yee convergence order than pure LDA. Both are
+  hypotheses to measure, not acceptance assumptions.
+
+### 56.1 Corrections carried into the experiment plan
+
+1. **Local ALE-LF is not merely another N/B blend.** It adds acoustic-scale
+   dissipation to all components and remains a useful low-order diagnostic.
+   If contour-LF fails, run one Roe+split LF control before blaming moving
+   storage, RK geometry/GCL or connectivity, because the contour KH entropy
+   source is a known confounder.
+2. A future linearly-degenerate eigenvalue floor must retain the existing
+   **element-relative-motion gate**. A direct per-face replacement
+
+       |lambda| -> max(|lambda|, eps c)
+
+   would also fire on some static-mesh faces and change the static baseline.
+   Inside the element gate, use the conservative split
+
+       lambda_eps^+ = 0.5 [lambda + max(|lambda|, eps c)],
+       lambda_eps^- = 0.5 [lambda - max(|lambda|, eps c)].
+
+   Test the shear mode before flooring the full repeated subspace: the entropy
+   mode was already ineffective on KH, while Sod identified shear as the
+   under-damped mode.
+3. A floor may improve the numerical rank of `S^-`, but uniform conditioning
+   on arbitrary triangles is unproved. Do not retire the pseudo-inverse without
+   singular-value and triangle-quality data. Nor does it leave every exact
+   co-moving contact/shear untouched: N uses `K^+` and `K^-` separately even
+   if the full element residual is zero. Contact width, density L1 and
+   transverse-velocity RMS remain mandatory diagnostics.
+4. Global minimum-density history does not prove a monotone, single-signed
+   drift of one cell; a per-ID history is required. Mapping where drained mass
+   reappears is correlation evidence, not unique proof of pairwise
+   antidiffusion.
+5. Restarting N from LDA snapshots is useful as a recoverability check, but is
+   not an exact point-of-no-return calibration because reconnect/rebuild, RK
+   history and endpoint-storage semantics differ.
+6. The KH entropy range is a strong early-warning diagnostic with a numerical
+   tolerance; for discrete nodal conservative averages it is not yet a
+   rigorously parameter-free invariant-domain theorem.
+
+### 56.2 Scalar-B campaign and acceptance criteria
+
+Use the already validated moving-mesh form:
+
+    B_SCHEME + RD_B_SCALAR_THETA + RD_B_FROZEN_THETA
+    + RD_RK2_TOTAL_RESIDUAL + RD_ALE_EQUALSTEP
+    + RD_ALE_CONTOUR_RESIDUAL + RD_ELEMENT_COMOVING_FRAME
+    + RD_ALE_CFL_TIMESTEP,
+
+with Arpaia modified-midpoint mass, `f = 1`, equal timesteps and the same
+glass/boosted IC family as section 49. The first run set is:
+
+1. Gresho `n = 48`, `t = 1`, boosts 0, 3 and 10;
+2. smoothed glass48 KH (tanh transition width 0.025) to `t = 10`;
+3. retain scalar-B versus LDA Yee `n = 32,64,128` as a separate smooth-
+   accuracy measurement.
+
+Scalar B passes Gresho only if **both** relative and absolute accuracy survive:
+
+- `L1(b10)/L1(b0) <= 1.2` (the moving-LDA `f = 1` reference is 1.05);
+- boost-0 and boost-10 absolute `L1(v_phi)` remain within roughly 10--20 per
+  cent of the matching moving-LDA values in section 49, rather than merely
+  becoming boost-invariant through diffusion;
+- publish mean theta, its histogram and the `theta = 1` fraction for every arm.
+
+The KH gate is completion to `t = 10` with positive mass, density and
+pressure, healthy mesh diagnostics, entropy-range history and the full theta
+history. Completion by becoming locally N-like is acceptable as a temporary
+robust scheme, but must be reported and is not a cure for pure LDA.
+
+Yee answers a different question: whether scalar limiting damages smooth-flow
+order or its error constant. It cannot replace the Gresho boost or KH gates.
+If scalar B passes KH and Gresho but lowers Yee order, it can still serve as a
+temporary production baseline; Bmax/Bx or another distribution then becomes
+an accuracy refinement rather than an emergency rescue.
+
+---
+
+## 57. 2026-08-20: scalar-B sprint — glass Gresho and KH complete with a measured accuracy cost
+
+- **Author:** Codex.
+- **Campaign root:**
+  `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820`.
+- **Status:** Gresho, Yee, matched moving-LDA controls and glass KH to `t = 10` are complete.
+
+### 57.1 Reproducibility and a correction to the historical comparison
+
+Current-source immutable builds are
+
+    gamma=5/3 scalar B:
+    /home/zwu/arepo_rd/arepo/build_artifacts/scalarb-sprint-g53/000cdaaee46f-65076a7882697285/Arepo
+
+    gamma=1.4 scalar B:
+    /home/zwu/arepo_rd/arepo/build_artifacts/scalarb-sprint-g14/000cdaaee46f-13d8f6f4c5faf23b/Arepo
+
+    gamma=5/3 matched LDA:
+    /home/zwu/arepo_rd/arepo/build_artifacts/lda-glass-control-g53/000cdaaee46f-a89df8b022b6bab4/Arepo
+
+All use Arpaia modified-midpoint mass, the P1(U) contour total, the element
+co-moving frame, `f = 1`, equal timesteps and the ALE-RD CFL bound. The B
+arms additionally use scalar and frozen theta with coherent RK2 total
+residuals.
+
+The three Gresho ICs use the same 2304 relaxed glass generators and IDs.
+Coordinates, density and internal energy are bitwise identical; only `v_x`
+is increased by exactly 3 or 10. The boost-zero IC reproduces the established
+glass hash exactly:
+
+    da76535f6f6366fa8d9b43d3e27f0f8b1bdfb461eead3c2d80aed401c935df64.
+
+The first submissions (jobs 10407658, 10407659, 10407660 and 10407662) used
+two ranks and stopped before the first update because
+`RD_ALE_GEOMETRY_DIAGNOSTICS` Stage 0 is deliberately single-rank. This is
+an orchestration error, not a physical failure. Their provenance is preserved
+under `output/`. The corrected one-rank runs use `output_rank1/`; hence
+this campaign is not an MPI validation.
+
+Section 49 is not a matched absolute-error reference. Its provenance shows a
+jitter IC, gamma 1.4 and Roe+split LDA. The present default-mathematics,
+gamma-5/3 glass comparison therefore required new LDA boost-0/10 controls.
+
+### 57.2 Glass48 Gresho at t=1
+
+The metric is mass-weighted `L1(v_phi)` in the de-boosted vortex frame.
+
+| scheme | boost 0 | boost 3 | boost 10 | b10/b0 |
+| --- | ---: | ---: | ---: | ---: |
+| scalar B | 9.338108e-3 | 9.337138e-3 | 9.337807e-3 | **0.99997** |
+| matched LDA | 7.795319e-3 | -- | 7.795328e-3 | **1.00000** |
+
+Scalar B therefore passes the Galilean gate decisively. Against the matched
+glass LDA control its absolute error is higher by 19.79 per cent at boost zero
+and 19.79 per cent at boost ten, just inside the pre-declared 10--20 per-cent
+acceptance band. The peak `v_phi` falls from about 0.96844 for LDA to
+0.92686/0.92682 for scalar B, so the cost is visible diffusion rather than
+noise in the scalar metric.
+
+Contrary to the hypothesis that a smooth vortex would activate little
+limiting, final total-theta is nearly identical in all three scalar-B arms:
+
+| boost | mean total theta | theta=1 histogram bin |
+| ---: | ---: | ---: |
+| 0 | 0.71871 | 46.40% |
+| 3 | 0.71867 | 46.48% |
+| 10 | 0.71884 | 46.40% |
+
+The spatial-theta mean is about 0.978. Scalar B preserves this Gresho result
+despite being strongly N-like locally; it is not an almost-pure-LDA result.
+
+Generated figures and metrics:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-gresho-glass-boosts.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-gresho-glass-boosts.pdf
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-vs-lda-gresho-glass.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-vs-lda-gresho-glass.pdf
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/gresho_scalarb_metrics.json
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/gresho_matched_metrics.json
+
+Every figure labels scalar B, Arpaia ALE, the P1(U) contour total, the
+co-moving frame, `f = 1` and coherent equal-step RK2.
+
+### 57.3 Yee convergence: the expected order loss is real
+
+Kimi's six Yee runs had all completed successfully, but the first analysis
+failed on an integer/string dictionary-key mismatch. After that was fixed,
+the script still reported a non-convergent `O(1.76e-2)` error already at
+`t=0`: it subtracted 5 from all three coordinate columns and thus inserted
+the spurious term `(z-5)^2=25` into `r^2`. Restricting the analytic radius
+to x and y reproduces the earlier LDA reference and gives
+
+| scheme | n=32 | n=64 | n=128 | observed orders |
+| --- | ---: | ---: | ---: | --- |
+| LDA | 2.277399e-3 | 7.347788e-4 | 2.247805e-4 | 1.63, 1.71 |
+| scalar B | 2.363198e-3 | 8.900692e-4 | 3.373608e-4 | **1.41, 1.40** |
+
+Thus Zhenyu's anticipated trade is confirmed: scalar B retains better than
+first-order convergence here, but lowers both measured orders and raises the
+fine-grid error (by 50 per cent at n=128). Its final mean total theta is
+0.659, 0.626 and 0.669 for n=32,64,128, with 24--33 per cent in the
+theta=1 bin.
+
+Corrected analysis and figure:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Yee_ScalarB_20260820/analyze_yee_scalarb.py
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Yee_ScalarB_20260820/analysis.json
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-yee-convergence.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-yee-convergence.pdf
+
+### 57.4 KH long-run status at the time of this entry
+
+Corrected job 10407671 uses the unchanged true glass48 KH IC (SHA256
+`e2db4f6f1b3682029f13f93bafd2e1f89dc4b8e6ad0920203d564123b1e47888`),
+gamma 1.4 and the scalar-B form above. The IC has the standard tanh shear
+transition of width 0.025 but no additional runtime boundary-layer smoothing.
+
+At the latest check it has passed `t = 5.69`, well beyond the old `t = 2`
+short run and pure moving-LDA failure, without negative mass or
+thermodynamics. At `t ~= 4`, min cell mass is `1.52e-4`,
+rho is 0.915--2.086 and pressure is 2.349--2.671. The entropy excursion was
+about 0.81 near `t = 1` and 0.25 near `t = 4`: current evidence is robust
+completion, not a cure for the contour entropy-quality defect.
+
+Run and log directory:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/kh_t10/output_rank1
+
+A final health table, theta history and labelled KH density figure will be
+added only after the run reaches `t = 10`.
+
+### 57.5 KH reaches t=10: the robustness gate passes
+
+Job 10407671 completed normally in 20:42 with Slurm state `COMPLETED` and
+exit code `0:0`. The final snapshot is `snap_050.hdf5` at exactly
+`t = 10`. No negative mass, density or pressure, inverted element,
+non-positive Arpaia midpoint mass, or pullback failure occurred.
+
+| time | rho range | pressure range | min cell mass | entropy excursion |
+| ---: | --- | --- | ---: | ---: |
+| 0 | 1.000--2.000 | 2.500--2.500 | 3.456e-4 | 0 |
+| 2 | 0.896--2.087 | 2.320--2.651 | 1.542e-4 | 0.301 |
+| 4 | 0.915--2.086 | 2.349--2.671 | 1.520e-4 | 0.246 |
+| 6 | 0.881--2.135 | 2.246--2.759 | 1.931e-4 | 0.306 |
+| 8 | 0.927--2.099 | 2.272--2.753 | 1.619e-4 | 0.0568 |
+| 10 | 0.934--1.996 | 2.302--2.703 | 1.832e-4 | 0.0452 |
+
+The endpoint mesh is healthy: minimum triangle area / mean area is 0.2866,
+minimum angle is 0.3849 rad, with zero inverted elements and zero non-positive
+`Sbar`; the final pullback error is `1.11e-16`.
+
+Limiter activity decreases rather than approaching a late global-N collapse:
+
+| time | mean total theta | theta=1 histogram bin |
+| ---: | ---: | ---: |
+| first reported step | 0.983 | 89.65% |
+| 2 | 0.761 | 36.72% |
+| 4 | 0.731 | 31.18% |
+| 6 | 0.588 | 16.97% |
+| 8 | 0.552 | 14.71% |
+| 10 | **0.466** | **8.44%** |
+
+Scalar B therefore passes the immediate engineering robustness gate at
+`f = 1`: it completes the glass KH problem on which pure moving LDA fails,
+without reducing the mesh velocity. Together with the Gresho result, it is a
+credible temporary production baseline. The qualification remains important:
+
+1. it costs 19.8 per cent in matched Gresho L1 and lowers Yee order from about
+   1.6--1.7 to about 1.4;
+2. the large intermediate entropy excursion shows that it does not repair the
+   contour-total entropy defect;
+3. classical scalar B is not an invariant-domain proof and has not been
+   validated with hierarchical timesteps or MPI;
+4. the late KH density field is visibly mixed, so completion alone is not an
+   accuracy endorsement.
+
+The bounded-sprint decision is therefore to keep scalar B as the current
+robust `f = 1` fallback/baseline, while pure LDA remains the smooth-accuracy
+reference. A less dissipative Bmax/Bx or shear-floor refinement is now an
+accuracy project, not a prerequisite for starting hierarchical-timestep and
+MPI work.
+
+Final data and generated figures:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/kh_scalarb_metrics.json
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-kh-density-t0-t10.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-kh-density-t0-t10.pdf
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-kh-theta-history.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-kh-theta-history.pdf
+
+---
+
+## 58. 2026-08-20: Chapter 4 distribution derivation and matched component-wise B Yee control
+
+- **Author:** Codex.
+- **Thesis file:**
+  `/home/zwu/MyThesis/Zhenyu-PhDThesis/zhenyu_thesis/chapter4/chapter4.tex`.
+- **Component-B campaign:**
+  `/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Yee_Bcomponent_20260820`.
+
+### 58.1 Mathematics added to Chapter 4
+
+Chapter 4 now separates four operations previously compressed into the phrase
+"use the N/LDA/B distribution":
+
+1. ALE upwind matrices are assembled in the element co-moving frame, with
+   characteristic speeds based on the relative velocity `u-sigma_bar_T`;
+2. Roe N constructs `phi_i^{N,Roe}=K_i^+(Uhat_i-Uhat_in)`, which sums to the
+   Roe-parameter-vector total, not in general to the P1(U) contour total;
+3. moving contour-N is defined by
+   `phi_i^N=phi_i^{N,Roe}+(Phi_contour-sum_j phi_j^{N,Roe})/3`;
+4. LDA distributes `Phi_contour` directly with `beta_i`, while B blends the
+   resulting contour-conservative N and LDA branches.
+
+Step 3 is explicitly marked as a scheme-design choice rather than an algebraic
+identity. The centred defect gives exact element conservation, but the
+monotonicity/positivity proof for unmodified N does not automatically carry
+over. This qualification is relevant to the moving-N Sod oscillations.
+
+For Euler, component-wise B uses a diagonal matrix of four sensors. Scalar B
+is now defined by `theta_T=max_l theta_{T,l}` acting on the complete
+conservative residual vector. Chapter 4 also distinguishes the predictor's
+spatial theta from the corrector's frozen complete-residual theta. The latter
+blends the complete N/lumped and LDA/F1 RK2 branches, not only their spatial
+terms. Both branches sum to the same Arpaia element residual, so the blend is
+conservative for any theta.
+
+The terminology is qualified: the original scalar-conservation-law B scheme
+already has one scalar coefficient. "Scalar B" here names this project's
+state-coherent Euler-system extension. It is not an invariant-domain proof or
+an accuracy claim. The full thesis compiled successfully with `pdflatex`;
+only pre-existing cross-reference/citation and box warnings were emitted.
+
+### 58.2 Matched component-wise B Yee ladder
+
+The control removes only `RD_B_SCALAR_THETA` from the scalar-B Config. Both B
+arms otherwise use gamma 1.4, identical ICs, moving mesh with `f=1`, P1(U)
+contour total, element co-moving frame, Arpaia modified-midpoint mass, frozen
+complete-residual theta, equal timesteps and the ALE-RD CFL bound.
+
+Reproducibility:
+
+    Config: examples/gresho_2d/Config_YEE_con_cm_Bcomponent.sh
+    Parameters:
+    examples/gresho_2d/param_YEE_bcomponent_n32.txt
+    examples/gresho_2d/param_YEE_bcomponent_n64.txt
+    examples/gresho_2d/param_YEE_bcomponent_n128.txt
+
+    Immutable binary:
+    /home/zwu/arepo_rd/arepo/build_artifacts/yee-bcomponent-g14/000cdaaee46f-d7bee2ec1c577b8d/Arepo
+
+    Build job: 10410470 (COMPLETED, MKL)
+    Run jobs: 10410476, 10410478, 10410477 (all COMPLETED, exit 0:0)
+
+The volume-weighted density error against the analytic Yee vortex at `t=1` is
+
+| scheme | n=32 | n=64 | n=128 | observed orders |
+| --- | ---: | ---: | ---: | --- |
+| LDA | 2.277399e-3 | 7.347788e-4 | 2.247805e-4 | 1.632, 1.709 |
+| component-wise B | **2.060269e-3** | **7.770489e-4** | **2.841136e-4** | **1.407, 1.452** |
+| scalar B | 2.363198e-3 | 8.900692e-4 | 3.373608e-4 | 1.409, 1.400 |
+
+Component-wise and scalar B share the same broad finite-resolution order loss
+relative to LDA, but they are not numerically redundant. At `n=128`, the
+component-wise error is 15.8 per cent below scalar B; relative to LDA it is
+26.4 per cent higher, versus 50.1 per cent for scalar B. Component-wise B's
+second interval order is also modestly better, 1.452 versus 1.400.
+
+Final component-averaged total-theta means are 0.4780, 0.4439 and 0.4305 for
+`n=32,64,128`, compared with scalar-B means 0.6589, 0.6256 and 0.6689. The
+scalar maximum therefore activates substantially more N dissipation.
+
+### 58.3 Decision
+
+The Yee result does not justify scalar B as an accuracy variant:
+component-wise B is consistently more accurate. Scalar B remains a distinct
+robustness variant because it is one convex blend of the complete Euler
+residual vector and, unlike component-wise B, has already completed glass48
+KH to `t=10` at `f=1`. Whether that advantage warrants a separate thesis
+method now depends on a matched component-wise KH long run, not another Yee
+ladder. Until then, Chapter 4 should present scalar B as robustness motivated
+and component-wise B as its accuracy control.
+
+Analysis and labelled figures:
+
+    examples/gresho_2d/analyze_yee_b_compare.py
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Yee_Bcomponent_20260820/yee_b_comparison.json
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Yee_Bcomponent_20260820/yee-component-vs-scalar-B.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Yee_Bcomponent_20260820/yee-component-vs-scalar-B.pdf
+
+### 58.4 Current-source matched KH resolves whether scalar B is redundant
+
+The earlier section-43 component-wise KH failure was rerun with the immutable
+binary built for section 58.2, removing code-version ambiguity. The input is
+the identical smoothed glass48 KH IC (tanh transition width 0.025) used by the scalar-B `t=10` run:
+
+    SHA256 e2db4f6f1b3682029f13f93bafd2e1f89dc4b8e6ad0920203d564123b1e47888
+
+The component-wise run used the same gamma 1.4, `f=1`, contour P1(U) total,
+element co-moving frame, Arpaia mass, frozen complete-residual B and ALE-RD
+CFL choices; the only B-definition difference is the absence of
+`RD_B_SCALAR_THETA`.
+
+    Parameter: examples/gresho_2d/param_KH_Bcomponent_glass48_t10.txt
+    Job: 10410514
+    State: FAILED, exit 1:0, elapsed 00:01:04
+    Final time reached: 0.87368011
+    Log:
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Yee_Bcomponent_20260820/kh_component_t10/arepo-20260820T204049Z.1013238.log
+
+At failure, ID 297 had endpoint mass `-1.62954e-7`, from old mass
+`1.84353e-7`. The predictor still had positive minimum density
+`7.054506e-5` and pressure `2.176415`; the mesh had
+`min(A)/mean(A)=0.3335`, minimum angle 0.4015 rad, zero inverted elements,
+zero non-positive Arpaia masses and zero pullback error. The final mean
+component-wise total theta was 0.2786, with 2.94 per cent of component samples
+in the theta=1 bin. This reproduces the historical failure at 0.81845 to the
+same qualitative state, with the small time difference attributable to the
+later code and timestep history.
+
+The redundancy question is therefore resolved more strongly than the Yee
+ladder alone could resolve it. Component-wise B is the more accurate smooth
+scheme, but it does not supply the nonlinear robustness needed by this KH
+problem. Scalar B completes the identical IC to `t=10` because the maximum
+sensor keeps the whole Euler residual vector on one, substantially more
+N-like, blend. Scalar B should remain a separately defined
+robustness-oriented method in Chapter 4; component-wise B remains the
+less-diffusive accuracy control and the natural starting point for future
+characteristic/Bx refinements.
+
+---
+
+## 59. 2026-08-21: matched pure-N glass48 KH control and time-dependent B interpretation
+
+- **Author:** Codex.
+- **Purpose:** test whether the robust N branch itself completes the identical
+  smoothed glass48 KH problem (tanh transition width 0.025), and compare actual solution morphology rather
+  than completion flags alone.
+
+### 59.1 Why the time term belongs to the B blend
+
+For an unsteady RD method the object distributed at the corrector is the
+complete space-time residual, not only the spatial flux residual. In the
+current equal-step RK2 notation the two branches have the form
+
+    R_i^N   = T_i^lumped + 0.5 (phi_i^{N,n}   + phi_i^{N,*}),
+    R_i^LDA = T_i^F1     + 0.5 (phi_i^{LDA,n} + phi_i^{LDA,*}).
+
+The time-dependent B update is therefore
+
+    R_i^B = theta_T R_i^N + (1-theta_T) R_i^LDA.
+
+Scalarising the Euler sensor changes only how `theta_T` is selected:
+`theta_T=max_k theta_{T,k}`. It does not remove the temporal residual. If B
+mixed only the spatial distributions while always retaining the F1/LDA mass
+matrix, `theta_T=1` would still not recover the full N update; the temporal
+distribution that can drive a non-admissible state would remain. The frozen
+complete-residual sensor reads the left endpoint to define `theta_T`, then
+uses that same scalar for the N/lumped and LDA/F1 temporal branches and for
+the old/new spatial branches. A spatial-only *sensor* remains a possible
+control, but the temporal branches must still be blended if the N limit is to
+be genuine.
+
+### 59.2 Strict matched diagnostic run
+
+The exact IC is the same one used by both B runs:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/inputs/IC_kh_glass48.hdf5
+    SHA256 e2db4f6f1b3682029f13f93bafd2e1f89dc4b8e6ad0920203d564123b1e47888
+
+Mathematical switches are `N_SCHEME`, `RD_RK2_TOTAL_RESIDUAL`,
+`RD_ALE_EQUALSTEP`, `RD_ALE_CONTOUR_RESIDUAL`,
+`RD_ELEMENT_COMOVING_FRAME`, and `RD_ALE_CFL_TIMESTEP`, with gamma 1.4,
+moving-mesh fraction `f=1`, one rank, and the standard smoothed KH IC with
+tanh transition width 0.025.
+
+    Config: examples/gresho_2d/Config_FS_con_cm_N.sh
+    Parameter: examples/gresho_2d/param_KH_N_glass48_t10.txt
+    Binary:
+    /home/zwu/arepo_rd/arepo/build_artifacts/kh-glass48-n-contour-cm-g14/000cdaaee46f-8cdf6a17f6581e7c/Arepo
+    Output:
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/kh_n_t10
+
+This fully instrumented run was intentionally stopped after reaching
+`t=2.099`. It had already passed the component-B failure time by more than a
+factor of two; at `t=2.09869` the predictor minimum density and pressure were
+`0.942818` and `2.40518`, respectively.
+
+### 59.3 Long quality run to t=10
+
+The long build removes only per-step diagnostic/assertion output. At the
+common `t=0.400390625` snapshot it is bitwise identical to the fully
+instrumented build: the maximum difference in coordinates, velocities,
+masses, density, pressure and internal energy is exactly zero.
+
+    Config: examples/gresho_2d/Config_KH_N_con_cm_release.sh
+    Parameter: examples/gresho_2d/param_KH_N_glass48_release_t10.txt
+    Binary:
+    /home/zwu/arepo_rd/arepo/build_artifacts/kh-glass48-n-contour-cm-release-g14/000cdaaee46f-38be559cc4d50aa6/Arepo
+    Output:
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/kh_n_release_t10
+    Log:
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/kh_n_release_t10/arepo-20260820T224745Z.1554461.log
+    Exit status: 0; final time: 10; wall time: 2189.38 s.
+
+At the last common pre-failure snapshot:
+
+| scheme | time | rho_min | rho_max | p_min | E_ky |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| component B | 0.800171 | 0.570005 | 2.13759 | 2.16736 | 1.00670e-2 |
+| scalar B | 0.800171 | 0.877703 | 2.09636 | 2.21323 | 9.11778e-3 |
+| N | 0.800171 | 0.962999 | 2.08678 | 2.23068 | 8.26161e-3 |
+
+The pure-N density channel is therefore already much better protected before
+component B fails. Scalar B is intermediate, consistent with its use of the
+maximum component sensor to move the whole Euler vector toward N.
+
+Pure N and scalar B remain visually close throughout the nonlinear KH
+evolution, but are not identical. Scalar B reaches a transverse-kinetic-energy
+peak `0.07155` at `t=6.8002`; N peaks later at `t=7.8003` with `0.06795`.
+At `t=10`:
+
+| scheme | rho_min | rho_max | p_min | E_ky | sigma_rho |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| scalar B | 0.934375 | 1.99647 | 2.30195 | 0.0331321 | 0.198061 |
+| N | 1.09597 | 1.95863 | 2.37114 | 0.0320329 | 0.181239 |
+
+Thus N is the robust limiting branch and is modestly more dissipative: its
+peak KH growth is about 5 per cent lower and delayed by about one time unit,
+and its final density standard deviation is 8.5 per cent below scalar B.
+Scalar B retains a visible accuracy/resolution advantage over pure N while
+recovering its long-time robustness. Component-wise B instead follows a less
+protected trajectory and loses local positive mass at `t=0.873680`.
+
+One qualification should remain visible. From snapshot sums, scalar B's total
+mass changes by `+1.94e-3` fractionally through `t=10`, while N changes by
+`+2.52e-3`; the corresponding total-energy changes are `-2.98e-4` and
+`-4.88e-4`. These are small compared with the local component-B failure but
+are not roundoff and belong to the remaining ALE endpoint/rebase conservation
+audit.
+
+The attempted four-rank acceleration terminates immediately by design at
+`rd_apply_cfl_timestep_constraint()`: the current `RD_ALE_CFL_TIMESTEP`
+prototype explicitly supports one rank only. This is a present implementation
+limit, not a KH instability.
+
+Analysis and labelled figures (all panels use real AREPO snapshots and one
+common density colour scale):
+
+    examples/gresho_2d/plot_kh_b_n_comparison.py
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-density-matched-t0-t08.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-density-matched-t0-t08.pdf
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-density-long-t1-t10.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-density-long-t1-t10.pdf
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-diagnostics.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-diagnostics.pdf
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-diagnostics.json
+## 60. 2026-08-21: KH investigation consolidated; scalar B is the temporary f=1 solution
+
+- **Purpose:** consolidate the KH work in sections 39--59, record the temporary
+  engineering decision, and audit what the density figures actually render.
+- **Deciding test:** smoothed relaxed-glass48 KH (tanh transition width 0.025),
+  gamma 1.4, Arpaia equal-step
+  ALE, P1(U) contour total, element-comoving frame, full quasi-Lagrangian mesh
+  velocity `f=1`, coherent RK2 total residual, one rank.
+- **Current decision:** scalar B is the temporary robust moving-mesh KH method;
+  pure N is its robust and more dissipative control; pure LDA remains the
+  smooth-accuracy reference but is unavailable for long-time moving KH.
+
+This is a temporary solution in the precise sense that it closes the immediate
+completion/robustness requirement without claiming an invariant-domain proof,
+without explaining pure LDA's secular precursor, and without yet validating
+hierarchical timesteps or MPI. It is nevertheless a real `f=1` solution: it
+does not obtain robustness by slowing the mesh or adding boundary-layer
+smoothing.
+
+### 60.1 What was tried, in chronological order
+
+| attempt | matched observation | decision |
+| --- | --- | --- |
+| Moving N, contour + comoving + Arpaia, `f=1` (sections 39--40) | completed KH to `t=2`; the later matched glass48 run completed to `t=10` | robust low-order control, visibly diffusive |
+| Static versus moving LDA, Roe+split and contour (sections 41--42) | on the production-style glass, static LDA completed `t=2`; moving Roe-LDA failed at `t=1.15515` in the RK predictor and moving contour-LDA failed at `t=0.46442` through endpoint mass loss; moving N completed | genuine long-time moving-LDA regression, not a jitter-only or contour-only effect |
+| Jittered versus relaxed-glass geometry (section 42) | jitter strongly amplified Sod/ALE noise, but both moving-LDA KH failures persisted on the glass | physical conclusions now use glass; jitter is only a geometry stress test |
+| Component-wise B (sections 43 and 58) | delayed the failure; the final current-source matched run failed at `t=0.873680` while mixing Euler components with different theta values | more accurate than scalar B on Yee, but not a KH robustness method |
+| Scalar-theta B (sections 43 and 57) | completed the identical smoothed glass48 KH to `t=10` at `f=1`; theta activity decreased from 0.983 initially to 0.466 at `t=10` | accepted temporary robustness baseline |
+| Zero-velocity ALE and no-regularisation controls (section 43) | zero-mesh ALE stayed close to static N; actual motion changed the solution before the first edge flip; disabling ordinary regularisation did not remove the increment | storage alone, regularisation alone and the first flip are not sufficient explanations |
+| Entropy-range diagnostic (section 45) | moving LDA developed large entropy excursions while N/scalar B stayed bounded | useful early quality symptom, but its causal interpretation was superseded by section 47 |
+| Targeted entropy dissipation (section 47) | reduced the entropy excursion but did not materially change the KH failure time | refuted as the cure; entropy runaway is not the terminal cause |
+| Discontinuity-driven mesh-velocity smoothing and stronger regularisation (sections 46 and 48) | reactive corrections changed trajectories/topology but did not rescue the baseline | rejected; they act after the damaging state has formed |
+| Uniform fluid-following fraction `f` (sections 47--49) | `f=0.90` completed to `t=10`, while `f=0.95` still failed; Gresho boost-10 error rose by a factor 2.28 at `f=0.90` and 7.87 at `f=0.75` | decisive diagnostic, not an acceptable default: narrow robustness cliff and loss of quasi-Lagrangian advantage |
+| Local a-posteriori LDA-to-N retry (section 52) | a six-triangle N star rescued two steps, then failed because the incoming LDA state was already contaminated; expanding to 24.5 per cent of all triangles did not change the bad nodal value; global N from a clean history completed | useful debug tool, but the positivity/mass-ratio detector fires too late; not a production fallback |
+| Pure N versus both B forms (sections 58--59) | component B failed at `t=0.873680`; scalar B and N both completed `t=10`; N had a roughly 5 per-cent lower and one-time-unit later transverse-energy peak, and 8.5 per-cent lower final density standard deviation | scalar B is not redundant: it retains more resolved structure than N while inheriting enough N-like robustness |
+
+Local LF, full residual-ratio Bmax, Dobeš--Deconinck Bx, SUPG variants and a
+shear-eigenvalue floor were discussed in sections 53--56 but were not executed
+as KH production candidates before scalar B passed the bounded sprint. They
+remain future accuracy/robustness refinements, not completed attempts and not
+prerequisites for beginning timestep/MPI work.
+
+The consolidated scientific reading is deliberately narrower than several
+intermediate explanations. The terminal section-52 mesh was globally healthy,
+so the recorded failure was not an already inverted or sliver Delaunay mesh.
+However, noisy solution-dependent vertex motion may still drive the secular
+precursor; that geometry-versus-solution feedback is not fully closed. What is
+established is that the full ALE construction can carry the same moving KH with
+N and scalar B, while pure LDA and component-wise B cannot. The immediate
+remedy therefore belongs on the distribution side, even though later causal
+analysis may involve both the solution and its induced geometry.
+
+### 60.2 Comparison-figure index
+
+The most useful summary figures, in reading order, are:
+
+    # Static LDA, moving Roe-LDA, moving contour-LDA and moving N
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Glass_Sod_KH_ALE_20260818/figures/glass-kh-static-moving-density.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Glass_Sod_KH_ALE_20260818/figures/glass-kh-static-moving-density.pdf
+
+    # Entropy-floor and mesh-fraction investigations
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_EntropySweep_20260819/figures/kh-entropy-sweep-density.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_EntropySweep_20260819/figures/kh-entropy-sweep-curves.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_FracLong_20260819/figures/kh-fraction-threshold.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_FracLong_20260819/figures/kh-fraction-long.png
+
+    # A-posteriori retry: morphology, precursor and retry-patch growth
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/figures/kh_aposteriori_density_comparison.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/figures/kh_aposteriori_minima_history.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/KH_Aposteriori_20260820/figures/kh_aposteriori_halo_growth.png
+
+    # Scalar-B long run and limiter activity
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-kh-density-t0-t10.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ScalarB_Glass_Sprint_20260820/figures/scalarb-kh-theta-history.png
+
+    # Final matched component-B / scalar-B / pure-N comparison
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-density-matched-t0-t08.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-density-long-t1-t10.png
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/figures/kh-b-n-diagnostics.png
+
+PDF files with the same stems are retained beside all principal density and
+diagnostic figures except the three debug-only a-posteriori PNGs.
+
+### 60.3 What the current KH density plot maps to the page
+
+The final comparison is generated by
+`examples/gresho_2d/plot_kh_b_n_comparison.py`. It is not a particle scatter
+plot. For every snapshot it:
+
+1. reads generator coordinates `x_i` and nodal densities `rho_i` from HDF5
+   and reduces coordinates modulo the periodic unit box;
+2. constructs a new `matplotlib.tri.Triangulation(x_i,y_i)`;
+3. masks triangles whose coordinate span exceeds 0.15 in either direction, as
+   a simple way to suppress non-periodic edges drawn across the box seam;
+4. calls `tripcolor(..., shading="gouraud")`, which displays
+
+       rho_plot(x)|_T = sum_{a=1}^3 rho_{i_a} phi_a^T(x)
+
+   on every triangle of the plotting triangulation.
+
+The renderer is therefore already P1 in the mathematical sense: Gouraud
+shading is barycentric interpolation of the three nodal values. The fragmented
+appearance is partly physical/numerical -- a low-resolution glass has irregular
+triangles and node-to-node variation -- and partly a presentation issue caused
+by many small panels. It is not caused by a nearest-particle or pixel-bin map.
+
+It is not, however, an exact rendering of the RD finite-element field. The
+plotting triangulation is reconstructed offline and does not consume AREPO's
+actual `DT[i].p[]` connectivity. Near periodic seams and nearly cocircular
+point sets, its diagonal/tie choice may differ from the solver's. Masking the
+seam deletes cross-periodic elements instead of unwrapping them. The current
+plot therefore represents
+
+    P1(snapshot nodal data, reconstructed plotting triangulation),
+
+not a certified
+
+    P1(snapshot nodal data, solver Delaunay triangulation).
+
+The existing `write_only_delaunay_triangulation()` routine can dump `DP`, `DT`
+and Voronoi-face data when `RD_OUTPUT_DIAGNOSTICS` is enabled, but the recent KH
+runs did not enable it. It also writes only diagnostic sync points, uses
+internal point indices and periodic images, and is not aligned with every HDF5
+snapshot. Exact historical connectivity cannot be recovered with certainty
+from the current snapshots alone.
+
+### 60.4 Recommended exact P1/Delaunay visualisation
+
+Use two levels, with the first available immediately and the second as the
+thesis-quality default:
+
+1. **Improved offline reconstruction, no rerun:** tile the generators over a
+   3-by-3 periodic image, triangulate the tiled set, retain triangles whose
+   barycentres lie in the central box, and rasterise the barycentric P1 field
+   before clipping to `[0,1]^2`. This removes seam deletion and is more
+   faithful than the present span mask. It still cannot guarantee AREPO's
+   diagonal for a degenerate/cocircular quartet.
+2. **Exact solver-connected output:** at each requested snapshot, write a
+   compact companion connectivity dataset whose vertices are
+   `(ParticleID, periodic image offset)` rather than transient `DP` indices.
+   Plot those explicit triangles and evaluate
+   `U_h|_T=sum_a U_{i_a} phi_a^T` with barycentric coordinates. This
+   reproduces the same P1 basis and Delaunay elements used by the residual
+   calculation, including periodic boundaries.
+
+For thesis figures, show the exact P1 density without edges in the main time
+sequence, plus one selected-time enlarged panel with thin Delaunay edges and
+generator points. A separate piecewise-constant Voronoi-cell view can explain
+dual storage, but must be labelled as a storage/mesh view rather than the RD P1
+solution. Drawing all edges on every small panel would make the current
+fragmentation worse rather than clarify it.
+
+This visualisation improvement does not change any completion or scalar-B/N
+comparison above. It is needed to make local mesh-scale claims -- slivers,
+edge-flip patches, precursor localisation and exact P1 morphology -- directly
+auditable from figures.
+### 60.5 Boundary-smoothing clarification and the executed non-solutions
+
+The phrase "unsmoothed KH" in earlier entries is retired. Every reported final
+glass48 comparison is the **smoothed KH** problem, using
+
+    band(y) = 1/2 [tanh((y-0.25)/0.025) - tanh((y-0.75)/0.025)],
+
+for both density and streamwise velocity. No additional runtime filter or
+damping layer is applied. The source and scalar-B IC copies are byte-identical:
+
+    SHA256 e2db4f6f1b3682029f13f93bafd2e1f89dc4b8e6ad0920203d564123b1e47888
+
+Thus the static/moving LDA/N glass figure, the scalar-B long figure, the
+component/scalar/N matched figures and the scalar-B theta history all have the
+same initial transition width and no additional smoothing during evolution.
+
+For avoidance of ambiguity, the executed remedies that did not become the
+solution are:
+
+| intervention | author/campaign | outcome |
+| --- | --- | --- |
+| change the LDA element total from contour to Roe+split | matched LDA campaigns | both moving forms failed, at different times and through different final checks |
+| switch jittered geometry to relaxed glass | section 42 | delayed and reduced artefacts but did not remove either moving-LDA failure |
+| component-wise B | sections 43 and 58 | delayed failure to the current matched `t=0.873680`; did not ensure coupled-state admissibility |
+| targeted entropy-mode dissipation, `eps=0.1--0.3` | Claude, sections 45--47 | changed entropy excursion but not the order-one failure time |
+| shock/all-wave sensor correction to mesh velocity | Codex, section 46, moving-N Sod discriminator | shock arm was nearly inert; active all-wave arm changed topology and extremes but not transverse noise; it was not a direct KH cure |
+| stronger ordinary mesh regularisation, up to four times default | Claude, sections 47--48 | `f=1` KH still failed at `t=1.064`, close to the baseline |
+| reduce the fluid-following mesh fraction | Claude, sections 47--49 | `f=0.95` still failed; `f=0.90` and 0.75 survived but were rejected as defaults because of a narrow cliff and measured boost/Galilean cost |
+| per-step a-posteriori rollback and local LDA-to-N recomputation | Codex, section 52 | two rejected LDA steps were restored and accepted after an N-star retry; the third could not be repaired even after the patch grew to 24.5 per cent because the incoming state was already contaminated |
+| enlarge the rollback patch by successive element halos | Codex, section 52 | no change in the bad nodal value once the complete vertex star was covered |
+| disable regularisation, zero mesh velocity and inspect first-flip timing | section 43 controls | useful isolation diagnostics, but none supplied a `f=1` LDA remedy |
+
+The local rollback is therefore not a successful solver option. It proved that
+state restoration and coherent RK-stage recomputation work, while also proving
+that a positivity/mass-ratio trigger acts too late for this secular precursor.
+Scalar B is the first executed intervention that both keeps `f=1` and carries
+the matched smoothed KH problem to `t=10`.
+
+Local LF, Bmax, Dobeš--Deconinck Bx, SUPG and the shear-eigenvalue floor remain
+proposals only. They must not be listed among failed numerical experiments.
+
+---
+
+## 61. 2026-08-21: the offline shear-floor check — the mechanics verified, the `eps ~= 0.45` prediction refuted
+
+- **Author:** Claude Code (Fable 5).
+- **Scope:** the offline verification that section 51.1 required to pass
+  *before* any simulation campaign, in the section-56.1 gated conservative-split
+  form. No build, no cluster, no solver change.
+- **Script:** `Hydro_data_analysis/Analysis/moving_mesh/shear_floor_verification.py`
+  (pure numpy; reuses `ale_feasibility.py` and the section-44.2 element/state).
+- **Verdict:** every structural property claimed for the floor is verified
+  exactly, but the quantitative prediction fails: `eps ~= 0.45` recovers only
+  about half of the missing shear damping, full recovery needs `eps ~= 0.8`
+  (single element) to `1.2` (ensemble), and at those values the floor's cost on
+  resolved co-moving shear structures reaches or exceeds what a *static* mesh
+  would charge at low Mach. The campaign the prediction was meant to authorise
+  should not be launched on its strength.
+
+### 61.1 What is implemented
+
+The section-56.1 form, analytically: per edge,
+`lambda_eps^+- = 0.5 [lambda +- max(|lambda|, eps c)]` applied inside the
+`K^+/K^-` construction to a selected subset of the degenerate modes, under the
+element-level gate `|u - sigma_bar_T| < eps c`. The eigendecomposition is
+analytic so that the repeated eigenvalue's subspace can be split into its
+entropy and shear directions — a numeric `eig` cannot do that, which is also
+why the production implementation will need the analytic form. Two variants:
+shear-only (`P_s`) and both degenerate modes (`P_e + P_s`).
+
+### 61.2 Structural properties: all pass, at round-off
+
+| check | result |
+| --- | --- |
+| E1 reproduce section 44.2 (`eps = 0`) | entropy 0.0000, shear 0.5540 at `sigma = u`; analytic vs numeric `K^+` split max diff 1.7e-17 |
+| E3 element gate | static mesh at `eps = 0.45`: `max |K_eps - K| = 0.0` exactly (`|u-sigma|/c = 0.93` > eps, gate off) |
+| E4 conservation | per-edge `K^+ + K^- - K = 0.0`; `K` itself unchanged by the floor (1.7e-18); `sum_j K_j = 6.9e-18`; `sum K^+ = -S^-` exactly |
+| E5 Galilean covariance | the boost is *linear* on conservative variables, `U' = T U`; `K^{+-}(boosted) = T K^{+-} T^{-1}` to 3.9e-16 against matrix scale 0.35, with and without the floor, at `sigma/u` = 0, 0.6, 1 |
+
+One structural bonus: at `eps = eps*` the shear damping ratio to static is
+1.0000 across the *entire* sigma sweep, not only at `sigma = u`, because at
+`|w| < c` the acoustic pickup `|w.n - c| + |w.n + c| = 2c` is
+sigma-independent and the floored shear eigenvalue is the constant `eps c`.
+There is no kink at the gate threshold for this element.
+
+### 61.3 The quantitative prediction fails
+
+On the section-44.2 element and Sod star state, the measured law is exactly
+
+    shear damping ratio(eps) = 0.554 (1 + eps),
+
+so the ratio reaches 1 at `eps* = 1/0.554 - 1 = 0.805`, not at
+`1 - 0.554 = 0.446`. Kimi's heuristic assumed the floor's contribution adds
+with unit slope; it adds with slope 0.554. Consequences, as predicted
+moving/static `RMS(v_y)` amplification (measured value 1.80):
+
+| | `eps = 0` | `eps = 0.446` | `eps = 0.805` | `eps*` |
+| --- | ---: | ---: | ---: | ---: |
+| section-44.2 element | 1.805 | 1.248 | 1.000 | 0.805 |
+| 501-element random ensemble (E9) | 1.971 | 1.511 | 1.228 | **1.210** |
+
+The ensemble row is the design number, since the domain RMS tracks the
+ensemble damping: full restoration needs a floor *above the sound speed*.
+`eps*` is also strongly element-dependent (E8): rotations of the reference
+element give 0.775–0.805, but random glass-like shapes spread 0.53 to beyond
+1.5, with 22 per cent having no root below 1.5 at all. A single global `eps`
+cannot restore static damping per element; only the ensemble target is
+meaningful, and it sits at 1.21.
+
+### 61.4 The cost, measured on exact co-moving states (E7)
+
+N-scheme nodal residual norms for linear co-moving contact and shear
+profiles, as a fraction of the same profile's *static-mesh* dissipation:
+
+| profile, state | `eps=0` | shear-only 0.45 | shear-only 0.805 | both 0.45 |
+| --- | ---: | ---: | ---: | ---: |
+| contact, Sod star (`u/c=0.93`) | 0 | **0** (1e-12) | **0** (1.7e-12) | 0.198 |
+| shear, Sod star | 1e-4 | 0.312 | 0.457 | 0.312 |
+| contact, Gresho-like (`u/c=0.38`) | 0 | **0** | **0** | 0.486 |
+| shear, Gresho-like | 1e-4 | 0.767 | **1.107** | 0.767 |
+
+Three readings:
+
+1. **Shear-only flooring leaves co-moving contacts at machine zero.** The
+   moving mesh's contact advantage survives the floor exactly, which both-mode
+   flooring destroys (20–49 per cent of the static rate). Combined with
+   section 47's result that entropy flooring does nothing for KH, shear-only
+   is unambiguously the right variant *if* a floor is used at all.
+2. **The floor is `c`-scaled and therefore Mach-blind.** At the Sod state the
+   cost on a resolved co-moving shear is 31–46 per cent of static; at a
+   Gresho-like `u/c = 0.38` it is 77 per cent at `eps = 0.45` and **111 per
+   cent — more diffusive than a static mesh — at `eps = 0.805`**. Since
+   ensemble restoration needs `eps ~= 1.2`, fully repairing Sod's transverse
+   noise means surrendering the quasi-Lagrangian shear advantage at low Mach,
+   mode-selectively but everywhere the gate is open. This is section 54.3-B's
+   flagged risk, now quantified: Gresho *is* a shear structure, and a
+   boost-0 Gresho arm would be expected to degrade toward or below the static
+   result at the `eps` values that actually fix Sod.
+3. **The `S^-` claim splits by variant (E6).** Shear-only flooring does *not*
+   repair `S^-`: the entropy direction stays in its kernel (worst minimum
+   singular value 5e-22, as without the floor). Both-mode flooring makes
+   `S^-` uniformly invertible over all 501 test elements (worst minimum
+   singular value 3.2e-3, worst condition number 3.5). So retiring the LDA
+   pseudo-inverse requires flooring the entropy mode too — at the measured
+   contact-diffusion price. Section 56.1's refusal to accept the conditioning
+   claim without singular-value data was correct.
+
+### 61.5 Decision recommended to Zhenyu
+
+1. **Do not launch the `eps ~= 0.45` Sod campaign on the section-51.1
+   prediction; the prediction is refuted offline.** The floor works exactly as
+   designed mechanically, but at affordable `eps` it is a partial mitigation
+   (1.97 to ~1.5 ensemble amplification at `eps = 0.45`), not a cure, and the
+   curative `eps` costs more on resolved shear than a static mesh charges.
+2. The primary Sod path becomes the bounding one already named in sections
+   51.1 and 55.3: confirm on glass64/96 that the factor ~1.8 is
+   resolution-independent, then state it in the thesis as an explained,
+   bounded eigenvalue property of the `sigma = u` design point, with scalar B
+   available where the LDA undershoot (a static-mesh defect, section 44.1)
+   needs suppressing.
+3. If an online data point is still wanted inside the sprint budget, it is
+   *one* diagnostic run — glass Sod, shear-only, `eps = 0.45` — to validate
+   the offline-to-online mapping against the predicted ensemble ratio ~1.5.
+   It should be labelled a mapping check, not a candidate fix, and no `eps`
+   sweep should follow it.
+4. Any genuine repair needs a *scale-aware* floor — for example scaled by the
+   element's own velocity variation `max_ij |u_i - u_j|` (Galilean covariant,
+   vanishes on uniform flow, targets mesh-scale shear noise) instead of by
+   `c`. That is a new design outside sections 51/56, belongs after the sprint,
+   and should inherit this script as its offline gate before any run.
+
+---
+
+## 62. 2026-08-22: published precedents for an RD eigenvalue fix and the space--time ALE alternative
+
+- **Author:** Codex, after a literature audit requested by Zhenyu.
+- **Scope:** literature and architecture review only; no new solver build or online shear-floor run.
+- **Decision:** the conservative eigenvalue modification has a direct RD precedent and a close nearly-Lagrangian ALE precedent. This justifies one bounded experiment, but not yet a production scheme or positivity claim.
+
+### 62.1 Direct RD precedent
+
+K. Sermeus and H. Deconinck, *An entropy fix for multi-dimensional upwind residual distribution schemes*, Computers & Fluids 34 (2005), 617--640, doi `10.1016/j.compfluid.2003.09.006`, modify the RD upwind matrices as
+
+\[
+K_i^{\pm *}=\frac12\left(K_i\pm |K_i|_*\right),
+\qquad |K_i|_*=R_i|\Lambda_i|_*R_i^{-1},
+\]
+
+with a floor on small acoustic eigenvalue moduli. This is the same operator-level construction as the section-56/61 conservative split and preserves `K_i^{+*}+K_i^{-*}=K_i`. They apply it to multidimensional upwind RD, including N, and remove oblique expansion shocks.
+
+The difference is essential. Their field is genuinely nonlinear, the threshold is derived from a continuous sonic expansion, and the activation is tied to an expansion-shock direction. The ALE entropy and shear fields are linearly degenerate and their zero speed at `sigma=u` is physical. The current candidate is therefore best described as a Sermeus--Deconinck/Harten-type modification extended experimentally to a linearly-degenerate ALE field, not as an established entropy fix or a new formal RD scheme.
+
+### 62.2 Close ALE mechanism precedent
+
+J. Badwaik, P. Chandrashekar and C. Klingenberg, *Single-Step Arbitrary Lagrangian--Eulerian Discontinuous Galerkin Method for 1-D Euler Equations*, Communications on Applied Mathematics and Computation 2 (2020), 541--579, doi `10.1007/s42967-019-00054-5`, identify the closely related mechanism `lambda_c=v-w ~= 0` on a nearly Lagrangian mesh. Spurious contact content generated during strong dynamics then has almost no dissipation and persists. They regularise the contact eigenvalue with a Harten-style scale `delta=alpha c`, using `alpha=0.1`, and remove spurious contact structures in a Shu--Osher calculation while retaining the moving-mesh accuracy advantage.
+
+This is 1-D ALE-DG rather than RD, but directly supports the physical motivation for regularising a linearly-degenerate eigenvalue lost in a nearly Lagrangian frame. Its positivity analysis is for a first-order Rusanov scheme; it does not prove positivity of its modified Roe flux or of the present matrix-N update.
+
+### 62.3 What positivity would require here
+
+For `d >= |lambda|`, the conservative split retains `lambda^{+*} >= 0`, `lambda^{-*} <= 0`, and the scalar N sign structure. The CFL must nevertheless be recomputed with the modified positive eigenvalues. Increasing `K^+` while retaining the old physical ALE signal-speed timestep invalidates the positive-coefficient argument.
+
+For Euler this is not a proof of `rho>0` and `p>0`: matrix-N positivity is characteristic and CFL-conditional, while the current update also contains RK2/F1, Arpaia temporary mass and changing connectivity. Section 61 also proves that shear-only flooring leaves the entropy direction in `ker S^-`; both-mode flooring repairs the sampled ranks but diffuses co-moving contacts. Online runs can test empirical robustness, not establish an invariant-domain theorem.
+
+### 62.4 Space--time positive ALE-RD is structurally different
+
+J. Dobeš and H. Deconinck, *A second order unconditionally positive space-time residual distribution method for solving compressible flows on moving meshes* (PANM 13, 2006, pp. 60--66), obtain positivity with P1 space/linear time space--time elements, two layers `n -> n+1/2 -> n+1`, a Crank--Nicolson-like lower-layer N residual, an upper-layer residual distributed to midpoint and endpoint nodes, implicit relaxation, positive bounded characteristic distribution coefficients, and GCL by construction.
+
+This is not a limiter insertable into the present explicit RK2 + F1 + Arpaia temporary-mass update; it replaces the temporal scheme. Its slabs also require a coherent element connection through time. AREPO rebuilds Delaunay connectivity and flips edges, so a full port needs topology-change space--time elements or a formal remap. Hierarchical timesteps and MPI add asynchronous slab ownership.
+
+Space--time ALE-RD is therefore a valuable long-term reference and possible future replacement, but not a short-term alternative. A fixed-connectivity prototype would not validate the production path with flips, Arpaia mass, hierarchical timesteps and MPI.
+
+### 62.5 Bounded next experiment and status
+
+The short path remains one entropy-fix-style operator experiment: implement a compile-time shear-only split at `eps=0.45`; include modified `lambda^{+*}` in the N CFL; first run a random-positive-state/random-triangle one-step falsification; then, only if it passes, run matched low-resolution static and moving glass Sod. Measure predictor/endpoint `rho_min,p_min`, CFL margin, `S^-` rank, conservation, contact width and RMS/99th-percentile/max `|v_y|`. Stop after this value. A new positivity failure, material static-mesh change or much weaker-than-predicted noise reduction rejects the candidate.
+
+At this entry **no online shear-floor result exists**. Section 61 is offline algebra. Section 47's online entropy-projector experiment was moving-LDA KH, changed the entropy diagnostic, and still failed near `t=1` for all tested eps; it does not answer the shear-only moving-N Sod question. The unmodified high-resolution moving-N Sod remains positive and improves with resolution, but retains visible transverse noise.
+---
+
+## 63. 2026-08-23: online shear-only ALE eigenvalue floor on glass48 moving-N Sod
+
+- **Author:** Codex (GPT-5).
+- **Status:** implementation and one bounded online mapping check completed.
+- **Decision:** the single \(\epsilon_s=0.45\) point is substantially more effective online than the section-61 offline estimate, and restores the transverse-noise statistic to the static-N level. It is promising enough for the next validation gate, but it is not yet a production default or a positivity result.
+
+### 63.1 Implemented operator
+
+The compile-time switch is:
+
+~~~text
+RD_ALE_SHEAR_EIGENVALUE_FLOOR=0.45
+~~~
+
+It is deliberately restricted to moving, equal-step, N-scheme builds with the ALE-RD CFL selector. It cannot be combined with the earlier entropy-projector experiment.
+
+For face \(j\),
+
+\[
+\lambda_{s,j}
+=
+(\boldsymbol u-\bar{\boldsymbol\sigma}_T)\cdot\hat{\boldsymbol n}_j .
+\]
+
+Only when the element gate
+\(\lvert\boldsymbol u-\bar{\boldsymbol\sigma}_T\rvert<\epsilon_s c\)
+is open, the shear modulus is replaced by
+
+\[
+d_{s,j}=\max(\lvert\lambda_{s,j}\rvert,\epsilon_s c),
+\qquad
+\lambda_{s,j}^{\pm *}=\frac12(\lambda_{s,j}\pm d_{s,j}).
+\]
+
+With \(\boldsymbol t_j=(-n_{y,j},n_{x,j})\),
+
+\[
+r_{s,j}=(0,t_x,t_y,\boldsymbol u\cdot\boldsymbol t_j)^T,
+\qquad
+l_{s,j}=(-\boldsymbol u\cdot\boldsymbol t_j,t_x,t_y,0),
+\qquad
+P_{s,j}=r_{s,j}l_{s,j}^T ,
+\]
+
+and the already assembled matrices receive
+
+\[
+K_j^{+*}
+=
+K_j^+
++
+\frac{|\boldsymbol n_j|}{4}
+(d_{s,j}-|\lambda_{s,j}|)P_{s,j},
+\qquad
+K_j^{-*}
+=
+K_j^-
+-
+\frac{|\boldsymbol n_j|}{4}
+(d_{s,j}-|\lambda_{s,j}|)P_{s,j}.
+\]
+
+Therefore \(K_j^{+*}+K_j^{-*}=K_j\) exactly. The complete ALE Jacobian and contour total are unchanged; only the N distribution's shear dissipation changes. The implementation is present in both laboratory and element co-moving algebra. In the latter, the laboratory matrices are replaced before use and the correction is reconstructed directly in the shifted variables.
+
+The N CFL code explicitly maximises its existing acoustic bound against
+\(\lambda_{s,j}^{+*}\). For \(0<\epsilon_s<1\),
+
+\[
+\lambda_{s,j}^{+*}\le c+|\lambda_{s,j}|,
+\]
+
+so this check does not tighten the validated acoustic timestep bound. It prevents a future change of scaling from silently omitting the modified eigenvalue.
+
+### 63.2 Offline falsification and build verification
+
+The new regression is tests/rd/test_ale_shear_eigenvalue_floor.py and is registered in make check_rd.
+
+Across 1000 random positive Euler states and random non-degenerate triangles:
+
+| identity | maximum defect |
+| --- | ---: |
+| \(K^{+*}+K^{-*}=K\), dimensionless backward error | \(4.36\times10^{-16}\) |
+| requested shear split eigenvalues | \(1.33\times10^{-13}\) |
+| projector identities and acoustic/entropy annihilation | \(6.05\times10^{-16}\) |
+| Galilean covariance | \(3.55\times10^{-14}\) |
+
+The complete make check_rd suite passes. The managed shear-floor build completed with MKL and no new compiler warning attributable to the implementation.
+
+Shear-floor artifact:
+
+~~~text
+/home/zwu/arepo_rd/arepo/build_artifacts/sod-n-shear-floor-045/000cdaaee46f-7a53c6a0c87cd539/Arepo
+SHA256 cefcc51d6a2ebf8b9fde5d8033dbdb3da326cb379a0ed93c976d6ac8419db86a
+~~~
+
+Current-source no-floor control:
+
+~~~text
+/home/zwu/arepo_rd/arepo/build_artifacts/sod-n-default-moving-current/000cdaaee46f-e5e929a2bcec43ef/Arepo
+SHA256 3b169e49377a2fb25513500c251e60c0a849c564f244ee3065c0203daa9edb76
+~~~
+
+The current-source control and the stored section-32 default baseline agree exactly at \(t=0.2\): the ID-matched RMS and maximum differences in \((\rho,v_x,v_y,p)\) are all zero. The intervening cleanup therefore does not explain the result below.
+
+### 63.3 Matched online experiment
+
+All moving arms use the same relaxed periodic glass48 IC: 2304 generators, SHA256
+8f8fc1d7557398643a9f35b1a0d18de1e5c6cb08d436fbe3f8dd02adc33103ea. They use \(\gamma=5/3\), contour total, element co-moving frame, Arpaia temporary mass, N distribution, total-residual RK2, Courant factor 0.4 and \(t_{\max}=0.2\). The only compile-time difference between the two current-source moving artifacts is the shear floor.
+
+Campaign root:
+
+~~~text
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_ShearFloor_20260823
+~~~
+
+Machine-readable analysis:
+
+~~~text
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_ShearFloor_20260823/analysis.json
+SHA256 837364296f4fa80b5664bf471846353710df0909643da9cea4226a9e3dddc92f
+~~~
+
+Endpoint results:
+
+| quantity at \(t=0.2\) | static N | moving N, \(\epsilon_s=0\) | moving N, shear floor \(0.45\) |
+| --- | ---: | ---: | ---: |
+| \(L_1(\rho)\) | 0.046588 | 0.038859 | 0.039985 |
+| \(L_1(v_x)\) | 0.101982 | 0.110329 | 0.099765 |
+| \(L_1(p)\) | 0.051054 | 0.054722 | 0.054602 |
+| volume RMS \(|v_y|\) | 0.008490 | 0.014244 | **0.008146** |
+| RMS \(v_y\) / static | 1.000 | 1.678 | **0.960** |
+| volume-weighted 99th percentile \(|v_y|\) | 0.026593 | 0.061380 | **0.027392** |
+| maximum \(|v_y|\) | 0.040527 | 0.129075 | **0.049842** |
+| endpoint \(\rho_{\min}\) | 0.148625 | 0.139253 | 0.136442 |
+| endpoint \(p_{\min}\) | 0.134974 | 0.120247 | 0.116121 |
+| maximum/minimum cell volume | 1.170 | 5.144 | 4.571 |
+| total edge flips | 0 | 332 | 273 |
+
+Both moving runs complete. For the floored run, the minimum logged RK predictor values are \(\rho=0.125\), \(p=0.1\); the largest element distribution conservation defect is \(3.72\times10^{-16}\); and the minimum RD-CFL-limit/selected-step ratio is 1.034. The minimum pivot ratio remains zero, as expected: a shear-only floor leaves the entropy direction in \(\ker S^-\) and does not retire the pseudo-inverse path.
+
+The result is stronger than section 61's fixed-geometry offline estimate. The direct dissipation reduces the final volume RMS \(v_y\) by 42.8 per cent and the 99th percentile by 55.4 per cent relative to the matched moving baseline. The online mesh responds as well: flips fall by 17.8 per cent and the volume ratio improves, providing a nonlinear geometry feedback absent from the offline ensemble model. This likely explains why the online RMS reaches the static level rather than the predicted ratio near 1.5.
+
+The cost is visible but modest in this case. Relative to default moving N, \(L_1(\rho)\) rises by 2.9 per cent, while \(L_1(v_x)\) improves and \(L_1(p)\) is unchanged. The floor does **not** improve the endpoint density or pressure minima, so this is not evidence for positivity. It suppresses the transverse linearly-degenerate noise that motivated it.
+
+### 63.4 Figures and interpretation
+
+Profile comparison:
+
+~~~text
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_ShearFloor_20260823/figures/sod-n-shear-floor-profiles.png
+SHA256 52480d89be1962c84f06c4aa692d85cfbf94bb00e20553827fc5cd3bc9c9b851
+~~~
+
+Evolution:
+
+~~~text
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_N_ShearFloor_20260823/figures/sod-n-shear-floor-evolution.png
+SHA256 f6533452dc5b27a40597d1c1873a9a581b0f1abc16925fa3f61d04670032d563
+~~~
+
+Repository copies:
+
+~~~text
+useful_resources/moving_mesh_sod/sod-n-shear-floor-eps045-profiles.png
+useful_resources/moving_mesh_sod/sod-n-shear-floor-eps045-evolution.png
+~~~
+
+The plots show that the floor removes the large asymmetric transverse spikes around the two contact regions and returns the scatter envelope close to static N. The density and pressure profiles remain those of the moving method; the shock/contact locations and overall broadening are not artificially changed into a static-mesh solution.
+
+This one result changes the recommendation from “likely only partial mitigation” to “credible diagnostic candidate”. It still needs two cheap rejection tests before thesis/default consideration:
+
+1. Gresho at boost 0 and 10, because section 61 predicts an \(\epsilon_s c\) floor can damage resolved low-Mach shear;
+2. one Yee resolution pair, to detect a loss of the smooth convergence behaviour.
+
+Do not start an epsilon sweep yet. If either rejection test shows material degradation, retain this as an analysis experiment rather than a production scheme. Even if both pass, describe it as a Sermeus--Deconinck/Harten-type ALE shear regularisation with empirical robustness evidence, not as a proved positive RD scheme.
+
+## 64. LDA extension and Gresho/Yee rejection tests (2026-08-23)
+
+The section-63 shear eigenvalue floor was enabled for moving LDA with the same modified \(K_j^\pm\) split; the contour total is unchanged. The tested form is contour + element co-moving frame + Arpaia temporary mass + total-residual RK2 with \(\epsilon_s=0.45\).
+
+### 64.1 Moving-LDA relaxed-glass Sod
+
+| quantity at \(t=0.2\) | static LDA | moving control | moving floor |
+| --- | ---: | ---: | ---: |
+| \(L_1(\rho)\) | 0.046435 | 0.030156 | **0.024023** |
+| \(L_1(v_x)\) | 0.103824 | 0.090402 | **0.075481** |
+| \(L_1(p)\) | 0.049790 | 0.039872 | **0.032275** |
+| volume RMS \(|v_y|\) | 0.010963 | 0.020098 | 0.019239 |
+| volume p99 \(|v_y|\) | 0.039906 | 0.075058 | 0.074514 |
+| maximum \(|v_y|\) | 0.066206 | 0.128146 | 0.134812 |
+| \(\rho_{\min}\) | 0.148557 | 0.076406 | **0.094886** |
+| \(p_{\min}\) | 0.134847 | 0.040880 | **0.054042** |
+
+The floor reduces the three principal errors by 20.3, 16.5 and 19.1 per cent and reduces undershoot. Unlike N, transverse RMS improves by only 4.3 per cent, p99 is unchanged and the maximum is slightly worse. It helps LDA but does not return transverse noise to the static level and is not a positivity result.
+
+~~~text
+campaign: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_LDA_ShearFloor_20260823
+analysis: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_LDA_ShearFloor_20260823/analysis.json
+figures: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_LDA_ShearFloor_20260823/figures/
+~~~
+
+### 64.2 Gresho relaxed glass \(48^2\), boost 0/10
+
+The controls are the accepted section-57 endpoints and the floor arms are new endpoint runs. This is not a bitwise current-source Gresho-control rerun: two redundant current controls were stopped early after terminal I/O caused severe slowdown. The compile-off path is supported by the fully matched current-source LDA Sod control above and the earlier exact N-control reproduction.
+
+| mass-weighted \(L_1(v_\phi)\), \(t=1\) | boost 0 | boost 10 |
+| --- | ---: | ---: |
+| LDA control | \(7.795319\times10^{-3}\) | \(7.795328\times10^{-3}\) |
+| LDA floor | **\(7.386879\times10^{-3}\)** | **\(7.386932\times10^{-3}\)** |
+
+The floor improves the error by 5.24 per cent. The floor boost-pair difference is \(5.34\times10^{-8}\), with visually identical de-boosted envelopes. No loss of the boost-10/quasi-Lagrangian advantage is seen.
+
+~~~text
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/ShearFloor_Gresho_Yee_20260823/figures/gresho-lda-shear-floor-boost-pair.png
+SHA256 2c62d52d40aa0a8632adef964ca96decd3566ff333b6000cad2abe45fe3fe7c3
+~~~
+
+### 64.3 Yee \(32^2/64^2\) pair
+
+These four arms are current-source and switch-for-switch matched.
+
+| moving-LDA arm | \(32^2\) | \(64^2\) | order |
+| --- | ---: | ---: | ---: |
+| control | \(2.277399\times10^{-3}\) | \(7.347788\times10^{-4}\) | 1.632 |
+| floor | **\(1.537984\times10^{-3}\)** | **\(4.781233\times10^{-4}\)** | **1.686** |
+
+The floor reduces the errors by 32.5 and 34.9 per cent without lowering pairwise order. Two resolutions do not prove asymptotic order, but reject immediate first-order degradation.
+
+~~~text
+campaign: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ShearFloor_Gresho_Yee_20260823
+analysis: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ShearFloor_Gresho_Yee_20260823/analysis.json
+SHA256 d951b2bede4da40272caa5c5af027566f71657dfe0165e056aca708654b0c239
+figure: /home/zwu/Hydro_data_analysis/Data_MMRD_debug/ShearFloor_Gresho_Yee_20260823/figures/yee-lda-shear-floor-resolution-pair.png
+~~~
+
+Repository copies of all four figures are in useful_resources/shear_eigenvalue_floor/. The reusable analysis driver is examples/gresho_2d/analyze_lda_shear_floor_validation.py.
+
+### 64.4 Decision
+
+The focused 1000-state/triangle test, make check_rd and git diff --check pass. Both rejection tests pass: the floor preserves boost covariance, does not damage Gresho and does not lower the Yee pairwise order. Retain it as a serious diagnostic/thesis candidate, not an ad-hoc plot fix.
+
+Do not make it the production default yet: positivity is unproved, moving-LDA Sod remains noisier transversely than static LDA, and only one epsilon and one Yee pair were tested. The next low-cost discriminator is long-time smoothed KH with LDA; perform a small epsilon sensitivity check only if needed.
+
+Thesis positioning: present this as an ongoing ALE-RD optimisation with a clear mathematical motivation, successful N-Sod suppression, partial LDA-Sod improvement, and passing smooth-test rejection checks. State explicitly that it is not the default method and that KH robustness, positivity and parameter sensitivity remain open. This gives the result analytical value without overstating its production readiness.
+
+The LDA Sod profile and evolution plots are also copied to:
+
+~~~text
+useful_resources/shear_eigenvalue_floor/sod-lda-shear-floor-profiles.png
+useful_resources/shear_eigenvalue_floor/sod-lda-shear-floor-evolution.png
+~~~
+
+### 64.5 Why moving LDA amplifies the rarefaction oscillation
+
+The larger moving-mesh oscillation in the Sod rarefaction is most plausibly an amplification of LDA's existing dispersive error, not a new failure attributable to one ALE formula.
+
+1. In the expanding fan, a quasi-Lagrangian generator field also expands. The physical node spacing and triangle areas grow, so the fan has lower Eulerian spatial resolution than on the fixed mesh. Glass-scale two-dimensional irregularity is then sampled by fewer triangles.
+2. The ALE spectrum is
+   \[
+   \lambda_\pm=(\boldsymbol u-\boldsymbol\sigma_T)\cdot\widehat{\boldsymbol n}\pm c,
+   \qquad
+   \lambda_0=(\boldsymbol u-\boldsymbol\sigma_T)\cdot\widehat{\boldsymbol n}.
+   \]
+   Near the Lagrangian limit, \(\lambda_0\) approaches zero and \(S^-=\sum_jK_j^-\) becomes singular or ill-conditioned in its linearly-degenerate fields. The implemented LDA action,
+   \[
+   S^-x=\Phi^T,\qquad \Phi_i^{LDA}=-K_i^+x,
+   \]
+   remains conservative and well defined through the generalized inverse, but its nodal distribution is sensitive to small changes of relative velocity, normals and Roe averages.
+3. The nodal storage uses \(Q_i=m_iU_i\). Arpaia re-basing and the topology ledger preserve conservation when \(m_i\) changes, but they do not impose a local maximum principle on \(U_i=Q_i/m_i\). Smooth area evolution, and occasionally flips, can therefore feed a small distribution error back into density and pressure.
+4. LDA is linearity preserving rather than monotone. It has no N/B-like nonlinear limiter to remove alternating error at the head and tail of a steep rarefaction.
+5. The shear floor cannot directly cure this acoustic feature: its projector annihilates both acoustic eigenvectors and the entropy eigenvector. The observed density/pressure improvement is indirect, through reduced transverse noise and solution--geometry feedback. This explains why improvement is visible but the moving rarefaction remains more oscillatory than static LDA.
+
+The weak dependence on contour versus Roe+split, Arpaia versus Campoli and laboratory versus element co-moving algebra, together with successful Gresho/Yee and conservation/GCL checks, argues against a gross error in one mathematical ALE form. It does not yet distinguish resolution loss from near-singular LDA sensitivity; local plots of error against triangle area, relative Mach number, \(S^-\) conditioning and flip history would do so.
+
+There is currently no credible low-cost production fix. The cheap options are diagnostics or deliberately limited experiments:
+
+- halve the CFL number once to reject a mainly temporal origin;
+- use the existing entropy-mode floor in one matched Sod run, which directly tests the missing near-Lagrangian entropy dissipation but cannot stabilize the acoustic fields;
+- correlate rarefaction error with area, relative speed, conditioning and flips;
+- try scalar-B only as a diagnostic local limiter near the fan edges;
+- reduce mesh velocity in expansion only as a diagnostic, since it trades away the quasi-Lagrangian advantage.
+
+A production treatment that preserves smooth LDA accuracy probably needs a principled nonlinear distribution/entropy-stable ALE construction, not parameter tuning. Unless one of the existing low-cost operators gives a decisive result, defer that redesign while proceeding with hierarchical timesteps and MPI parallelisation, and present the present floor study in the thesis as ongoing optimisation.
+
+## 65. Final Sod operator experiment: entropy-mode floor (2026-08-23)
+
+The complete mathematics, motivation, distribution formulas and full result
+tables are recorded separately in:
+
+~~~text
+dev_log/RD_ALE_LINEARLY_DEGENERATE_DISSIPATION.md
+~~~
+
+This campaign is the final Sod tuning attempt.  It compares the accepted
+moving N/LDA controls and shear-floor arms against the already implemented
+rank-one entropy correction
+
+\[
+K_j^+\leftarrow K_j^++\eta_{e,j}P_e,\qquad
+K_j^-\leftarrow K_j^--\eta_{e,j}P_e,
+\]
+
+with the single motivated value \(\epsilon_e=0.27\).  All arms use the same
+relaxed glass48 IC (SHA256
+8f8fc1d7557398643a9f35b1a0d18de1e5c6cb08d436fbe3f8dd02adc33103ea),
+contour total, element co-moving frame, Arpaia mass and total-residual RK2.
+The entropy and shear corrections are tested separately.
+
+### 65.1 Endpoint result
+
+| scheme and metric | control | shear 0.45 | entropy 0.27 |
+| --- | ---: | ---: | ---: |
+| N global \(L_1(\rho)\) | 0.038859 | 0.039985 | **0.045040** |
+| N rarefaction \(L_1(\rho)\) | 0.058837 | 0.060913 | 0.057646 |
+| N rarefaction entropy error | 0.024572 | 0.024832 | **0.030025** |
+| N RMS \(|v_y|\) | 0.014244 | **0.008146** | 0.011937 |
+| LDA global \(L_1(\rho)\) | 0.030156 | **0.024023** | 0.032667 |
+| LDA rarefaction \(L_1(\rho)\) | 0.047868 | **0.041175** | 0.045213 |
+| LDA rarefaction entropy error | 0.007500 | **0.004431** | 0.006776 |
+| LDA RMS \(|v_y|\) | 0.020098 | 0.019239 | 0.020026 |
+| LDA \(\rho_{\min}\) | 0.076406 | **0.094886** | 0.072190 |
+| LDA \(p_{\min}\) | 0.040880 | **0.054042** | 0.039297 |
+
+For N, the entropy arm makes global density error 15.9 per cent worse and
+rarefaction entropy error 22.2 per cent worse.  It reduces transverse RMS by
+16.2 per cent, but the shear floor reduces it by 42.8 per cent.
+
+For LDA, the entropy arm gives small rarefaction-density and entropy-error
+reductions of 5.5 and 9.6 per cent, but global density/velocity/pressure errors
+rise by 8.3/0.8/1.1 per cent, the minima worsen and transverse noise is
+unchanged.  The shear arm remains substantially better.
+
+### 65.2 The negative result is mechanistically decisive
+
+Both entropy runs complete and preserve element conservation.  More
+importantly, the correction removes the algebraic defect it was designed to
+remove:
+
+| diagnostic | N entropy | LDA entropy |
+| --- | ---: | ---: |
+| minimum \(S^-\) pivot ratio | 0.0999 | 0.1646 |
+| maximum F1 lumped count | 0 | 0 |
+| maximum relative conservation defect | \(3.79\times10^{-16}\) | \(9.68\times10^{-16}\) |
+
+The matched LDA control and shear arms have zero minimum pivot ratio and up to
+4027 rank-deficient F1 lumped events.  Hence the entropy projector is active,
+removes the common entropy kernel and eliminates the temporal fallback, yet
+does not improve the solution.  Missing entropy-mode dissipation is not the
+cause of the remaining moving-mesh rarefaction error.
+
+The remaining evidence points to acoustic LDA/N dispersion, lower Eulerian
+sampling in the expanding quasi-Lagrangian fan, and solution--geometry
+feedback.  No further Sod operator tuning is planned.  Retain the shear floor
+as a non-default ongoing-optimisation result for the thesis; retain the
+entropy correction as a mathematically clean diagnostic and negative result.
+
+### 65.3 Reproducibility
+
+~~~text
+campaign:
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_EntropyFloor_Final_20260823
+analysis:
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_EntropyFloor_Final_20260823/analysis.json
+SHA256 cf814cd7898ac3c0134e88b7ad7695dfe5d13b597df99ce50dea02e53e875e5f
+
+N entropy binary:
+/home/zwu/arepo_rd/arepo/build_artifacts/sod-n-entropy-floor-027-g53/000cdaaee46f-53d8f3ddc58c398a/Arepo
+SHA256 04a294f335329ffe5f3d1a10775aa713566da4fa30ceb0c7a2416337304a70fa
+
+LDA entropy binary:
+/home/zwu/arepo_rd/arepo/build_artifacts/sod-lda-entropy-floor-027-g53/000cdaaee46f-f2fbbb85ede47a9b/Arepo
+SHA256 c8317e47fb317d2e9a8818f05fcbc98f05545ba938dcbbe8b5b41dbb162b3f7e
+
+figures:
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_EntropyFloor_Final_20260823/figures/sod-entropy-floor-full-profiles.png
+SHA256 cdd546e43be9901a1fb28fe75aa9a04fb2da59013804d6b61eb0d71380e506d2
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/Sod_EntropyFloor_Final_20260823/figures/sod-entropy-floor-rarefaction.png
+SHA256 03b123a3e5a8fd14550814c7dd90b3e450f91c51099b168ef37f800dbb87ffef
+~~~
+
+Repository figure copies are in
+useful_resources/shear_eigenvalue_floor/.
+
+
+---
+
+## 66. 2026-08-23: Kimi's review of sections 56-65 — close the testing phase, with one pre-closure discriminator and two technical notes for the next phase
+
+- **Author:** Kimi (K3), at Zhenyu's request.
+- **Scope:** review of sections 56-65 (the scalar-B sprint, the component-B
+  controls, the KH consolidation, and the shear/entropy eigenvalue-floor
+  campaigns). Advisory only; no code change, no new run.
+- **Status:** recommendations for Zhenyu.
+
+### 66.1 Both open problems are now in "explained plus engineering baseline" state
+
+Problem 1 (moving-N Sod transverse oscillation): the mechanism is
+quantitatively explained (section 44.2: shear-mode damping 0.554 at
+`sigma = u`, predicting and matching the factor 1.80), and the section-63/64
+shear eigenvalue floor at `eps_s = 0.45` restores the transverse statistic to
+0.96 of static N while passing both rejection tests (Gresho boost covariance
+preserved; Yee pairwise order 1.69, not degraded). Section 65 has closed Sod
+operator tuning with the decisive entropy-floor negative result.
+
+Problem 2 (moving-LDA KH long-time failure): scalar B completes the matched
+smoothed glass48 KH to `t = 10` at `f = 1` with limiter activity *decaying*
+(mean total theta 0.983 to 0.466), passes the Galilean gate decisively
+(`b10/b0 = 0.99997`), and pays a measured accuracy cost: +19.8 per cent on
+matched Gresho `L1(v_phi)` and Yee orders 1.41/1.40 against LDA's 1.63/1.71
+(section 57). Component-wise B is not redundant (more accurate on Yee, fails
+KH at `t = 0.87`; section 58.4). The section-53.6 stopping rule is met.
+
+**Recommendation: the testing phase can be closed.** Both problems have a
+recorded mechanism or a recorded limitation plus a working `f = 1`
+configuration, which is exactly the state the section-53.6 stopping rule was
+designed to produce. Development effort should move to the section-53.6
+engineering order: moving equal-step MPI, then the moving hierarchical
+ledger on one rank, then the combination.
+
+### 66.2 One pre-closure discriminator still worth its single run
+
+Section 64.4 already named it: **long-time smoothed KH with moving LDA plus
+the shear floor.** It is decision-relevant for what the hierarchical/MPI
+phase should treat as the production scheme:
+
+- If LDA + floor survives to `t = 10`, the accuracy-optimal default becomes
+  LDA + shear floor (Yee order 1.69, Gresho boost covariance exact, no
+  N-blending cost), and scalar B is demoted to the robustness fallback.
+- If it fails, scalar B's position as the temporary production baseline is
+  final, and the remaining pure-LDA shear limitation is a thesis statement.
+
+One run, one rank, existing binaries; it should not grow into a sweep. This
+is a cheaper and more informative closure experiment than the glass64/96
+resolution check of the factor 1.80 (section 61.5 item 2), which the shear
+floor has largely superseded and which can be deferred to thesis-writeup
+time.
+
+### 66.3 Technical notes for the hierarchical-timestep phase
+
+1. **The B scheme is currently excluded from hierarchical timesteps by
+   construction.** The compile-time guard in
+   `src/hydro/residual_distribution_solver.c` ("RD_RK2_TOTAL_RESIDUAL with
+   B_SCHEME is an equal-bin experiment; the hierarchy has only been derived
+   for the N and LDA temporal terms") means that if scalar B is the
+   production robustness scheme, the hierarchical phase must first define
+   what the frozen total-residual theta means across time bins: whether
+   theta is computed per bin from the local residual ratio, frozen at the
+   coarse-bin level, or blended separately per bin. This is a derivation
+   task before it is an implementation task, and it is the strongest argument
+   for running the section-66.2 discriminator first — LDA + floor needs no
+   such derivation, since the LDA hierarchy already exists.
+2. **Two MPI obstacles are already on record.** (a)
+   `RD_ALE_GEOMETRY_DIAGNOSTICS` Stage 0 is deliberately single-rank; the
+   section-57.1 two-rank startup failure was this switch, not a physics
+   failure, and MPI validation runs must build without it (or guard it).
+   (b) The LU-pivot-ratio branch selecting the pseudo-inverse path
+   (`rd_solve_upwind_system`) is round-off-sensitive and therefore a
+   candidate source of domain-decomposition dependence (section 1, item 4 /
+   section 3.4 of the carried-forward list). One MPI-invariance control
+   should be run with `RD_ALWAYS_PSEUDOINVERSE` to separate that branch from
+   any observed rank-count dependence, before rank-dependent results are
+   attributed to the exchange logic.
+
+### 66.4 Standing qualifications to carry into the thesis text
+
+- Scalar B is a temporary engineering baseline: it has no invariant-domain
+  proof, its KH entropy excursion peaks at 0.8 (the contour-total entropy
+  quality defect of section 45.3 is not repaired), and the late-time KH field
+  is visibly mixed — completion is not an accuracy endorsement.
+- The shear floor is a Sermeus--Deconinck/Harten-type regularisation with
+  empirical evidence at one `eps_s` and one mesh family; it is not the
+  default and is not a positivity mechanism (section 63.4).
+- The geometry-versus-solution feedback question for the LDA precursor
+  (section 60.1) remains formally open; the terminal event is solution-first,
+  but the driver of the secular drift is not closed.
+
+---
+
+## 67. 2026-08-23: phase-entry assessment — concur on closure, with one added prerequisite
+
+- **Author:** Claude Code (Fable 5), at Zhenyu's request.
+- **Scope:** review of sections 62-66 and the decision whether the moving-mesh
+  hierarchical-timestep / MPI phase can start. Advisory; no code change, no
+  new run.
+- **Verdict:** yes. The section-53.6 stopping rule is met, section 66.1's
+  closure recommendation is endorsed, and the engineering order stands:
+  moving equal-step MPI, then the hierarchical ledger on one rank, then the
+  combination. Two things should happen at the front of that phase: the
+  section-66.2 discriminator run, and a conservation-drift attribution that
+  Kimi's checklist does not contain.
+
+### 67.1 A correction to section 61's expectation, recorded honestly
+
+Section 61 predicted that `eps_s = 0.45` would be a partial mitigation only
+(ensemble RMS amplification ~1.5 against the measured 1.68-1.80). The online
+result of section 63 is 0.960 — better than static. The offline ensemble
+model missed the nonlinear solution-geometry feedback that section 63.4
+identifies: once the transverse noise is damped, the mesh itself improves
+(17.8 per cent fewer flips, better volume ratio), which further reduces the
+noise source. The offline gate did its intended job — it rejected the false
+`eps* = 0.446` full-restoration prediction and forced the shear-only variant
+that leaves contacts untouched — but as an estimate of online effectiveness
+it was conservative, and the record should say so. The same feedback blindness
+cuts both ways and is why offline models in this project bound mechanisms, not
+outcomes.
+
+### 67.2 Why the section-66.2 discriminator should run before, not after
+
+The KH run of moving LDA + shear floor to `t = 10` is not merely a nice-to-have
+closure experiment; it selects how much derivation work the hierarchical phase
+contains. The compile-time guard in `residual_distribution_solver.c` excludes
+`B_SCHEME` from `RD_RK2_TOTAL_RESIDUAL` hierarchical bins because the
+frozen total-residual theta has no defined meaning across time bins. So:
+
+- LDA + floor survives KH: the production scheme for the hierarchical phase
+  is LDA (+ floor as a non-default option), whose hierarchy already exists
+  from the static phase; scalar B remains the equal-step robustness fallback
+  and the theta-across-bins derivation is deferred indefinitely.
+- LDA + floor fails KH: scalar B's baseline status is final, and the
+  hierarchical phase begins with a derivation task (per-bin versus
+  coarse-bin-frozen theta), which must then be budgeted rather than
+  discovered mid-implementation.
+
+One run, one rank, existing binaries; it can run while the MPI groundwork
+below is prepared, but its answer is needed before the hierarchical ledger
+work is scoped.
+
+### 67.3 Added prerequisite: attribute the section-59.3 conservation drift
+
+Section 59.3 records fractional total-mass changes through the KH `t = 10`
+runs of `+1.94e-3` (scalar B) and `+2.52e-3` (N), explicitly "not roundoff",
+assigned to the outstanding ALE endpoint/rebase conservation audit and left
+open. For the robustness discussion that was acceptable. For the next phase
+it is not: the static phase's primary validation gates were conservation
+exact to round-off and rank invariance by ParticleID, and those are precisely
+the gates the equal-step MPI work will need. A single-rank equal-step
+baseline that drifts at `2e-3` makes the most sensitive MPI gate unusable.
+
+The attribution has two branches with very different costs:
+
+1. a diagnostic artifact — snapshot sums formed from density times Voronoi
+   volume rather than the stored dual masses `Q_i`/`m_i`, which the ALE
+   storage does not require to agree at the `1e-3` level. Half a day: rerun
+   the sums on the stored masses and on the conservation ledger the solver
+   already logs (section 63.3 records element conservation defects at
+   `1e-16`, which makes this branch likely);
+2. a real solver drift in the endpoint/rebase path, in which case it must be
+   found and fixed before MPI validation begins, because every subsequent
+   gate inherits it.
+
+Either way the audit is short, and it converts the strongest validation
+instrument of the static phase back into a usable gate. It should be the
+first task of the engineering phase, alongside the discriminator run.
+
+### 67.4 Known obstacles carried into the phase, consolidated
+
+From sections 57, 59, 63 and 66.3, with one addition:
+
+1. `RD_ALE_CFL_TIMESTEP` is by design single-rank and terminates multi-rank
+   runs at `rd_apply_cfl_timestep_constraint()` (section 59.3). Making its
+   reduction MPI-aware is the natural first implementation task of the
+   equal-step MPI step.
+2. `RD_ALE_GEOMETRY_DIAGNOSTICS` Stage 0 is deliberately single-rank
+   (section 57.1's two-rank startup failure); MPI builds must omit or guard
+   it.
+3. The LU-pivot-ratio branch selecting the pseudo-inverse is
+   round-off-sensitive and a candidate source of domain-decomposition
+   dependence; run one MPI-invariance control with `RD_ALWAYS_PSEUDOINVERSE`
+   before attributing any rank dependence to the exchange logic
+   (section 66.3, carrying section 3.4).
+4. The shear floor itself is element-local with no communication footprint
+   and adds no MPI obstacle; its CFL contribution is already bounded by the
+   acoustic limit (section 63.1).
+5. Deferred by agreement: the glass64/96 resolution check of the factor 1.80
+   (to thesis-writeup time, per section 66.2), and any epsilon sensitivity
+   study (single value `eps_s = 0.45` stands until the discriminator and the
+   engineering phase say otherwise).
+
+### 67.5 Recorded position
+
+The testing phase closes with both problems in the state the stopping rule
+required: Sod explained and instrumented (sections 44, 63-65), KH carried by
+scalar B at `f = 1` with its costs measured (sections 57-60). The moving
+hierarchical-timestep / MPI phase starts with, in order: the section-59.3
+conservation attribution, the section-66.2 LDA-plus-floor KH discriminator,
+then moving equal-step MPI per section 53.6.
+
+## 68. Topology-change conservation repair proposed for review (2026-08-24)
+
+**Author:** Codex
+**Scope:** mathematics and algorithmic contract only; no source change and no new
+production run in this section.
+**Status:** proposal for Claude review before implementation.
+
+### 68.1 Why formal order is not a sufficient answer to the observed drift
+
+Let the globally summed discrete conserved state after step \(n\) be
+\(\mathcal Q^n=\sum_i Q_i^n\), and let a topology event introduce the defect
+
+\[
+  \delta^n = \mathcal Q^{n+1}-\mathcal Q^n .
+\]
+
+After \(N\) events,
+
+\[
+  \mathcal Q^N-\mathcal Q^0 = \sum_{n=0}^{N-1}\delta^n.
+\]
+
+A local defect of formal size \(O(h^p)\) does not imply a small long-time
+invariant error.  If the event defects have a non-zero signed mean, they add as
+\(N_{\rm flip}O(h^p)\), rather than cancelling statistically as
+\(\sqrt{N_{\rm flip}}O(h^p)\).  Moreover, the number of topology events itself
+can grow as the resolution is increased, and a sharp layer only supplies a
+local estimate such as \(O(h^2[U])\), not the smooth-solution estimate.
+
+This separates two requirements which should not be conflated:
+
+1. the LDA/N update may retain its designed order for the solution norm;
+2. the global invariants should nevertheless be preserved by an algebraic
+   identity, to roundoff, at every topology transfer.
+
+The current scalar-B fixed-grid/moving-grid diagnostic makes the distinction
+visible.  In the recorded run,
+
+\[
+\begin{aligned}
+ M(0) &= 1.4999719023504383,\\
+ M(T) &= 1.5028869545126289,\\
+ \frac{M(T)-M(0)}{M(0)} &= 1.94\times10^{-3},
+\end{aligned}
+\]
+
+while the N result reaches \(2.52\times10^{-3}\).  For scalar B there are
+\(30055\) measured steps: \(2659\) without flips and \(27396\) with flips.
+The no-flip median and maximum endpoint defects are approximately
+\(2.72\times10^{-13}\) and \(5.77\times10^{-11}\); the flip-step values are
+\(2.05\times10^{-5}\) and \(3.45\times10^{-4}\).  The signed cumulative
+contributions are approximately
+
+\[
+  \sum_{\rm no\ flip}\delta M=-2.37\times10^{-9},\qquad
+  \sum_{\rm flip}\delta M=+2.915054\times10^{-3}.
+\]
+
+Thus the typical signed contribution per flip step is only
+\(1.06\times10^{-7}\), but it is biased.  The temporary trajectory reaches
+roughly \(+3.1825\times10^{-3}\), followed by a final rebase contribution of
+about \(-2.6744\times10^{-4}\).  The final \(10^{-3}\) error is therefore a
+long accumulation of small topology-correlated defects, not a single failed
+hydrodynamic step.
+
+**Decision:** formal accuracy remains a necessary consistency check, but it is
+not an acceptance criterion for a conservation invariant.
+
+### 68.2 Transfer problem and required identities
+
+Consider one connected retriangulation patch \(P\), the symmetric difference
+between the old and new triangulations at the same physical time.  Decompose
+the lumped basis mass of each affected vertex into the unchanged exterior part
+and the patch part:
+
+\[
+  m_i^\pm = m_{i,\mathrm{out}} + m_{i,P}^\pm,\qquad
+  \Delta m_i = m_{i,P}^+ - m_{i,P}^- .
+\]
+
+Here \(-\) and \(+\) denote the old and new connectivity, pulled back to the
+same physical time and periodic image.  For a \(P_1\) basis on the same patch
+domain, partition of unity and linear reproduction give
+
+\[
+  \sum_{i\in P}\Delta m_i=0,\qquad
+  \sum_{i\in P}\Delta m_i\,\boldsymbol x_i=\boldsymbol 0.
+  \tag{68.1}
+\]
+
+Let \(\boldsymbol U_i=(\rho,\rho\boldsymbol v,E,\ldots)_i\), and let
+\(\boldsymbol Q_i=m_i\boldsymbol U_i\) be the lumped nodal conserved state.
+The topology operator \(\mathcal T_P\) should satisfy:
+
+\[
+\begin{array}{ll}
+\text{patch conservation:}&
+ \displaystyle\sum_{i\in P}\boldsymbol Q_i^+
+ =\sum_{i\in P}\boldsymbol Q_i^-,\\[1ex]
+\text{uniform-state/GCL exactness:}&
+ \boldsymbol U_i^-=\boldsymbol U_0
+ \Longrightarrow \boldsymbol U_i^+=\boldsymbol U_0,\\[1ex]
+\text{linear exactness:}&
+ \boldsymbol U(\boldsymbol x)=\boldsymbol a+B\boldsymbol x
+ \Longrightarrow \boldsymbol U_i^+=\boldsymbol U(\boldsymbol x_i),\\[1ex]
+\text{locality:}&
+ \boldsymbol Q_i^+=\boldsymbol Q_i^-\quad(i\notin P),\\[1ex]
+\text{admissibility:}&
+ \rho_i^+>0,\quad
+ e_i^+=E_i^+-\frac{|\boldsymbol m_i^+|^2}{2\rho_i^+}>0.
+\end{array}
+\tag{68.2}
+\]
+
+The operator must be independent of whether the subsequent residual
+distribution is LDA, N, or scalar B.  It repairs a change of representation,
+not the PDE residual.
+
+### 68.3 Method to advance: local conservative high-order patch correction
+
+If the nodal primitive/conservative values are simply retained while the basis
+masses jump, the provisional new state is
+\(\widetilde{\boldsymbol Q}_i^+=m_i^+\boldsymbol U_i^-\).  Its patch defect is
+
+\[
+  \boldsymbol D_P
+  =\sum_{i\in P}\Delta m_i\,\boldsymbol U_i^-.
+  \tag{68.3}
+\]
+
+Choose non-negative local weights with
+
+\[
+  w_i\ge0,\qquad \sum_{i\in P}w_i=1.
+\]
+
+The initial choice proposed for testing is the new patch-mass fraction
+
+\[
+  w_i=\frac{m_{i,P}^+}{M_P},\qquad
+  M_P=\sum_{j\in P}m_{j,P}^+.
+  \tag{68.4}
+\]
+
+Define the high-order topology increment and transferred state by
+
+\[
+\boxed{
+  \Delta\boldsymbol Q_i^H
+   =\Delta m_i\,\boldsymbol U_i^- - w_i\boldsymbol D_P,
+  \qquad
+  \boldsymbol Q_i^{H,+}
+   =\boldsymbol Q_i^-+\Delta\boldsymbol Q_i^H .
+}
+\tag{68.5}
+\]
+
+This construction has the following exact properties.
+
+**Patch conservation.**  From (68.3)-(68.5),
+
+\[
+  \sum_{i\in P}\Delta\boldsymbol Q_i^H
+  =\boldsymbol D_P-\boldsymbol D_P=0.
+  \tag{68.6}
+\]
+
+**Uniform-state exactness.**  If
+\(\boldsymbol U_i^-=\boldsymbol U_0\), then by (68.1)
+
+\[
+  \boldsymbol D_P
+  =\boldsymbol U_0\sum_i\Delta m_i=\boldsymbol0,
+\]
+
+and hence
+\(\boldsymbol Q_i^{H,+}=m_i^+\boldsymbol U_0\).
+
+**Linear exactness.**  If
+\(\boldsymbol U_i^-=\boldsymbol a+B\boldsymbol x_i\), then (68.1) gives
+
+\[
+ \boldsymbol D_P
+ =\boldsymbol a\sum_i\Delta m_i
+  +B\sum_i\Delta m_i\boldsymbol x_i
+ =\boldsymbol0.
+ \tag{68.7}
+\]
+
+The nodal linear state is therefore unchanged by the transfer.  For a smooth
+state, Taylor expansion about a patch point and the cancellation of constant
+and linear terms give
+
+\[
+  \boldsymbol D_P=O(M_P h_P^2\|\nabla^2\boldsymbol U\|),
+  \qquad
+  \frac{w_i\boldsymbol D_P}{m_i^+}
+  =O(h_P^2\|\nabla^2\boldsymbol U\|).
+  \tag{68.8}
+\]
+
+Thus the correction is second-order small in a smooth region while making
+conservation exact.  At a discontinuity it is not assumed to be high order;
+that case is delegated to the admissible fallback below.
+
+Equation (68.5) is also the solution of a simple constrained least-change
+problem.  Writing the corrective redistribution as
+\(\boldsymbol c_i=-w_i\boldsymbol D_P\), it minimizes, component by component,
+
+\[
+  \min_{\{\boldsymbol c_i\}}
+  \frac12\sum_{i\in P}\frac{\|\boldsymbol c_i\|^2}{w_i}
+  \quad\text{subject to}\quad
+  \sum_{i\in P}\boldsymbol c_i=-\boldsymbol D_P.
+  \tag{68.9}
+\]
+
+This interpretation makes the unresolved design choice explicit: whether
+\(w_i\) should use new patch masses, full new lumped masses, or a
+geometry/conditioning-aware metric.  New patch mass is the proposed first
+choice because it is local to the changed basis and has a direct low-order
+interpretation.
+
+### 68.4 Method to advance: admissible low-order fallback and convex limiting
+
+For robustness near a shock or a contact, decompose only the changed patch
+contribution.  Define its old conservative average
+
+\[
+  \overline{\boldsymbol U}_P
+  =\frac{\sum_{j\in P}m_{j,P}^-\boldsymbol U_j^-}
+         {M_P},
+  \qquad
+  M_P=\sum_jm_{j,P}^-=\sum_jm_{j,P}^+.
+  \tag{68.10}
+\]
+
+The low-order remap replaces the old patch contribution by the same admissible
+average on the new patch masses:
+
+\[
+\boxed{
+  \Delta\boldsymbol Q_i^L
+   =m_{i,P}^+\overline{\boldsymbol U}_P
+    -m_{i,P}^-\boldsymbol U_i^- .
+}
+\tag{68.11}
+\]
+
+It is conservative because
+
+\[
+  \sum_i\Delta\boldsymbol Q_i^L
+  =M_P\overline{\boldsymbol U}_P
+   -\sum_i m_{i,P}^-\boldsymbol U_i^-=\boldsymbol0.
+  \tag{68.12}
+\]
+
+If all \(m_{i,P}^\pm\) are non-negative and the old states are admissible, then
+\(\overline{\boldsymbol U}_P\) lies in the convex Euler admissible set
+
+\[
+  \mathcal G_\epsilon
+  =\left\{\boldsymbol U:
+    \rho\ge\epsilon_\rho,\quad
+    E-\frac{|\boldsymbol m|^2}{2\rho}\ge\epsilon_e
+   \right\}.
+  \tag{68.13}
+\]
+
+The exterior contribution is left untouched.  A common scalar limiter for the
+whole conserved vector is then used:
+
+\[
+  \boldsymbol Q_i^+(\alpha)
+   =\boldsymbol Q_i^{L,+}
+    +\alpha\left(
+       \boldsymbol Q_i^{H,+}-\boldsymbol Q_i^{L,+}
+     \right),
+  \qquad 0\le\alpha\le1.
+  \tag{68.14}
+\]
+
+Choose the largest patch-common \(\alpha\) for which every affected nodal state
+belongs to \(\mathcal G_\epsilon\).  Both endpoints are conservative and the
+same \(\alpha\) is used for all nodes and conserved components, so (68.14)
+remains exactly conservative.  Convexity supplies the admissibility argument.
+
+This is deliberately a topology-transfer limiter only.  It does not claim an
+invariant-domain proof for the complete RK2 RD update.  Diagnostics must record
+the number of limited patches, the distribution of \(\alpha\), and the
+low-order fraction of the total transferred mass/energy.  If limiting is
+frequent away from discontinuities, the transfer or its mass decomposition is
+wrong rather than merely under-limited.
+
+### 68.5 Required placement in the time integrator
+
+The intended factorization of one moving-mesh step is
+
+\[
+  \underbrace{
+    (\boldsymbol Q^-,m^-,\mathcal T^-)
+    \xrightarrow{\ \mathcal T_{\rm topo}\ }
+    (\widehat{\boldsymbol Q},m^+,\mathcal T^+)
+  }_{\text{same physical time}}
+  \xrightarrow{\ \mathcal A_{\rm ALE,RK2}\ }
+  (\boldsymbol Q^{n+1},m^{n+1},\mathcal T^{n+1}).
+  \tag{68.15}
+\]
+
+The topology transfer must use the state saved before drift and the actual old
+basis/connectivity.  It must not be applied after RK2 as a global repair,
+because that would mix representation error with physical ALE evolution.
+Arpaia preparation should receive \((\widehat{\boldsymbol Q},m^+)\), not a
+state that silently combines old nodal values with new masses.
+
+Implementation therefore needs, for each topology event or connected event
+cluster:
+
+- old and new patch connectivity long enough to evaluate
+  \(m_{i,P}^-\) and \(m_{i,P}^+\);
+- a coherent periodic image for all moment checks;
+- one transfer per topology change, before the continuous ALE residual;
+- per-component checks of (68.1), (68.6), positivity, and finite values;
+- scheme-independent application before LDA/N/scalar-B branching.
+
+For later hierarchical timesteps, the algebraic transfer is still local, but
+the event time and ownership must be defined separately: active and inactive
+vertices cannot each apply a partial version of the same patch transfer.  That
+is an MPI/hierarchy integration question, not a reason to weaken (68.6).
+
+### 68.6 Earlier antisymmetric graph operator: retain as an alternative, not the first implementation
+
+The previously discussed graph construction seeks coefficients
+
+\[
+  a_{ij}=-a_{ji},\qquad
+  \sum_j a_{ij}=\Delta m_i,
+  \tag{68.16}
+\]
+
+and defines
+
+\[
+  \Delta\boldsymbol Q_i^A
+  =\sum_j a_{ij}
+     \frac{\boldsymbol U_i^-+\boldsymbol U_j^-}{2}.
+  \tag{68.17}
+\]
+
+Antisymmetry makes global conservation exact, and (68.16) makes a uniform state
+exact.  However, for a linear field,
+
+\[
+  \Delta\boldsymbol Q_i^A-\Delta m_i\boldsymbol U_i^-
+  =\frac12 B\sum_j a_{ij}
+       (\boldsymbol x_j-\boldsymbol x_i).
+  \tag{68.18}
+\]
+
+Linear exactness therefore requires the additional vector constraints
+
+\[
+  \sum_j a_{ij}(\boldsymbol x_j-\boldsymbol x_i)=\boldsymbol0
+  \quad\text{for every }i.
+  \tag{68.19}
+\]
+
+Those constraints are not implied by antisymmetry and the row sums.  Solving a
+constrained graph-flow problem may be worthwhile later, but signs,
+conditioning, solvability on small flip graphs, and positivity then become
+non-trivial.  The unaugmented antisymmetric form should not be promoted as the
+primary repair.  Equation (68.5) obtains conservation plus linear exactness
+with a smaller first implementation and a transparent limiter path.
+
+### 68.7 Methods not proposed for the first repair
+
+#### 68.7.1 Global post-step renormalization
+
+For example,
+
+\[
+  \boldsymbol Q_i\leftarrow
+  \boldsymbol Q_i
+  -\omega_i\left(
+    \sum_j\boldsymbol Q_j-\boldsymbol{\mathcal Q}_0
+   \right)
+\]
+
+can force a global sum to match its initial value.  It is useful as a
+diagnostic: if it alone cures the long-time drift, the attribution is
+confirmed.  It is not proposed as the solution because it is non-local,
+changes cells unrelated to the flip, obscures the responsible lifecycle
+stage, can violate positivity, and does not define a consistent transfer for
+momentum and energy.  A component-wise multiplicative rescaling has the same
+objections and additionally changes velocity or thermodynamics unless all
+components use a physically unjustified common factor.
+
+#### 68.7.2 Replacing Galerkin/lumped basis masses by Voronoi volumes
+
+A Voronoi volume is geometrically continuous under a Delaunay flip, but the RD
+mass and residual are derived from the simplicial \(P_1\) basis.  Substituting a
+different control volume in only the time derivative changes the semidiscrete
+method and its GCL/order analysis.  It may define another valid scheme, but it
+is not a local repair of the present one.
+
+#### 68.7.3 Suppressing flips, reducing the mesh-motion factor, or over-regularizing
+
+These can reduce the event count,
+
+\[
+  |\mathcal Q^N-\mathcal Q^0|
+  \lesssim N_{\rm flip}\max_n|\delta^n|,
+\]
+
+but do not make \(\delta^n=0\).  They trade the symptom against mesh quality and
+do not survive general moving meshes.  Fixed-connectivity and no-flip runs
+remain controls, not production remedies.
+
+#### 68.7.4 Exact old/new overlap projection
+
+A full conservative remap can be written schematically as
+
+\[
+  M^+\boldsymbol U^+
+   =C^{+,-}\boldsymbol U^-,
+  \qquad
+  C_{ij}^{+,-}=\int_{\Omega}
+       \phi_i^+(\boldsymbol x)\phi_j^-(\boldsymbol x)\,d\boldsymbol x.
+  \tag{68.20}
+\]
+
+With exact overlap integration it offers a principled projection and can be
+made constant/linear exact.  It is not proposed first because it requires
+robust intersections of old and new simplices, periodic bookkeeping, a
+consistent choice of lumped versus consistent mass matrices, and a positivity
+strategy.  It is the clean fallback if the local patch formula fails the
+verification gates.
+
+#### 68.7.5 Fictitious continuous deformation and swept topology flux
+
+One may connect the old and new triangulations through a fictitious
+space-time deformation and integrate a conservative swept-volume flux so that
+the discrete geometric conservation law holds through the connectivity
+change.  This is the strongest geometric interpretation and is related to
+published conservative ALE remapping across topology changes.  It is not the
+first implementation because the present evidence points to a correctable
+local basis jump, while a swept construction requires robust space-time
+polytope geometry, event ordering, degeneracy handling, and substantially
+more code.
+
+#### 68.7.6 Full space-time ALE residual distribution
+
+Treating flips as faces of a space-time tessellation can unify mesh motion,
+topology change, and conservation in one formulation.  It is a research
+programme rather than a thesis-scale closing fix, and it would delay the
+hierarchical-timestep/MPI work.  It should remain future work unless both the
+local transfer and exact overlap remap fail.
+
+### 68.8 Verification gates before production use
+
+The proposed transfer should not be accepted from the KH mass curve alone.
+
+1. **Stationary isolated flip.**  No physical time advance; prescribe constant,
+   linear, and quadratic fields.  Constant and linear errors and every global
+   conserved component must be at roundoff.
+2. **Smooth scaling.**  On geometrically similar patches, the quadratic-state
+   nodal change from the high-order correction must scale as \(h^2\).
+3. **Flip cascades and periodic boundaries.**  Check connected event clusters,
+   alternate diagonals repeatedly, and translations across the periodic seam.
+4. **Discontinuous states.**  Exercise density/pressure jumps and near-vacuum
+   states; verify positivity and limiter statistics.
+5. **Lifecycle controls.**  Uniform moving flow and a no-flip run must remain
+   unchanged; transfer must fire exactly once per connectivity change.
+6. **Scheme independence.**  Repeat the conservation audit with LDA, N, and
+   scalar B.  The topology defect should be roundoff in all three.
+7. **Fluid regressions.**  Re-run the existing moving Gresho/Sod diagnostics and
+   the KH discriminator; conservation repair must not erase their established
+   conclusions.
+8. **MPI/hierarchy gate, later.**  Patch ownership must be deterministic
+   (for example, the minimum persistent vertex ID), ghost contributions must be
+   accumulated once, and the serial/equal-step MPI result must agree to
+   roundoff before asynchronous activation is enabled.
+
+Acceptance for the topology operator is stricter than solution accuracy:
+
+\[
+ \frac{\left|\sum_i\boldsymbol Q_i^+
+             -\sum_i\boldsymbol Q_i^-\right|}
+      {\max(1,\left|\sum_i\boldsymbol Q_i^-\right|)}
+ \lesssim C\,\epsilon_{\rm mach}
+ \tag{68.21}
+\]
+
+per event cluster, apart from explicitly documented parallel reduction order.
+
+### 68.9 Questions for Claude's review
+
+1. Is the decomposition into non-negative old/new patch basis masses well
+   defined with the current mass-lumping convention for every 2-D flip cluster?
+2. Does the implementation retain enough pre-drift connectivity to evaluate
+   both patch mass sets at one physical time, or is an explicit old-patch
+   snapshot required?
+3. Are the two moment identities in (68.1) exact for the actual periodic
+   coordinate unwrapping and boundary treatment?
+4. Is the new patch-mass weight (68.4) preferable to a full-mass or
+   condition-number-weighted minimum-norm correction?
+5. Can the low-order decomposition (68.11) be guaranteed non-negative, or can
+   a lumped vertex receive signed patch contributions in the existing code?
+6. Is the Euler admissible-set limiter in (68.14) sufficient for all advected
+   fields, or do scalar bounds/species constraints require additional common
+   restrictions on \(\alpha\)?
+7. Is there any RK2 stage in which the code currently combines
+   \(\boldsymbol U^-\) with \(m^+\) before the proposed transfer point?
+8. Should connected simultaneous flips be treated as one patch to preserve the
+   moment identities, rather than corrected one edge flip at a time?
+9. Does the constrained antisymmetric graph operator have an implementation
+   advantage in the present data structures large enough to justify solving
+   (68.19), or should it remain an alternative?
+
+### 68.10 Proposed position pending review
+
+Advance (68.5) as the high-order local topology transfer, with (68.11)-(68.14)
+as its conservative admissible fallback.  Require roundoff patch conservation,
+uniform-state exactness, and linear exactness before any KH production run.
+Keep the antisymmetric graph construction only as a constrained alternative.
+Use global renormalization solely as an attribution experiment.  Do not advance
+Voronoi substitution, flip suppression, exact overlap projection, fictitious
+swept remap, or a full space-time ALE formulation unless the local method fails
+a stated verification gate.
+
+## 69. Conservative flip-patch repair passes the offline go/no-go audit (2026-08-24)
+
+**Author:** Codex
+**Scope:** two-dimensional offline geometry and state-transfer tests only; no
+AREPO source change, no MPI, no hierarchical timestep, and no hydrodynamic
+production run.
+**Decision:** pass the offline gate and advance to a minimal one-rank
+equal-step online prototype. Do not yet claim that the production KH drift is
+fixed.
+
+### 69.1 Artifacts and exact commands
+
+The existing topology audit was extended, without changing its previous test
+logic, to expose the full old/new lumped masses and the old/new contribution of
+each connected symmetric-difference patch:
+
+- `/home/zwu/Hydro_data_analysis/Analysis/moving_mesh/ale_topology_defect.py`
+- SHA256:
+  `0084f8c947c3db77a0c9114c93f7fe2e23d170432c2d74636040f2dea7541494`
+
+A separate repair audit was added:
+
+- `/home/zwu/Hydro_data_analysis/Analysis/moving_mesh/ale_topology_repair.py`
+- SHA256:
+  `f1bbabb7489a4ddaee2efac5779477fedf7888fe18ffb4aa9406226735ed7559`
+
+The full repair command was
+
+```text
+python3 Analysis/moving_mesh/ale_topology_repair.py \
+  --steps 12 \
+  --long-steps 80 \
+  --trials-per-patch 40 \
+  --max-adversarial-patches 60
+```
+
+The independent regression command was
+
+```text
+python3 Analysis/moving_mesh/ale_topology_defect.py \
+  --steps 12 \
+  --long-steps 0
+```
+
+Both scripts also passed `python3 -m py_compile`.
+
+The repair audit reported
+
+```text
+PASS: all 11164 checks passed
+```
+
+and the original moment/defect audit reported
+
+```text
+PASS: all 1512 algebraic checks passed
+```
+
+### 69.2 Operator actually tested
+
+For each connected component \(P\) of the old/new triangle symmetric
+difference, the audit constructs non-negative old and new patch masses
+
+\[
+  m_{i,P}^-,\qquad m_{i,P}^+,
+\]
+
+their difference
+
+\[
+  \Delta m_i=m_{i,P}^+-m_{i,P}^-,
+\]
+
+and the raw topology defect
+
+\[
+  \boldsymbol D_P
+  =\sum_{i\in P}\Delta m_i\boldsymbol U_i^-.
+\]
+
+The high-order candidate is exactly section 68's proposal,
+
+\[
+  \boldsymbol Q_i^{H,+}
+  =\boldsymbol Q_i^-
+   +\Delta m_i\boldsymbol U_i^-
+   -w_i\boldsymbol D_P,
+  \qquad
+  w_i=\frac{m_{i,P}^+}{\sum_jm_{j,P}^+}.
+  \tag{69.1}
+\]
+
+The low-order endpoint is
+
+\[
+  \overline{\boldsymbol U}_P
+   =\frac{\sum_jm_{j,P}^-\boldsymbol U_j^-}
+          {\sum_jm_{j,P}^+},
+\]
+
+\[
+  \boldsymbol Q_i^{L,+}
+  =\boldsymbol Q_i^-
+   +m_{i,P}^+\overline{\boldsymbol U}_P
+   -m_{i,P}^-\boldsymbol U_i^-.
+  \tag{69.2}
+\]
+
+Using the new patch mass in the denominator of
+\(\overline{\boldsymbol U}_P\) makes (69.2) conservative even when the two
+floating-point evaluations of the common patch area differ by roundoff. In
+exact arithmetic it is the same convex old-patch average because
+
+\[
+  \sum_i m_{i,P}^-=\sum_i m_{i,P}^+.
+\]
+
+When (69.1) is inadmissible, the audit finds the largest patch-common
+\(\alpha\) by bisection such that
+
+\[
+  \boldsymbol Q_i^+(\alpha)
+   =\boldsymbol Q_i^{L,+}
+    +\alpha\left(
+       \boldsymbol Q_i^{H,+}-\boldsymbol Q_i^{L,+}
+     \right)
+\]
+
+has positive density and internal energy at every patch vertex.
+
+### 69.3 Isolated flip: exactness and scaling
+
+A non-symmetric convex quadrilateral was triangulated with each of its two
+diagonals. The test verified to roundoff:
+
+- patch zeroth moment;
+- patch first moment;
+- constant-state preservation;
+- patch conservation;
+- linear-state preservation.
+
+For the quadratic scalar field used by the audit, the maximum nodal change was
+
+| \(h\) | \(\max_i|U_i^+-U_i^-|\) |
+| ---: | ---: |
+| 1 | \(1.572378\times10^{-2}\) |
+| 1/2 | \(3.930945\times10^{-3}\) |
+| 1/4 | \(9.827362\times10^{-4}\) |
+| 1/8 | \(2.456840\times10^{-4}\) |
+
+Every measured refinement order was `2.000000`. This directly verifies
+
+\[
+  U_i^+-U_i^-=O(h^2)
+\]
+
+for a smooth non-linear field while the conserved patch sum is exact.
+
+### 69.4 Real topology patches, including cascades and periodic seams
+
+The full sample used jittered \(24^2\) and \(48^2\) point sets under Yee and KH
+motions, plus the tiled Swift \(48^2\) set under KH motion. Twelve steps were
+run for each case at `CFL = 0.3`.
+
+The combined repair sample contained
+
+\[
+  647\ \text{connected patches},
+  \qquad
+  123\ \text{cascade patches},
+  \qquad
+  4\ \text{periodic-seam patches}.
+\]
+
+Every patch passed the constant and linear identities, including the four
+periodic cases after patch-local unwrapping.
+
+Using a smooth positive Euler state, the accumulated raw mass defect over this
+mixed sample was
+
+\[
+  \sum\delta M_{\rm raw}
+   =-1.3344191653175130\times10^{-4},
+\]
+
+whereas the accumulated repaired value was
+
+\[
+  \sum\delta M_{\rm repaired}
+   =+2.7000623958883807\times10^{-13}.
+\]
+
+Across all four conserved components and all sampled steps,
+
+\[
+  \max
+  \frac{|\delta\boldsymbol{\mathcal Q}_{\rm raw}|}
+       {\max(1,\sum_i|\boldsymbol Q_i|)}
+  =7.167376\times10^{-4},
+\]
+
+\[
+  \max
+  \frac{|\delta\boldsymbol{\mathcal Q}_{\rm repaired}|}
+       {\max(1,\sum_i|\boldsymbol Q_i|)}
+  =1.243451\times10^{-15}.
+\]
+
+The largest smooth-state nodal correction in this deliberately short mixed
+sample was
+
+\[
+  \max_{i,k}|U_{i,k}^+-U_{i,k}^-|
+  =3.105727\times10^{-3}.
+\]
+
+No high-order candidate lost admissibility for either the smooth Euler field or
+the discontinuous KH-like density/velocity field:
+
+```text
+high-order bad nodes = smooth:0 KH:0
+```
+
+This is encouraging but is not a production positivity result; the states are
+synthetic rather than states evolved by the RD solver.
+
+### 69.5 The fallback was exercised, not merely checked symbolically
+
+To force difficult transfers, 2400 random patch states were generated over 60
+real patches. Density and pressure spanned several decades and velocities
+spanned three decades. Every old state was admissible.
+
+The high-order candidate produced 6552 inadmissible nodal instances. The
+patch-common limiter activated in
+
+\[
+  1899/2400
+\]
+
+trials, with
+
+\[
+  \alpha_{\min}=0.3108191.
+\]
+
+The low-order endpoint produced zero inadmissible nodes, and every blended
+state was both conservative to roundoff and admissible:
+
+```text
+high-order bad nodes = 6552
+limited trials       = 1899
+minimum alpha        = 3.108191e-01
+low-order bad nodes  = 0
+```
+
+The large limited fraction is not a prediction for a fluid run: this ensemble
+was intentionally extreme. It establishes that the fallback path is reachable
+and that its two required invariants survive when it is used.
+
+### 69.6 Bounded long-motion accumulation
+
+An 80-step prescribed periodic mesh deformation generated 1557 topology
+patches without allowing unbounded mesh degradation. For a smooth Euler field,
+the raw accumulated conserved-component defects were
+
+\[
+ (-2.157909,\,-0.7450805,\,+0.4334343,\,-4.317037)
+ \times10^{-2},
+\]
+
+while the repaired accumulation was
+
+\[
+ (+2.842171,\,-32.68497,\,0,\,-5.684342)
+ \times10^{-14}.
+\]
+
+The latter is floating-point summation noise; every individual step also
+passed the roundoff conservation check.
+
+### 69.7 What this result establishes and what it does not
+
+The offline result establishes:
+
+1. equation (69.1) is conservative on isolated, cascading and
+   periodic-boundary flip patches;
+2. uniform and linear fields are preserved to roundoff;
+3. the smooth nodal correction has the expected \(O(h^2)\) scaling;
+4. the proposed low-order endpoint is admissible for the tested positive
+   states;
+5. a single patch-common convex limiter preserves conservation when the
+   high-order candidate fails;
+6. long accumulation of the topology defect is removed algebraically rather
+   than made statistically smaller.
+
+It does **not** yet establish:
+
+1. that the online lifecycle forms exactly the same old/new patch masses;
+2. that the observed production scalar-B/N drift is entirely removed;
+3. that a real RD state never needs stronger scalar/species constraints;
+4. that old triangle records survive mesh free/domain decomposition correctly;
+5. that MPI patch ownership is unique;
+6. that physical, stage-0 and predictor ledgers are transferred coherently
+   under hierarchical timesteps;
+7. that the repair leaves the established Gresho, Sod, Yee and KH solution
+   metrics unchanged.
+
+### 69.8 Go/no-go decision and next implementation slice
+
+The proposal passes the offline go/no-go gate.
+
+The next slice should remain deliberately smaller than the full section-68
+design:
+
+1. one rank and equal timesteps only;
+2. accumulate the pulled-back new-connectivity nodal mass inside
+   `rd_ale_prepare_step`;
+3. construct connected affected support from \(\Delta m_i\) for the first
+   diagnostic implementation;
+4. apply the high-order operator (69.1) before the continuous ALE mass rebase;
+5. abort and report the patch if the candidate is inadmissible, rather than
+   immediately integrating the full fallback;
+6. verify isolated flip, uniform flow and short KH;
+7. only then run the existing long KH conservation audit.
+
+If this removes the endpoint drift to roundoff without moving the accepted
+fluid metrics, add exact old/new triangle-key patch reconstruction and the
+tested fallback. MPI and hierarchical stage transfer remain subsequent,
+separate gates.
+
+---
+
+## 70. One-rank equal-step online topology repair: uniform flow and matched short KH (2026-08-24)
+
+### 70.1 Scope and implemented operator
+
+Section 69 authorised only the smallest online slice. It is compiled by
+`RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC`, is guarded by `RD_ALE_EQUALSTEP`, and
+the existing equal-step path still aborts for `NTask != 1`. This is not yet
+an MPI or hierarchical-timestep implementation.
+
+After the new-connectivity triangles have been pulled back to time level
+\(n\), define
+
+\[
+  m_i^- = |S_i^n|,\qquad
+  \widehat m_i = \sum_{T^{n+1}\ni i}\frac{|T^n_{\rm pullback}|}{3},
+  \qquad \Delta m_i=\widehat m_i-m_i^- .
+\]
+
+Nodes with numerically non-zero \(\Delta m_i\) are joined through the new
+triangulation. Each connected component is a provisional topology patch
+\(P\). The code checks the patch zeroth moment,
+
+\[
+  \left|\sum_{i\in P}\Delta m_i\right|
+  \le 65536\,\epsilon_{\rm mach}
+     \max\!\left(\overline m,\sum_{i\in P}|\Delta m_i|\right),
+\]
+
+and aborts if it fails. The repair is
+
+\[
+  \boldsymbol D_P=\sum_{i\in P}\Delta m_i\boldsymbol U_i^-,
+  \qquad
+  w_i=\frac{\widehat m_i}{\sum_{j\in P}\widehat m_j},
+\]
+
+\[
+  \widehat{\boldsymbol Q}_i
+    =m_i^-\boldsymbol U_i^-+\Delta m_i\boldsymbol U_i^-
+       -w_i\boldsymbol D_P,
+  \qquad
+  \boldsymbol U_i^+=\frac{\widehat{\boldsymbol Q}_i}{\widehat m_i}.
+\]
+
+All non-anchor weights are evaluated first. The anchor receives the exact
+floating-point remainder
+
+\[
+  w_{\rm anchor}=1-\sum_{i\ne {\rm anchor}}w_i,
+\]
+
+so the correction weights sum to exactly one. Patch and global conserved sums
+are then audited to roundoff. Density and pressure are checked at every
+corrected node. In this first online slice an inadmissible candidate aborts
+with `RD-TOPO-BAD`; the section-69 low-order endpoint and patch-common limiter
+are not yet connected to the fluid lifecycle.
+
+The implementation is local to
+`src/hydro/residual_distribution_solver.c`, with the flag registered in
+`Template-Config.sh` and `defines_extra`. No production Config was changed.
+
+### 70.2 Reproducible builds and isolated runs
+
+Repair build:
+
+```text
+config   examples/gresho_2d/Config_FS_con_cm_N_toporepair.sh
+artifact build_artifacts/toporepair-n-debug/000cdaaee46f-f959f4d1978f8243/Arepo
+sha256   026ce4206c2199a35a852b3c020a2d6c6ea6a25a23437ff5432ca0c5b2eed277
+```
+
+Matched no-repair control:
+
+```text
+config   examples/gresho_2d/Config_FS_con_cm_N_topobaseline.sh
+artifact build_artifacts/topobaseline-n-debug/000cdaaee46f-77b22b004eceb4c1/Arepo
+sha256   c19099f5bc55ccd84c1426239e6609445a8efa10e75dd21972cb72f5b87cce65
+```
+
+The builds have the same source state and options except for the repair flag.
+All runs used one rank, forced equal timesteps, N distribution, contour
+residual, the element co-moving frame and the Arpaia modified-midpoint mass
+pair. Outputs are isolated under
+
+```text
+/home/zwu/Hydro_data_analysis/Data_MMRD_debug/TopologyRepair_20260824/
+```
+
+### 70.3 Uniform-flow gate
+
+The random-48 uniform IC was evolved to \(t=0.02\). This was a real topology
+test, not a no-flip pass:
+
+```text
+ALE/repair steps                  73
+affected-node instances        2724   (maximum 86 in one step)
+provisional patch instances     639   (maximum 20 in one step)
+maximum patch zeroth residual   6.924e-15
+maximum repair |Delta U|         6.217e-15
+maximum finished-state |Delta U|8.882e-16
+maximum endpoint defect         7.994e-15
+```
+
+The state remained uniform to roundoff. There were no inverted pulled-back
+triangles, non-positive states or failed conservation assertions. The
+free-stream and online-lifecycle gate passes.
+
+### 70.4 Matched short-KH gate
+
+The smoothed glass-48 KH IC was evolved to \(t=0.2\). The repair run contained
+432 repair calls, 3761 affected-node instances and 886 provisional patches.
+The new mesh changed connectivity on 369 of 433 geometry observations, with
+965 replaced edges in total.
+
+Summing the counterfactual uncorrected topology defect along the repair
+trajectory gave
+
+\[
+ \sum_n\boldsymbol D_{\rm raw}=
+ (2.2376833,\;5.4298655,\;0.27259883,\;5.6172490)\times10^{-4},
+\]
+
+whereas the topology-stage audit after repair gave
+
+\[
+ \sum_n\Delta\boldsymbol{\mathcal Q}_{\rm repaired}=
+ (-2.6645,\;0.83267,\;0.085869,\;10.658)\times10^{-14}.
+\]
+
+The stronger end-to-end comparison comes from initial and final HDF5
+snapshots. In conserved-component order \((M,P_x,P_y,E)\), the matched
+no-repair run drifted by
+
+\[
+ \Delta\boldsymbol{\mathcal Q}_{\rm control}=
+ (2.0269585\times10^{-4},\;
+  4.6343221\times10^{-4},\;
+  2.9981906\times10^{-5},\;
+  5.4657728\times10^{-4}),
+\]
+
+whereas the repair run drifted by
+
+\[
+ \Delta\boldsymbol{\mathcal Q}_{\rm repair}=
+ (-4.1741273\times10^{-8},\;
+  -1.0634096\times10^{-7},\;
+  -7.1723652\times10^{-9},\;
+  -1.1273872\times10^{-7}).
+\]
+
+The absolute improvement factors are:
+
+```text
+mass 4856.0   x-momentum 4358.0   y-momentum 4180.2   energy 4848.2
+```
+
+The largest single-step endpoint defects fell from
+
+\[
+ (4.3503,\;5.0735,\;1.4808,\;1.7707)\times10^{-5}
+\]
+
+to
+
+\[
+ (1.2376,\;1.2849,\;0.36861,\;0.97904)\times10^{-8}.
+\]
+
+Thus the worrying \(10^{-3}\)-scale long accumulation is already visible in
+the control's \(t=0.2\) trend, and the repair removes its dominant
+topology-driven part by roughly four orders of magnitude.
+
+The maximum nodal conserved-state change made by one repair was
+
+\[
+  \max_{i,k}|U_{i,k}^+-U_{i,k}^-|=1.940\times10^{-2}
+\]
+
+at \(t=0.18046875\). Relative to the approximately 6.4 energy-density scale
+of this KH problem this is 0.3 per cent. It did not trigger the positivity
+abort: the minimum RK2 predictor density and pressure were 0.9799744 and
+2.357655, and the final snapshot minima were 0.9841669 and 2.3707735.
+
+The repair run took 41.34 s versus 39.84 s for the matched control, an
+indicative 3.8 per cent overhead. This is one noisy debug pair with extensive
+geometry output, not a production performance measurement.
+
+### 70.5 Decision and remaining gates
+
+The first online gate passes:
+
+1. real topology changes are detected in the fluid lifecycle;
+2. uniform flow remains exact to roundoff;
+3. a real non-uniform RD state remains admissible;
+4. the matched control reproduces the accumulated drift;
+5. end-to-end mass, momentum and energy drift fall by
+   \(4.2\)--\(4.9\times10^3\), not merely in an internal patch audit;
+6. the measured one-rank debug cost is small enough to justify the next gate.
+
+This does not authorise a production or thesis-default switch. The next gates
+are:
+
+1. run the existing longer KH conservation audit and compare accepted fluid
+   metrics, not only global ledgers;
+2. replace provisional \(\Delta m\) support components with exact old/new
+   triangle-key flip patches and verify that the two constructions agree
+   online;
+3. connect and deliberately exercise the section-69 admissible fallback;
+4. define one-owner patch assembly and ghost exchange for MPI;
+5. define which physical, stage-0 and predictor ledgers are repaired when a
+   flip occurs inside a hierarchical interval, then test equal-step reduction
+   before enabling local timesteps.
+
+The compile guard deliberately prevents item 5 from being bypassed: the
+current repair cannot be enabled without `RD_ALE_EQUALSTEP`.
+---
+
+## 71. KH to \(t=10\): conservation/robustness pass, solution-invariance fail (2026-08-24)
+
+### 71.1 Runs and control equivalence
+
+The section-70 repair binary was run unchanged:
+
+    parameter examples/gresho_2d/param_KH_N_glass48_toporepair_t10.txt
+    output    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/TopologyRepair_20260824/kh_n_t10/output
+    binary    build_artifacts/toporepair-n-debug/000cdaaee46f-f959f4d1978f8243/Arepo
+    sha256    026ce4206c2199a35a852b3c020a2d6c6ea6a25a23437ff5432ca0c5b2eed277
+
+It completed normally at exactly \(t=10\), with no RD-TOPO-BAD,
+termination, negative predictor state, inverted pulled-back element or
+non-positive midpoint mass. The instrumented run took 3430.36 s; it shared
+the node with a duplicate control during its early part, so this wall time is
+not a repair-overhead measurement.
+
+A current-source no-repair control was initially run in parallel. At the common
+snapshot time \(t=0.2001953125\), it was compared by particle ID with the
+already complete section-59 release-N \(t=10\) control. The maximum difference
+was exactly zero for every common output field:
+
+    Coordinates, CenterOfMass, Velocities, VertexVelocity,
+    Masses, Density, Pressure, InternalEnergy, Volume,
+    ParticleIDs and TimebinHydro.
+
+The duplicate control was therefore stopped after \(t\simeq1.67\), preserving
+its partial output, and the bitwise-equivalent complete section-59 run was used
+for the long comparison:
+
+    /home/zwu/Hydro_data_analysis/Data_MMRD_debug/N_Glass48_ContourCM_20260820/kh_n_release_t10
+
+Both complete series contain 51 snapshots. Corresponding output times differ
+by at most one timebase increment, \(3.0517578125\times10^{-4}\).
+
+### 71.2 Online topology and health audit
+
+The repair lifecycle executed:
+
+    repair calls                    31502
+    affected-node instances        315005   (maximum 46 per step)
+    provisional patch instances     77496   (maximum 11 per step)
+    geometry observations           31502
+    observations with flips          28600
+    replaced edges                   79033   (maximum 12 per step)
+    maximum patch zeroth residual   2.278e-14
+    maximum nodal |Delta U|          1.065e-01
+
+The signed accumulated counterfactual topology defect was
+
+\[
+ \sum_n\boldsymbol D_{\rm raw}
+ = (4.09625\times10^{-3},\;
+    1.37666\times10^{-3},\;
+   -2.29166\times10^{-3},\;
+   -1.40980\times10^{-2}),
+\]
+
+while the same sum after repair was
+
+\[
+ (2.62\times10^{-14},\;-6.55\times10^{-15},
+  -4.30\times10^{-15},\;5.51\times10^{-14}).
+\]
+
+The raw absolute, rather than signed, accumulated mass defect was 1.09924.
+Large cancellation therefore hides the total transfer activity; the repair
+audit remained at floating-point summation error through all 31502 calls.
+
+The maximum local correction rose from \(1.94\times10^{-2}\) in the
+\(t=0.2\) test to \(1.065\times10^{-1}\), but reached that value before
+\(t=3\) and did not continue growing. The minimum RK2 predictor density and
+pressure were
+
+\[
+ \rho_{\min}=0.7351733,\qquad p_{\min}=2.202427.
+\]
+
+The mesh also remained healthy:
+
+    minimum triangle area / mean area   0.1416
+    minimum angle                       0.2882 rad
+    inverted elements                   0
+    non-positive Sbar                   0
+    final area / mean area              0.2295
+    final minimum angle                 0.3549 rad
+    final pullback error                1.221e-17
+
+Thus the long robustness and online admissibility gates pass.
+
+### 71.3 End-to-end conservation
+
+From the initial and final HDF5 snapshots, the no-repair control changed
+\((M,P_x,P_y,E)\) by
+
+\[
+ (3.7842509\times10^{-3},\;
+  1.9809978\times10^{-3},\;
+  1.8052846\times10^{-4},\;
+ -3.1368937\times10^{-3}).
+\]
+
+The repaired run changed the same totals by
+
+\[
+ (-1.0383736\times10^{-5},\;
+  -8.2594560\times10^{-7},\;
+  -1.5981326\times10^{-7},\;
+  -7.1096403\times10^{-7}).
+\]
+
+The absolute improvement factors are:
+
+    mass 364.4   x-momentum 2398.5   y-momentum 1129.6   energy 4412.2
+
+The fractional mass drift fell from \(2.523\times10^{-3}\) to
+\(6.923\times10^{-6}\), and the fractional energy drift from
+\(4.884\times10^{-4}\) to \(1.107\times10^{-7}\).
+
+The topology stage itself is conservative to roundoff. The remaining
+\(1.04\times10^{-5}\) mass drift is the accumulated non-topology endpoint
+defect; its largest single-step component was \(2.43\times10^{-7}\).
+Consequently this prototype removes the dominant topology-driven drift but
+does not make the complete ALE-RD update globally roundoff conservative.
+
+### 71.4 KH solution metrics move materially
+
+The established section-59 diagnostics were recomputed with identical
+definitions. Here \(E_{k,y}=\frac12\sum_i m_i v_{y,i}^2\),
+\(\sigma_\rho\) is the unweighted nodal density standard deviation, and the
+entropy excursion is the maximum distance of \(s=p/\rho^\gamma\) outside its
+initial range, divided by that range.
+
+| \(t\) | \(E_{k,y}\) control | \(E_{k,y}\) repair | \(\sigma_\rho\) control | \(\sigma_\rho\) repair | entropy control | entropy repair |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 0.003353 | 0.004156 | 0.40657 | 0.42348 | 0.183 | 0.655 |
+| 4 | 0.005970 | 0.007249 | 0.34180 | 0.35120 | 0.0649 | 0.240 |
+| 6 | 0.044236 | 0.033868 | 0.30439 | 0.31247 | 0.0238 | 0.128 |
+| 8 | 0.067100 | 0.052622 | 0.22700 | 0.24344 | 0.0141 | 0.0855 |
+| 10 | 0.032033 | 0.044804 | 0.18124 | 0.18965 | 0 | 0.0383 |
+
+The control peak is
+
+\[
+ E_{k,y}^{\max}=0.0679545\quad\hbox{at}\quad t=7.80029,
+\]
+
+whereas the repaired run peaks at
+
+\[
+ E_{k,y}^{\max}=0.0539425\quad\hbox{at}\quad t=8.60016.
+\]
+
+The peak is 20.6 per cent lower and delayed by 0.8 time units. At \(t=10\),
+the two solutions are on different parts of the nonlinear oscillation and
+\(E_{k,y}\) differs by 39.9 per cent. The final density standard deviation is
+4.64 per cent larger with repair.
+
+Both final states are physically healthy:
+
+| case | density range | pressure range | minimum cell mass |
+| --- | --- | --- | ---: |
+| control | 1.09597--1.95863 | 2.37114--2.70053 | \(1.613\times10^{-4}\) |
+| repair | 1.04517--2.17184 | 2.35381--2.70217 | \(1.922\times10^{-4}\) |
+
+Nevertheless, the section-69 requirement that accepted fluid metrics should
+not move materially is not met.
+
+### 71.5 Interpretation and decision
+
+The long test has a split verdict:
+
+1. **robustness: pass** -- it reaches \(t=10\) with substantial positivity and
+   mesh-quality margins;
+2. **topology conservation: pass** -- the patch operator remains conservative
+   to roundoff over 31502 calls;
+3. **end-to-end conservation: strong pass for the intended defect** -- global
+   drift improves by \(3.6\times10^2\) to \(4.4\times10^3\);
+4. **solution invariance: fail** -- KH growth, phase and entropy excursion move
+   materially.
+
+The leading implementation-level explanation is the provisional patch
+detector, but this is an inference rather than a demonstrated cause. A
+connected non-zero-\(\Delta m\) support component never splits an exact flip
+patch in the section-69 audit, but it can merge adjacent independent flips.
+Conservation survives such merging; locality does not. Distributing one
+combined defect over an over-connected component can create a larger and more
+diffusive state transfer. The growth of the maximum correction from 0.0194 to
+0.1065 and the increased entropy excursion are consistent with that mechanism.
+
+Therefore the current \(\Delta m\)-support implementation remains a diagnostic
+prototype and must not become a thesis or production default. The next action
+is not another long run. It is to implement exact old/new triangle-key patch
+reconstruction alongside the provisional detector, log the merge relation and
+patch diameters, and compare both correction candidates online without first
+applying the exact candidate. Only if exact patches reduce the local correction
+and restore the accepted KH metrics should the admissible fallback, MPI
+ownership and hierarchical-timestep ledger transfer proceed.
+
+---
+
+## 72. Plan for review: exact triangle-key topology patches before further long runs (2026-08-25)
+
+### 72.1 Motivation and status
+
+Section 71 gives a split result. The provisional online repair is robust and
+removes the dominant global conservation drift, but it materially changes the
+long-time KH trajectory. The leading implementation hypothesis is that the
+current non-zero-\(\Delta m\) support detector merges nearby independent
+topology events. This is consistent with the larger nodal correction and
+entropy excursion, but it is not yet a demonstrated cause.
+
+This section is a review plan, not an implementation record. No solver change
+is authorised by it. Its purpose is to give Claude an explicit object to audit
+before the next coding slice.
+
+### 72.2 What the exact reconstruction must identify
+
+Let \(\mathcal T^-\) and \(\mathcal T^+\) denote the actual old and final new
+Delaunay triangle sets at the two sides of one mesh rebuild. Each physical
+triangle is represented by a canonical key \(K_T\). Define
+
+\[
+ \mathcal R=\mathcal T^-\setminus\mathcal T^+,\qquad
+ \mathcal A=\mathcal T^+\setminus\mathcal T^-,
+\]
+
+where \(\mathcal R\) contains removed triangles and \(\mathcal A\) contains
+inserted triangles. The exact changed region is the symmetric difference
+
+\[
+ \mathcal C=\mathcal T^-\triangle\mathcal T^+
+            =\mathcal R\cup\mathcal A.
+\]
+
+An unchanged key is continuous ALE geometry and must not enter the topology
+repair. Connected components of the changed-triangle incidence graph define
+the exact net topology patches. An isolated two-dimensional \(2\to2\) flip
+must produce the two removed and two inserted triangles on its four physical
+vertices. A cascade may produce a larger component.
+
+This identifies the net old/new connectivity change exactly. It is not
+required to reconstruct a unique chronological flip sequence inside the
+Delaunay build. Such a sequence can be non-unique, and transient internal
+flips that leave no net connectivity change do not enter the endpoint
+transfer.
+
+### 72.3 Canonical triangle key
+
+For the present one-rank, non-refining two-dimensional slice, the non-periodic
+part begins with the sorted global particle IDs,
+
+\[
+ K_T^{\rm ID}=\operatorname{sort}(ID_a,ID_b,ID_c).
+\]
+
+IDs, not local point indices, are mandatory because local indices can change
+under particle rearrangement or future domain decomposition. Orientation is
+not part of identity.
+
+Sorted IDs alone are insufficient at a periodic seam. A proposed periodic key
+is:
+
+1. choose a deterministic anchor vertex, initially the smallest global ID;
+2. express the other two vertices' integer periodic-image offsets relative to
+   the anchor;
+3. translate all three offsets by a common integer vector so that the anchor
+   offset is zero;
+4. sort the two non-anchor \((ID,\Delta{\boldsymbol n}_{\rm image})\) pairs
+   lexicographically;
+5. include dimension and any particle-generation/refinement tag needed to
+   exclude an ID-reuse collision.
+
+Claude is asked to audit whether anchor-by-smallest-ID is sufficient for every
+periodic triangle represented by AREPO ghosts, or whether a minimum over all
+three translated/rotated representations is required.
+
+MPI is deliberately not part of the first slice. The eventual key must admit
+ghost deduplication and a unique owner, for example the task owning the
+lexicographically smallest canonical vertex/key. Refinement and derefinement
+must later be classified separately from ordinary Delaunay flips.
+
+### 72.4 Exact patch graph and the locality distinction
+
+The changed-triangle graph must be defined from \(\mathcal C\), not from all
+new triangles. Two changed triangles are adjacent only under the selected
+physical incidence rule. The review must decide whether shared edge is
+sufficient or whether shared physical vertex is required to obtain patches
+that individually satisfy the zeroth and first moment identities.
+
+This choice matters. For two truly independent exact patches \(A\) and \(B\),
+
+\[
+ \boldsymbol D_A=\sum_{i\in A}\Delta m_i^A\boldsymbol U_i,\qquad
+ \boldsymbol D_B=\sum_{i\in B}\Delta m_i^B\boldsymbol U_i,
+\]
+
+the intended operator conserves \(A\) and \(B\) separately. If the provisional
+detector merges them into \(P=A\cup B\), it instead distributes
+
+\[
+ \boldsymbol D_P=\boldsymbol D_A+\boldsymbol D_B
+\]
+
+with weights normalised over all of \(P\). Only \(P\) is then guaranteed to
+conserve. In general,
+
+\[
+ \Delta\boldsymbol{\mathcal Q}_A
+ =\boldsymbol D_A-W_A(\boldsymbol D_A+\boldsymbol D_B)\ne0,
+ \qquad W_A=\sum_{i\in A}w_i^P.
+\]
+
+This is the precise sense in which global/merged-patch conservation can survive
+while topology-event locality is lost. Calling the resulting change
+"dissipative" is only a numerical hypothesis; the exchange can have either
+sign.
+
+### 72.5 First implementation slice: non-invasive dual diagnostics
+
+The first implementation must not apply the exact candidate to the fluid
+state. It should preserve the section-71 trajectory and calculate two patch
+descriptions side by side:
+
+1. current non-zero-\(\Delta m\) support components;
+2. exact old/new triangle-key components.
+
+The required lifecycle is:
+
+1. immediately before the old tessellation/connectivity is discarded, capture
+   canonical old triangle records and the old geometric contributions needed
+   for nodal mass;
+2. after the new tessellation exists, construct the corresponding canonical
+   new records and pulled-back old-time geometry;
+3. hash-match equal keys and form \(\mathcal R\), \(\mathcal A\), and exact
+   components;
+4. compute \(\Delta m_i^P\), \(\boldsymbol D_P\), weights and the exact
+   candidate correction without writing it to particle storage;
+5. retain the existing support repair as the only applied operator during this
+   diagnostic comparison.
+
+For every rebuild, log compact aggregate data:
+
+- old/new/unchanged/removed/inserted triangle counts;
+- exact and support patch counts;
+- for each support component, how many exact components it contains;
+- exact/support node counts and physical diameters;
+- whether any exact component is split across support components;
+- zeroth and first moment residuals for each exact component;
+- \(\|\boldsymbol D_P\|\), maximum candidate
+  \(|\Delta\boldsymbol U|\), and the ID/component producing the maximum;
+- candidate density and pressure minima;
+- whether the section-71 maximum 0.1065 belongs to a one-to-many merge.
+
+Detailed per-patch output should be emitted only for the largest corrections,
+periodic seams, failed identities or an explicit debug flag. Full per-step
+patch dumps would reproduce the section-71 I/O problem.
+
+### 72.6 Correctness gates before any exact repair is applied
+
+The dual diagnostic passes only if all of the following hold:
+
+1. every physical old/new triangle has one canonical key after local
+   deduplication;
+2. unchanged keys cancel exactly and do not enter a topology patch;
+3. reconstructed counts agree with the independent replaced-edge/connectivity
+   diagnostics;
+4. each exact patch satisfies
+   \(\sum_i\Delta m_i^P=0\) to roundoff;
+5. its periodic-unwrapped first moment satisfies
+   \(\sum_i\Delta m_i^P\boldsymbol x_i=0\) to roundoff;
+6. no exact patch is split between two support components;
+7. isolated flips, cascades and periodic seams reproduce the accepted
+   section-69 offline patches;
+8. a no-flip continuously moving mesh produces an empty exact changed set;
+9. repeated domain/local-index rearrangement does not change the key set in
+   the future MPI preparation test.
+
+Failure of item 6 would invalidate the previous assumption that the support
+detector is conservative over complete exact events. Failure of items 4 or 5
+would mean the triangle component rule or periodic canonicalisation is wrong.
+
+### 72.7 Hypothesis and solution-quality discriminator
+
+The merge hypothesis is supported only if the diagnostic shows that:
+
+1. the large support components are one-to-many unions of exact components;
+2. exact-patch candidate corrections are materially smaller or more local than
+   the support candidate;
+3. the 0.1065 maximum and the large entropy-excursion regions correlate with
+   those unions.
+
+If exact patches are almost always identical to support patches, or if their
+candidate correction remains near 0.1065, the detector is not the explanation.
+The next audit would then move to the transfer weights/operator itself rather
+than applying exact patches and repeating a long run.
+
+Only after the hypothesis passes should a second build apply the exact
+candidate. Its test order is:
+
+1. isolated real flip and periodic-seam replay;
+2. uniform moving flow;
+3. matched KH to \(t=0.2\);
+4. matched KH to \(t=2\), including entropy and \(E_{k,y}\);
+5. \(t=10\) only if the short fluid metrics return close to the accepted
+   no-repair N trajectory.
+
+The section-69 admissible fallback is connected only after the exact high-order
+patch path passes these gates.
+
+### 72.8 Cost model and acceptance budget
+
+For glass48,
+
+\[
+ N_{\rm gas}=2305,\qquad N_{\rm tri}\simeq4610.
+\]
+
+Three implementation levels are distinguished.
+
+**Full sorting.** Saving and sorting both triangle-key sets costs
+
+\[
+ O(N_{\rm tri}\log N_{\rm tri})
+\]
+
+per rebuild. It is useful only as a simple reference and is not the desired
+production path.
+
+**Full hash comparison.** Hash insertion/lookup of all old/new keys is expected
+\(O(N_{\rm tri})\). At 48 squared resolution this is roughly 9000 key
+operations per rebuild. A 48--64 byte triangle record gives about
+0.4--0.6 MB for two dense key arrays; including hash slack and geometry should
+remain of order 1--2 MB.
+
+**Incremental change list.** Recording triangles at the existing Delaunay
+create/delete points costs \(O(N_{\rm changed})\). Section 71 observed 79033
+replaced edges in 31502 rebuilds, only 2.51 per rebuild on average. This is the
+preferred eventual path, but it is more invasive and should follow, not
+precede, validation of the key semantics.
+
+The first diagnostic uses full hashing, preferably piggybacking on triangle
+loops that already exist. Cost is measured with per-patch text output disabled
+and a matched release build:
+
+- below 5 per cent total overhead: accept full hashing for the next slice;
+- 5--10 per cent: optimise traversal/hash storage before a long run;
+- above 10 per cent: stop and move to an incremental create/delete list.
+
+These are engineering gates, not measured predictions. The section-70 3.8 per
+cent short-debug repair overhead and section-71 shared-node wall time must not
+be used as the exact-key cost measurement.
+
+For hierarchical timesteps a naive full global key scan at every fine substep
+would be unacceptable even if the equal-step cost passes. The eventual design
+must maintain persistent keys or restrict comparison to the locally rebuilt
+active/ghost region. Exact keys nevertheless help the MPI/hierarchical design
+because they provide stable event identity and an ownership object.
+
+### 72.9 Questions explicitly sent to Claude
+
+Claude is asked to review the following before implementation:
+
+1. Does old/new triangle-set symmetric difference contain exactly the
+   information needed for endpoint topology transfer, without chronological
+   flip reconstruction?
+2. Is the proposed periodic key canonical for AREPO's image/ghost
+   representation, or must all anchor/orientation representations be minimised?
+3. Should changed-triangle components use shared vertices, shared edges, or a
+   bipartite old/new incidence construction to guarantee patch moment
+   identities?
+4. At which precise lifecycle points can old records be captured and new
+   pulled-back records formed without crossing mesh free, particle reorder or
+   domain decomposition?
+5. Is separate zeroth and first moment conservation on every reconstructed
+   component the correct completeness criterion?
+6. Can two exact net topology events legitimately share a vertex while
+   remaining separately conservative, making component decomposition
+   non-unique?
+7. Is the non-invasive candidate comparison sufficient to test the merge
+   hypothesis before changing the fluid trajectory?
+8. Are the 5/10 per cent cost gates reasonable given the subsequent MPI and
+   hierarchical-timestep requirements?
+9. Does exact event identity suggest a better future MPI owner than the
+   lexicographically smallest canonical key/vertex?
+10. Is any additional conserved ledger beyond physical
+    \(\boldsymbol Q\), stage-0 and predictor state required to be represented
+    already in the key-record interface?
+
+Until this review is resolved, no exact-key implementation, MPI extension or
+hierarchical transfer change is approved.
+
+---
+
+## 73. 2026-08-25: review of sections 68-72 — mathematics verified, a second hypothesis added, the plan approved with amendments
+
+- **Author:** Claude Code (Fable 5), answering sections 68.9 and 72.9.
+- **Scope:** independent verification of the section-68 operator, a source
+  reading of the section-70 implementation
+  (`rd_ale_apply_topology_repair`, `residual_distribution_solver.c`), a
+  reinterpretation of the section-71 split verdict, and answers to all
+  nineteen review questions. No code change.
+- **Verdict:** the operator mathematics is correct and the offline audit is
+  exemplary. The section-72 plan is approved with amendments. The single
+  most important amendment: the section-71 "solution-invariance fail" admits
+  **two** hypotheses, not one, and the dual diagnostic must be designed so
+  that it can distinguish them — otherwise a null merge result will be
+  misread as an operator defect.
+
+### 73.1 The section-68 mathematics, verified independently
+
+The moment identities (68.1) are exact geometric facts of P1 lumping: for
+either triangulation of the patch region, `sum_i m_{i,P} = |patch|` and
+`sum_i m_{i,P} x_i = integral of x over the patch`, because each triangle
+contributes `|T|/3` at its three vertices and `(|T|/3)(x_a+x_b+x_c) =
+|T| x_centroid = integral over T of x`. Both sides tile the same region, so
+the differences vanish. Conservation, uniform exactness and linear exactness
+of (68.5) follow as stated; the least-change interpretation (68.9) is
+correct; the fallback (68.11) is conservative and admissible by convexity
+since every `m_{i,P}^{+-}` is a sum of positive triangle thirds
+(section 68.9 question 5: signed lumped patch contributions cannot arise in
+2-D P1 lumping).
+
+One reformulation makes the rest of this review transparent. In nodal form
+the high-order transfer is exactly
+
+    U_i^+ = U_i^- - w_i D_P / mhat_i,
+
+so the entire solution perturbation of one event is the defect `D_P` spread
+by the weights. Linear exactness means `D_P = sum_i dm_i (U_i - L(x_i))` for
+any linear `L`, so on a patch of diameter `h_P`:
+
+- smooth region: `D_P = O(sum|dm| h_P^2 |grad^2 U|)`, the verified `O(h^2)`;
+- an interface of width comparable to `h` (this KH: tanh width 0.025 against
+  `h ~ 0.021`): no linear fit removes the variation, so
+  `D_P = O(sum|dm| [U])`, and with per-flip `|dm_i|/m_i` of order the
+  inverse vertex valence — a 2-to-2 flip moves `|T|/3`-sized thirds — nodal
+  corrections of order `0.1 [U]` are **intrinsic to any conservative local
+  transfer at an under-resolved interface**, exact patches or not.
+
+That last line is the second hypothesis for section 71.4.
+
+### 73.2 Answers to section 68.9
+
+1. Yes; non-negative by construction under `|T|/3` lumping, for every 2-D
+   cluster.
+2. The `dm` evaluation needs no old triangle list (section 70's
+   `DualArea` against pulled-back new-connectivity mass is sufficient), but
+   the **exact patch identification does**: an explicit old-record snapshot
+   (canonical key plus per-vertex-ID old-time area thirds) captured while
+   the old tessellation still exists.
+3. Yes, provided all patch coordinates are unwrapped to one anchor image;
+   the four periodic-seam patches of section 69 confirm it.
+4. New patch-mass weight is the right first choice; the weight only decides
+   where the `O(h^2)` (or interface-scale) correction lands. Note the
+   implemented slice does **not** use it — see 73.4.
+5. Yes, guaranteed non-negative (see 73.1).
+6. Sufficient for pure Euler. Passive scalars/species would need the same
+   patch-common `alpha` restricted further by scalar min/max bounds; not
+   needed in the current 2-D code.
+7. That silent combination — `m^+ U^-` — *was* the pre-repair code, i.e. the
+   defect itself; the section-70 placement before Arpaia preparation is the
+   correct factorization (68.15).
+8. Yes: one transfer per connected component of the *changed set* at the
+   rebuild endpoint. Chronological per-flip correction is unnecessary and
+   worse (transient intermediate triangulations never carry the state).
+9. No implementation advantage; keep (68.16)-(68.19) as a documented
+   alternative only.
+
+### 73.3 Section 71 reinterpreted: two hypotheses, and what discriminates them
+
+**Hypothesis A (Codex's, section 71.5): over-merged support components make
+the transfer non-local.** Confirmed as a real mechanism by the source: the
+union loop runs over **all** new physical triangles, so two affected
+vertices are joined whenever they co-occur in *any* triangle, including
+unchanged ones. Two independent flips separated by one unchanged triangle
+merge; along a flip-dense shear layer the merge radius chains. The code
+comment already concedes the related second deviation (73.4). Merging
+preserves both moment identities (a support component is a union of exact
+patches — a split would trip the per-component zeroth-moment abort, which
+never fired in 31502 calls), so conservation survives while locality does
+not, exactly as section 72.4 states.
+
+**Hypothesis B (this review): the correction magnitude at the interface is
+intrinsic.** By 73.1, even exact single-flip patches at a `[rho] ~ 1`
+interface of width `~h` produce `D_P` of interface scale, and nodal kicks
+of order `0.1` are then expected occasionally regardless of the detector.
+If B dominates, exact patches will improve locality statistics but leave
+`max |Delta U|` near 0.1065 and the KH trajectory shift largely in place —
+and that outcome would **not** indict the operator or its weights. It would
+mean a conservative representation transfer at an under-resolved interface
+has an irreducible local price, and the acceptance criterion, not the
+scheme, needs revision.
+
+Section 72.7 already provides for the null result but routes it to "audit
+the transfer weights/operator". The right arbiter is different: compute the
+**exact overlap L2 projection (68.20) diagnostically on the recorded worst
+patches** (offline, from the dual-diagnostic logs — no solver change). If
+the projection's nodal changes are comparable to the patch operator's, the
+price is intrinsic (hypothesis B) and no weight tuning will remove it; only
+if the projection is materially smaller is the operator/weight family the
+problem.
+
+**The acceptance criterion itself must change before the next long run.**
+"Repair must not move accepted fluid metrics" (section 69.7 item 7) is
+well-posed for smooth problems, where corrections are `O(h^2)`; it is not
+well-posed for a chaotic KH at `t = 10` on `n = 48`, where the no-repair
+control is itself a non-conservative trajectory, not truth — its
+`+2.5e-3` biased mass creation concentrated at the interface is a solution
+defect too, merely a less visible one. Proposed replacement gates:
+
+1. smooth regressions (moving Gresho, Sod, Yee) with the repair applied:
+   metrics within about one per cent, corrections `O(h^2)` — these
+   section-69.7 items have **not yet been run** and cost an afternoon;
+2. matched KH to `t = 2`: entropy excursion within a factor about 2 of
+   control, `E_{k,y}` within a few per cent;
+3. long-time: do not require trajectory coincidence at `t = 10`; require
+   instead that the repair-control divergence *shrinks with resolution*
+   (one glass96 short pair), or that the repair tracks the overlap-projection
+   reference at least as closely as it tracks the control.
+
+### 73.4 Two recorded deviations of the implemented slice from section 68
+
+1. **Weights.** The code uses full pulled-back nodal masses
+   (`ale_pullback_area / patch_weight`), not the proposed new *patch*-mass
+   fraction (68.4); the source comment calls it a diagnostic substitute.
+   Conservation needs only `sum w = 1`, but full-mass weighting pushes
+   corrections toward large-dual-area vertices and, combined with merging,
+   further delocalises the transfer. The exact-key slice gets
+   `m_{i,P}^+` for free and should log both weightings in the comparison.
+2. **Detector graph.** Support components connect through unchanged
+   triangles (73.3). The section-72.4 changed-set rule removes this.
+
+Both deviations must be reconciled — or their effect measured — before any
+conclusion about "the operator" is drawn from the dual diagnostic.
+
+### 73.5 Answers to section 72.9
+
+1. **Yes.** The endpoint symmetric difference carries exactly the
+   information the transfer needs; net-zero transient flips never touch the
+   state. Chronological reconstruction would add nothing and is non-unique.
+2. **Canonical, with two provisos.** Smallest-ID anchor plus per-vertex
+   integer periodic-image offsets *relative to the anchor* (translated so
+   the anchor offset is zero), non-anchor pairs sorted lexicographically,
+   is a true canonical form — relative offsets quotient out the image
+   ambiguity, so no minimisation over representations is needed. Provisos:
+   (a) assert the three IDs are distinct (a triangle containing the same
+   particle through two periodic images is geometrically possible only in
+   boxes a few cells wide — assert, do not handle); (b) recover offsets as
+   exact integers from coordinate differences divided by the box size,
+   never from floating-point geometry comparisons.
+3. **Edge-sharing on the union of removed and inserted triangles** (old-old
+   via old edges, new-new via new edges, old-new via shared edges — a 2-to-2
+   flip is connected through its retained boundary edges). This equals
+   interior-connectivity of the changed region, which is precisely the
+   granularity at which both moment identities hold: each interior-connected
+   component is tiled by its own `R` and `A` subsets. Vertex-sharing
+   over-merges pinched ("bowtie") events that conserve separately.
+4. Capture old records **while the previous step's tessellation is still
+   live** — the natural point is where the old element set is already being
+   traversed (end of the previous RD solve or immediately before mesh
+   free), storing `(canonical key, per-ID area thirds)` keyed by particle
+   ID. IDs, never indices: Peano reordering and any future domain
+   decomposition sit between capture and use. Pulled-back new records form
+   after the rebuild exactly as `ale_pullback_area` does now.
+5. **Yes, as the primary criterion** — zeroth plus first moment per
+   component, given that each component's old/new subsets tile the same
+   region, is exactly what uniform and linear exactness require. Keep the
+   independent count cross-check (gate 3): a mis-reconstruction could
+   accidentally satisfy moments.
+6. **Yes** — two events touching at one vertex conserve separately, and the
+   decomposition is non-unique only there. Choose maximal locality (the
+   edge rule keeps them separate); record the rule; either choice is
+   mathematically valid.
+7. **Yes for hypothesis A — but only with the 73.3 arbiter added** so that
+   the null result discriminates A from B instead of defaulting to a weight
+   audit. Add to the logged aggregates: the per-step *non-topology* endpoint
+   defect against flip count. Section 71.3's residual `1.04e-5` drift has a
+   largest single step of `2.43e-7`, far above the no-flip envelope
+   (`5.8e-11`, section 68.1), so the residual is itself flip-correlated and
+   currently unattributed — the same diagnostic run can localise it.
+8. **Yes**, with the release-build, unshared-node measurement discipline
+   section 72.8 already states. The incremental create/delete list is the
+   only plausible hierarchical-phase path (2.51 replaced edges per rebuild
+   makes `O(N_changed)` overwhelmingly cheaper), so treat full hashing as
+   scaffolding.
+9. Owner = task owning the anchor (smallest canonical ID) vertex is fine
+   and deterministic. The real MPI constraint is that the *whole* patch
+   must be resident on the owner: patches are small (section 71 maximum 11
+   per step), so one ghost ring usually suffices, but a cascade can exceed
+   it — the design needs a patch-diameter cap with an explicit abort, not
+   silent truncation.
+10. Equal-step: physical `Q` only — stage-0 and predictor states are
+    constructed after the transfer point, so nothing else exists to
+    transfer. Hierarchical: the same patch operator must be applied to
+    every persistent per-vertex conserved array (inactive-bin endpoint
+    states, the pending ledger of the hierarchical conservation design), so
+    design the transfer as an operator over a *list* of conserved arrays
+    now, rather than hard-coding `Q` — the key-record interface itself
+    needs nothing extra.
+
+### 73.6 Approval and amended order
+
+Sections 68-70 are accepted as recorded; section 71's split verdict stands
+with the reinterpretation of 73.3. The section-72 dual-diagnostic slice is
+**approved with these amendments**:
+
+1. run the smooth regressions (73.3 gate 1) with the existing applied
+   support repair *now* — cheap, decisive for implementation errors, and
+   independent of the exact-key work;
+2. log both weightings (patch-mass and full-mass) in the exact-key
+   comparison (73.4);
+3. add the overlap-projection arbiter on the recorded worst patches before
+   concluding anything from a null merge result (73.3);
+4. add the per-step non-topology endpoint defect to the aggregates (73.5
+   item 7);
+5. adopt the 73.3 replacement acceptance gates before any further `t = 10`
+   run is scored.
+
+No exact-key application to the fluid state, no MPI extension and no
+hierarchical transfer are authorised until the dual diagnostic reports,
+consistent with section 72's own restriction.
