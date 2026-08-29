@@ -460,6 +460,7 @@ check_docs: $(DOCS_CHECK)
 check_rd:
 	@$(PYTHON) tests/rd/test_lda_f1_rank_deficiency.py
 	@$(PYTHON) tests/rd/test_n_frame_covariance.py
+	@$(PYTHON) tests/rd/test_ale_shear_eigenvalue_floor.py
 
 $(CONFIG_CHECK): $(TO_CHECK) $(CONFIG) check.py
 	@$(PYTHON) check.py 2 $(CONFIG) $(CONFIG_CHECK) defines_extra $(TO_CHECK)

@@ -285,22 +285,6 @@ void set_vertex_velocities(void)
 #else /* #ifdef MESHRELAX */
       for(j = 0; j < 3; j++)
         SphP[i].VelVertex[j] = P[i].Vel[j]; /* make cell velocity equal to fluid's velocity */
-#ifdef RD_ALE_MESH_VELOCITY_FRACTION
-#ifndef RD_ALE_EQUALSTEP
-#error "RD_ALE_MESH_VELOCITY_FRACTION is only a test policy for RD_ALE_EQUALSTEP."
-#endif
-      /* The Lagrangian fraction: sigma_QL <- f u, applied to the fluid-following
-       * part ONLY, before the regularisation loop below adds its correction.
-       *
-       * The first version of this switch scaled the final VelVertex, which also
-       * scaled the regularisation drift and so confounded two effects.  Placed
-       * here, f is exactly what its name says -- the fraction of the fluid
-       * velocity the mesh follows -- and mesh regularisation keeps its full
-       * configured strength at every f.  f = 1 is the quasi-Lagrangian default
-       * and f = 0 leaves only the regularisation drift.  See log section 47. */
-      for(j = 0; j < 3; j++)
-        SphP[i].VelVertex[j] *= (double)(RD_ALE_MESH_VELOCITY_FRACTION);
-#endif
 #endif /* #ifdef MESHRELAX #else */
 
       double acc[3];
@@ -333,6 +317,20 @@ void set_vertex_velocities(void)
           SphP[i].VelVertex[1] += 0.5 * dt * acc[1];
           SphP[i].VelVertex[2] += 0.5 * dt * acc[2];
         }
+
+#ifdef RD_ALE_MESH_VELOCITY_FRACTION
+#if !defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_HIERARCHICAL)
+#error "RD_ALE_MESH_VELOCITY_FRACTION is only a test policy for the supported moving ALE paths."
+#endif
+      /* Scale the complete quasi-Lagrangian predictor
+       * sigma_QL = u + 0.5 dt a_pressure, but not the optional regularisation
+       * correction added by the second loop below.  Applying f before the
+       * pressure predictor left a non-zero mesh speed at f = 0 for dynamic
+       * flows.  Here f = 0 and no regularisation switches means sigma = 0
+       * exactly; f = 1 is the unchanged quasi-Lagrangian default. */
+      for(j = 0; j < 3; j++)
+        SphP[i].VelVertex[j] *= (double)(RD_ALE_MESH_VELOCITY_FRACTION);
+#endif
     } /* for loop of active particles */
 
 #ifdef RD_ALE_SENSOR_MESH_SMOOTHING

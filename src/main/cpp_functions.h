@@ -12,6 +12,9 @@ extern "C"{
 #ifdef RESIDUAL_DISTRIBUTION
 // functions defined in residual_distribution_solver.c, which may be used in other C files
 void reset_dualarea(tessellation *T);
+#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+void rd_ale_topology_capture_old_mesh(tessellation *T);
+#endif
 #ifdef RD_HIERARCHICAL_TIMESTEPS
 #define RD_RK_STAGE_PREDICTOR 0
 #define RD_RK_STAGE_CORRECTOR 1

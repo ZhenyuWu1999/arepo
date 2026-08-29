@@ -231,7 +231,9 @@ void run(void)
         /* compute intercell flux with Riemann solver and update the cells with the fluxes */
 #ifdef RESIDUAL_DISTRIBUTION
 #ifdef RD_HIERARCHICAL_TIMESTEPS
+#ifndef RD_ALE_HIERARCHICAL
           compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR);
+#endif
 #elif !defined(RD_RK2_TOTAL_RESIDUAL)
           compute_residuals(&Mesh);
 #else
@@ -257,6 +259,13 @@ void run(void)
 
           write_cpu_log(); /* output some CPU usage log-info (accounts for everything needed up to completion of the current
                               sync-point) */
+
+#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+          /* Retain the old owned triangle keys and areas while this mesh is
+           * still live.  The next rebuilt mesh consumes the snapshot only for
+           * a non-invasive exact-patch comparison. */
+          rd_ale_topology_capture_old_mesh(&Mesh);
+#endif
 
           find_next_sync_point(); /* find next synchronization time */
 
@@ -340,7 +349,15 @@ void run(void)
 
 #ifdef RESIDUAL_DISTRIBUTION
 #ifdef RD_HIERARCHICAL_TIMESTEPS
+#ifdef RD_ALE_HIERARCHICAL
+      /* The new connectivity exists only after this moving-mesh rebuild.
+       * Concentrate both RK sweeps at this event; the predictor call performs
+       * the geometric-ledger close, and the corrector reuses the same mesh. */
+      compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR);
       compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR);
+#else
+      compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR);
+#endif
 #else
       compute_residuals(&Mesh);
 #endif

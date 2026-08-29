@@ -1342,6 +1342,12 @@ extern struct sph_particle_data
   MySingle SurfaceArea;
 #ifdef RESIDUAL_DISTRIBUTION
   MyDouble DualArea;
+#ifdef RD_ALE_HIERARCHICAL
+  /* Geometric mass already represented in Q by due incident triangles.
+   * At a vertex synchronization this is closed to the exact current median
+   * dual area before the fluid residual is applied. */
+  MyDouble RD_GeoLedger;
+#endif
 #ifdef RD_RK2_TOTAL_RESIDUAL
   /* Per-step transients for the two-stage total-residual update. Both are
    * intensive nodal states U = Q/DualArea = {rho, rho vx, rho vy, rho e},

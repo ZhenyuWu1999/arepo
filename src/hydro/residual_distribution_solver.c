@@ -56,8 +56,8 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "The current residual-distribution solver is implemented only for TWODIMS."
 #endif
 
-#if !defined(VORONOI_STATIC_MESH) && !defined(RD_ALE_EQUALSTEP)
-#error "Moving-mesh RD requires the restricted RD_ALE_EQUALSTEP prototype."
+#if !defined(VORONOI_STATIC_MESH) && !defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_HIERARCHICAL)
+#error "Moving-mesh RD requires RD_ALE_EQUALSTEP or the restricted RD_ALE_HIERARCHICAL prototype."
 #endif
 
 #if !defined(FORCE_EQUAL_TIMESTEPS) && !defined(RD_HIERARCHICAL_TIMESTEPS)
@@ -76,36 +76,22 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if defined(RD_ALE_CFL_DIAGNOSTIC) && !defined(RD_ALE_EQUALSTEP)
 #error "RD_ALE_CFL_DIAGNOSTIC requires the equal-step ALE prototype."
 #endif
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) && !defined(RD_ALE_EQUALSTEP)
+#error "RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC requires RD_ALE_EQUALSTEP."
+#endif
+#if defined(RD_ALE_EXACT_PATCH_DIAGNOSTIC) && !defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC)
+#error "RD_ALE_EXACT_PATCH_DIAGNOSTIC requires RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC."
+#endif
 #if defined(RD_ALE_CFL_TIMESTEP) && (!defined(RD_ALE_EQUALSTEP) || !defined(TREE_BASED_TIMESTEPS))
 #error "RD_ALE_CFL_TIMESTEP currently requires RD_ALE_EQUALSTEP and TREE_BASED_TIMESTEPS."
 #endif
-/* The element frame covers N, LDA and the conservative N/LDA B blend.
- * G(b_T) is a similarity of the
- * ALE operator, K'_j = G K_j G^-1, so S'^- = G S^- G^-1 and Uhat'_in = G Uhat_in,
- * whence phi'^N_i = K'^+_i (U'_i - Uhat'_in) = G phi^N_i: N's nodal flux maps
- * back exactly like LDA's.  B forms both branches and its dimensionless theta
- * entirely in this element frame before applying G^-1.  A global boost changes
- * b_T with the fluid/generator velocity and therefore leaves those relative-
- * frame inputs and theta unchanged; linear mapping then preserves both element
- * conservation and covariance.  The timestep hierarchy stays out because the
- * frame must be held fixed over a complete element RK evaluation, which mixed
- * bins do not guarantee. */
-#if defined(RD_ELEMENT_COMOVING_FRAME) &&                                                              \
-    (!defined(RD_ALE_EQUALSTEP) || (!defined(LDA_SCHEME) && !defined(N_SCHEME) && !defined(B_SCHEME)) || \
-     defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_HIERARCHICAL_TIMESTEPS))
-#error "RD_ELEMENT_COMOVING_FRAME covers the equal-step two-pass LDA/F1, N and conservative B prototypes."
+#if defined(RD_ALE_SHEAR_EIGENVALUE_FLOOR) && \
+    (!defined(RD_ALE_EQUALSTEP) || (!defined(N_SCHEME) && !defined(LDA_SCHEME)) || !defined(RD_ALE_CFL_TIMESTEP))
+#error "RD_ALE_SHEAR_EIGENVALUE_FLOOR is an N/LDA ALE experiment and requires RD_ALE_EQUALSTEP plus RD_ALE_CFL_TIMESTEP."
 #endif
-#if defined(RD_ELEMENT_COMOVING_FRAME) && defined(RD_ALE_CONDITION_DIAGNOSTIC)
-#error "Use separate builds for RD_ELEMENT_COMOVING_FRAME and the lab-vs-frame diagnostic."
+#if defined(RD_ALE_SHEAR_EIGENVALUE_FLOOR) && defined(RD_ALE_ENTROPY_DISSIPATION)
+#error "Test the shear eigenvalue floor separately from RD_ALE_ENTROPY_DISSIPATION."
 #endif
-#if defined(RD_ALE_CONTOUR_RESIDUAL) && \
-    (!defined(RD_ALE_EQUALSTEP) || (!defined(LDA_SCHEME) && !defined(N_SCHEME) && !defined(B_SCHEME)))
-#error "RD_ALE_CONTOUR_RESIDUAL covers the equal-step LDA, N and conservative B experiments."
-#endif
-/* N's contour reconciliation is covariant too: it distributes
- * (Phi_contour - sum_i phi_i^N)/3, and G is linear, so both totals transform
- * under G, their difference transforms under G, and division by three commutes
- * with it.  The combination therefore needs no separate derivation. */
 #if !defined(N_SCHEME) && !defined(LDA_SCHEME) && !defined(B_SCHEME)
 #error "RD_ALE_EQUALSTEP supports N/lumped, LDA/F1 and their conservative B blend."
 #endif
@@ -121,11 +107,63 @@ static lapack_int solve_system(int n, double *A, double *b);
 #endif
 #endif
 
+/* The element frame covers N, LDA and the conservative N/LDA B blend in the
+ * equal-step path, and N in the concentrated moving hierarchy.  G(b_T) is a
+ * similarity of the ALE operator.  In the concentrated hierarchy predictor
+ * and corrector are consecutive after one rebuild, so their pulled-back
+ * geometry and b_T are identical; this is not true of the older two-call
+ * static-hierarchy path, which remains excluded. */
+#if defined(RD_ELEMENT_COMOVING_FRAME) &&                                                        \
+    ((!defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_HIERARCHICAL)) ||                            \
+     (!defined(LDA_SCHEME) && !defined(N_SCHEME) && !defined(B_SCHEME)) ||                       \
+     defined(RD_RK2_RATE_CONSISTENT_HEUN) ||                                                     \
+     (defined(RD_HIERARCHICAL_TIMESTEPS) && !defined(RD_ALE_HIERARCHICAL)))
+#error "RD_ELEMENT_COMOVING_FRAME requires the equal-step ALE path or the concentrated moving hierarchy."
+#endif
+#if defined(RD_ELEMENT_COMOVING_FRAME) && defined(RD_ALE_CONDITION_DIAGNOSTIC)
+#error "Use separate builds for RD_ELEMENT_COMOVING_FRAME and the lab-vs-frame diagnostic."
+#endif
+#if defined(RD_ALE_CONTOUR_RESIDUAL) &&                                                          \
+    ((!defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_HIERARCHICAL)) ||                            \
+     (!defined(LDA_SCHEME) && !defined(N_SCHEME) && !defined(B_SCHEME)))
+#error "RD_ALE_CONTOUR_RESIDUAL requires the equal-step ALE path or the concentrated moving hierarchy."
+#endif
+/* N's contour reconciliation is covariant too: it distributes
+ * (Phi_contour - sum_i phi_i^N)/3, and G is linear, so both totals transform
+ * under G, their difference transforms under G, and division by three commutes
+ * with it. */
+
+#ifdef RD_ALE_HIERARCHICAL
+#if defined(VORONOI_STATIC_MESH) || !defined(RD_HIERARCHICAL_TIMESTEPS) || !defined(RD_RK2_TOTAL_RESIDUAL) || \
+    !defined(N_SCHEME) || !defined(CREATE_FULL_MESH)
+#error "RD_ALE_HIERARCHICAL v1 requires moving mesh, CREATE_FULL_MESH, hierarchy, total-residual RK2 and N."
+#endif
+#if(defined(RD_ALE_CAMPOLI_MASS) + defined(RD_ALE_HIERARCHICAL_ARPAIA)) != 1
+#error "RD_ALE_HIERARCHICAL requires exactly one temporal mass pair: Campoli or experimental Arpaia."
+#endif
+#if defined(FORCE_EQUAL_TIMESTEPS) && defined(RD_HIERARCHICAL_TEST_PATTERN)
+#error "Use either the equal-bin degeneration or RD_HIERARCHICAL_TEST_PATTERN, not both."
+#endif
+#if defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || defined(MHD) || defined(PASSIVE_SCALARS)
+#error "RD_ALE_HIERARCHICAL v1 excludes refinement, MHD and passive scalars."
+#endif
+#if defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE)
+#error "RD_ALE_HIERARCHICAL v1 excludes gravity."
+#endif
+#if defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
+#error "RD_ALE_HIERARCHICAL v1 requires periodic boundaries."
+#endif
+#endif
+
 #ifdef RD_HIERARCHICAL_TIMESTEPS
 #if !defined(RD_RK2_TOTAL_RESIDUAL) || (!defined(N_SCHEME) && !defined(LDA_SCHEME))
 #error "RD_HIERARCHICAL_TIMESTEPS currently requires RD_RK2_TOTAL_RESIDUAL with N_SCHEME or LDA_SCHEME."
 #endif
-#ifdef LDA_SCHEME
+#if defined(RD_ALE_HIERARCHICAL) && defined(RD_ALE_HIERARCHICAL_ARPAIA)
+#define RD_RK2_STAGE_BETA_LABEL "concentrated-ALE-hierarchy-N-Arpaia"
+#elif defined(RD_ALE_HIERARCHICAL)
+#define RD_RK2_STAGE_BETA_LABEL "concentrated-ALE-hierarchy-N-Campoli"
+#elif defined(LDA_SCHEME)
 #define RD_RK2_STAGE_BETA_LABEL "two-call-LDA-F1-frozen"
 #else
 #define RD_RK2_STAGE_BETA_LABEL "two-call-N-lumped"
@@ -138,6 +176,11 @@ static lapack_int solve_system(int n, double *A, double *b);
 
 #if defined(RD_RK2_TOTAL_RESIDUAL) && !defined(RD_HIERARCHICAL_TIMESTEPS)
 #define RD_RK2_INTERNAL_LOOP
+#endif
+
+#if defined(RD_ALE_APOSTERIORI_FALLBACK) && \
+    (!defined(RD_ALE_EQUALSTEP) || !defined(RD_RK2_INTERNAL_LOOP) || !defined(B_SCHEME) || defined(RD_RK2_RATE_CONSISTENT_HEUN))
+#error "RD_ALE_APOSTERIORI_FALLBACK is the equal-step two-pass B-engine diagnostic (binary LDA/N only)."
 #endif
 
 #if(defined(LDA_SCHEME) + defined(N_SCHEME) + defined(B_SCHEME)) != 1
@@ -157,6 +200,9 @@ static lapack_int solve_system(int n, double *A, double *b);
 #define RD_RK2_STAGE_BETA_LABEL "rate-consistent-LDA-F1-Heun"
 #define RD_UPWIND_NRHS 3
 #elif defined(RD_HIERARCHICAL_TIMESTEPS)
+#define RD_UPWIND_NRHS 3
+#elif defined(B_SCHEME) && defined(RD_ALE_APOSTERIORI_FALLBACK)
+#define RD_RK2_STAGE_BETA_LABEL "a-posteriori-LDA-N"
 #define RD_UPWIND_NRHS 3
 #elif defined(B_SCHEME)
 #define RD_RK2_STAGE_BETA_LABEL "coherent-total-B"
@@ -417,7 +463,11 @@ static void rd_open_vertex_predictors(void)
         {
           for(int k = 0; k < 4; k++)
             SphP[i].RD_dU[k] = 0.0;
+#ifdef RD_ALE_HIERARCHICAL
+          SphP[i].RD_PredictorEnd = All.Ti_Current;
+#else
           SphP[i].RD_PredictorEnd = All.Ti_Current + (((integertime)1) << P[i].TimeBinHydro);
+#endif
         }
     }
 }
@@ -738,6 +788,70 @@ static void rd_add_entropy_dissipation(double velx, double vely, double enthalpy
             const double d = eta * r_e[row] * l_e[col];
             Kmatrix[row][col][vertex][kplus] += d;
             Kmatrix[row][col][vertex][kminus] -= d;
+          }
+    }
+}
+#endif
+#ifdef RD_ALE_SHEAR_EIGENVALUE_FLOOR
+/*! \brief Diagnostic Harten-type modulus floor for the ALE shear field.
+ *
+ *  The unmodified shear eigenvalue on face j is
+ *
+ *      lambda_s,j = (u - sigmabar_T) . n_hat_j.
+ *
+ *  If the element is near Lagrangian, |u-sigmabar_T| < eps_s c, replace only
+ *  its shear modulus by d_s,j=max(|lambda_s,j|,eps_s c) in the conservative
+ *  split lambda_s^{+/-*}=0.5(lambda_s,j +/- d_s,j).  The corresponding change
+ *  to the already assembled face matrices is
+ *
+ *      K_j^{+*} = K_j^+ + |n_j|(d_s,j-|lambda_s,j|) P_s,j / 4,
+ *      K_j^{-*} = K_j^- - |n_j|(d_s,j-|lambda_s,j|) P_s,j / 4.
+ *
+ *  Thus K_j^{+*}+K_j^{-*}=K_j exactly: this changes dissipation but neither
+ *  the ALE flux nor the element total residual.  P_s,j=r_s,j l_s,j^T uses
+ *
+ *      t_j=(-n_y,n_x),  r_s=(0,t_x,t_y,u.t)^T,
+ *      l_s=(-u.t,t_x,t_y,0),
+ *
+ *  so l_s r_s=1 and P_s annihilates the entropy and acoustic eigenvectors.
+ *  Unlike RD_ALE_ENTROPY_DISSIPATION, the deficit is evaluated per face and
+ *  contains the factor 1/2 from the conservative eigenvalue split.
+ */
+static void rd_apply_shear_eigenvalue_floor(double velx, double vely, double cs,
+                                            double rel_velx, double rel_vely,
+                                            const double normal_x[3], const double normal_y[3],
+                                            const double magnitude[3], int kplus, int kminus,
+                                            double Kmatrix[4][4][3][3])
+{
+  const double epsilon = RD_ALE_SHEAR_EIGENVALUE_FLOOR;
+  if(!(epsilon > 0.0) || !(epsilon < 1.0) || !isfinite(epsilon))
+    terminate_program("RD_ALE_SHEAR_EIGENVALUE_FLOOR must satisfy 0 < epsilon < 1");
+
+  const double relative_speed = sqrt(rel_velx * rel_velx + rel_vely * rel_vely);
+  const double floor_speed = epsilon * cs;
+  if(!(relative_speed < floor_speed))
+    return;
+
+  for(int vertex = 0; vertex < 3; vertex++)
+    {
+      const double lambda_s = rel_velx * normal_x[vertex] + rel_vely * normal_y[vertex];
+      const double deficit = floor_speed - fabs(lambda_s);
+      if(!(deficit > 0.0))
+        continue;
+
+      const double tangent_x = -normal_y[vertex];
+      const double tangent_y = normal_x[vertex];
+      const double velocity_tangent = velx * tangent_x + vely * tangent_y;
+      const double r_s[4] = {0.0, tangent_x, tangent_y, velocity_tangent};
+      const double l_s[4] = {-velocity_tangent, tangent_x, tangent_y, 0.0};
+      const double eta = 0.25 * magnitude[vertex] * deficit;
+
+      for(int row = 0; row < 4; row++)
+        for(int col = 0; col < 4; col++)
+          {
+            const double correction = eta * r_s[row] * l_s[col];
+            Kmatrix[row][col][vertex][kplus] += correction;
+            Kmatrix[row][col][vertex][kminus] -= correction;
           }
     }
 }
@@ -1157,6 +1271,9 @@ struct rd_element_set
 #ifdef RD_ALE_EQUALSTEP
   struct rd_ale_triangle_geometry *ale_geometry;
   double *ale_endpoint_area;
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+  double *ale_pullback_area;
+#endif
   double *ale_divisor;
 #ifdef RD_ALE_CFL_DIAGNOSTIC
   double *ale_cfl_alpha_sum;
@@ -1165,6 +1282,13 @@ struct rd_element_set
   double ale_old_total[4];
   double ale_dt;
   int ale_uniform_initial;
+#endif
+#ifdef RD_ALE_HIERARCHICAL
+  double *ale_hier_divisor_element_area;
+  double *ale_hier_endpoint_area;
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+  double *ale_hier_divisor;
+#endif
 #endif
   int n;
   int n_active;
@@ -1286,6 +1410,9 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
   set->ale_geometry = NULL;
   set->ale_endpoint_area = NULL;
   set->ale_divisor = NULL;
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+  set->ale_pullback_area = NULL;
+#endif
 #ifdef RD_ALE_CFL_DIAGNOSTIC
   set->ale_cfl_alpha_sum = NULL;
 #endif
@@ -1294,6 +1421,13 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
   set->ale_uniform_initial = 0;
   for(int component = 0; component < 4; component++)
     set->ale_old_total[component] = 0.0;
+#endif
+#ifdef RD_ALE_HIERARCHICAL
+  set->ale_hier_divisor_element_area = NULL;
+  set->ale_hier_endpoint_area = NULL;
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+  set->ale_hier_divisor = NULL;
+#endif
 #endif
 
   for(i = 0, n = 0; i < Ndt; i++)
@@ -1357,10 +1491,24 @@ static void rd_free_element_set(struct rd_element_set *set)
 #endif
   if(set->ale_divisor != NULL)
     myfree(set->ale_divisor);
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+  if(set->ale_pullback_area != NULL)
+    myfree(set->ale_pullback_area);
+#endif
   if(set->ale_endpoint_area != NULL)
     myfree(set->ale_endpoint_area);
   if(set->ale_geometry != NULL)
     myfree_movable(set->ale_geometry);
+#endif
+#ifdef RD_ALE_HIERARCHICAL
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+  if(set->ale_hier_divisor != NULL)
+    myfree(set->ale_hier_divisor);
+#endif
+  if(set->ale_hier_endpoint_area != NULL)
+    myfree(set->ale_hier_endpoint_area);
+  if(set->ale_hier_divisor_element_area != NULL)
+    myfree(set->ale_hier_divisor_element_area);
 #endif
   myfree_movable(set->normals);
   myfree_movable(set->active);
@@ -1380,6 +1528,114 @@ static int rd_ale_local_point_index(const point *dp)
     terminate_program("RD_ALE_EQUALSTEP could not map a periodic image to its primary generator");
   return index;
 }
+
+#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+/*! A physical triangle key for the deliberately one-rank diagnostic.
+ *
+ * Sorted particle IDs are sufficient unless the same three particles form
+ * more than one distinct torus triangle. Both snapshots are checked for
+ * duplicate keys and abort in that exceptional small-box case; this is safer
+ * than inferring periodic winding numbers from floating-point coordinates.
+ */
+struct rd_ale_exact_triangle_record
+{
+  MyIDType id[3];
+  double area_third;
+};
+
+static struct rd_ale_exact_triangle_record *rd_ale_exact_old_triangle = NULL;
+static int rd_ale_exact_old_triangle_count = 0;
+static int rd_ale_exact_old_snapshot_valid = 0;
+
+static int rd_ale_exact_triangle_compare(const void *a, const void *b)
+{
+  const struct rd_ale_exact_triangle_record *ta = a;
+  const struct rd_ale_exact_triangle_record *tb = b;
+  for(int vertex = 0; vertex < 3; vertex++)
+    {
+      if(ta->id[vertex] < tb->id[vertex])
+        return -1;
+      if(ta->id[vertex] > tb->id[vertex])
+        return 1;
+    }
+  return 0;
+}
+
+static int rd_ale_exact_key_equal(const struct rd_ale_exact_triangle_record *a,
+                                  const struct rd_ale_exact_triangle_record *b)
+{
+  return a->id[0] == b->id[0] && a->id[1] == b->id[1] && a->id[2] == b->id[2];
+}
+
+static void rd_ale_exact_make_record(tessellation *T, int triangle, double area,
+                                     struct rd_ale_exact_triangle_record *record)
+{
+  for(int vertex = 0; vertex < 3; vertex++)
+    record->id[vertex] = T->DP[T->DT[triangle].p[vertex]].ID;
+
+  for(int a = 0; a < 2; a++)
+    for(int b = a + 1; b < 3; b++)
+      if(record->id[b] < record->id[a])
+        {
+          MyIDType tmp = record->id[a];
+          record->id[a] = record->id[b];
+          record->id[b] = tmp;
+        }
+
+  if(record->id[0] == record->id[1] || record->id[1] == record->id[2])
+    terminate_program("RD exact-patch diagnostic found a triangle with repeated particle IDs");
+  if(!(area > 0.0) || !isfinite(area))
+    terminate_program("RD exact-patch diagnostic found a non-positive triangle area");
+  record->area_third = area / 3.0;
+}
+
+static void rd_ale_exact_assert_unique_keys(struct rd_ale_exact_triangle_record *record, int count,
+                                            const char *which)
+{
+  for(int i = 1; i < count; i++)
+    if(rd_ale_exact_key_equal(&record[i - 1], &record[i]))
+      {
+        printf("RD-TOPO-EXACT duplicate-%s-key IDs=[%llu %llu %llu]\n", which,
+               (unsigned long long)record[i].id[0], (unsigned long long)record[i].id[1],
+               (unsigned long long)record[i].id[2]);
+        terminate_program("RD exact-patch ID-only key is ambiguous; periodic winding metadata is required");
+      }
+}
+
+/*! Snapshot the current owned physical triangulation immediately before the
+ * mesh is freed. The snapshot contains no fluid state and survives only to
+ * the next equal-step rebuild, where it is compared with the pulled-back new
+ * connectivity. It therefore cannot alter the numerical solution.
+ */
+void rd_ale_topology_capture_old_mesh(tessellation *T)
+{
+  if(NTask != 1)
+    terminate_program("RD exact-patch diagnostic is initially restricted to one MPI rank");
+
+  struct rd_element_set set;
+  rd_build_element_set(T, &set, 0);
+
+  if(rd_ale_exact_old_triangle != NULL)
+    free(rd_ale_exact_old_triangle);
+  rd_ale_exact_old_triangle_count = set.n;
+  rd_ale_exact_old_triangle = (struct rd_ale_exact_triangle_record *)malloc(
+      rd_ale_exact_old_triangle_count * sizeof(*rd_ale_exact_old_triangle));
+  if(rd_ale_exact_old_triangle == NULL)
+    terminate_program("RD exact-patch diagnostic could not allocate its persistent old triangle snapshot");
+
+  for(int slot = 0; slot < set.n; slot++)
+    rd_ale_exact_make_record(T, set.element[slot], set.normals[slot].area,
+                             &rd_ale_exact_old_triangle[slot]);
+
+  qsort(rd_ale_exact_old_triangle, rd_ale_exact_old_triangle_count,
+        sizeof(*rd_ale_exact_old_triangle), rd_ale_exact_triangle_compare);
+  rd_ale_exact_assert_unique_keys(rd_ale_exact_old_triangle, rd_ale_exact_old_triangle_count, "old");
+  rd_ale_exact_old_snapshot_valid = 1;
+
+  mpi_printf("RD-TOPO-EXACT-SNAPSHOT triangles=%d\n", rd_ale_exact_old_triangle_count);
+  rd_free_element_set(&set);
+}
+#endif
 
 static void rd_ale_q_from_particle(int i, double q[4])
 {
@@ -1401,6 +1657,739 @@ static void rd_ale_set_particle_q(int i, double area, const double u[4])
   if(SphP[i].DualArea > 0.0)
     SphP[i].Momentum[2] *= area / SphP[i].DualArea;
 }
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+#define RD_ALE_TOPOLOGY_SUPPORT_FACTOR 65536.0
+#define RD_ALE_TOPOLOGY_AUDIT_FACTOR 262144.0
+
+static int rd_ale_topology_find(int *parent, int i)
+{
+  int root = i;
+  while(parent[root] != root)
+    root = parent[root];
+
+  while(parent[i] != i)
+    {
+      int next = parent[i];
+      parent[i] = root;
+      i = next;
+    }
+  return root;
+}
+
+static void rd_ale_topology_union(int *parent, int a, int b)
+{
+  int root_a = rd_ale_topology_find(parent, a);
+  int root_b = rd_ale_topology_find(parent, b);
+  if(root_a != root_b)
+    parent[root_b] = root_a;
+}
+
+#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+struct rd_ale_exact_changed_triangle
+{
+  struct rd_ale_exact_triangle_record triangle;
+  int side; /* -1: removed old triangle, +1: inserted pulled-back triangle */
+};
+
+struct rd_ale_exact_id_index
+{
+  MyIDType id;
+  int index;
+};
+
+static int rd_ale_exact_id_index_compare(const void *a, const void *b)
+{
+  const struct rd_ale_exact_id_index *ia = a;
+  const struct rd_ale_exact_id_index *ib = b;
+  if(ia->id < ib->id)
+    return -1;
+  if(ia->id > ib->id)
+    return 1;
+  return 0;
+}
+
+static int rd_ale_exact_lookup_index(const struct rd_ale_exact_id_index *map, int count, MyIDType id)
+{
+  int lo = 0, hi = count;
+  while(lo < hi)
+    {
+      int mid = lo + (hi - lo) / 2;
+      if(map[mid].id < id)
+        lo = mid + 1;
+      else
+        hi = mid;
+    }
+  if(lo >= count || map[lo].id != id)
+    terminate_program("RD exact-patch diagnostic could not map a triangle ID to a local particle");
+  return map[lo].index;
+}
+
+static int rd_ale_exact_triangles_share_edge(const struct rd_ale_exact_triangle_record *a,
+                                             const struct rd_ale_exact_triangle_record *b)
+{
+  int common = 0;
+  for(int i = 0; i < 3; i++)
+    for(int j = 0; j < 3; j++)
+      common += a->id[i] == b->id[j];
+  return common >= 2;
+}
+
+static double rd_ale_exact_wrap(double x, double box)
+{
+  x = fmod(x, box);
+  if(x < 0.0)
+    x += box;
+  if(x >= box)
+    x -= box;
+  return x;
+}
+
+/*! Compare the exact endpoint symmetric difference with the provisional
+ * non-zero-dm support patches. Both exact correction candidates are formed
+ * in scratch arrays only; the applied state remains the support repair below.
+ */
+static void rd_ale_exact_patch_diagnostic(tessellation *T, struct rd_element_set *set,
+                                          const unsigned char *affected, int *support_parent,
+                                          const int *support_root_to_patch, int support_patch_count)
+{
+  if(!rd_ale_exact_old_snapshot_valid)
+    {
+      mpi_printf("RD-TOPO-EXACT time=%.8g unavailable=1 reason=no-old-snapshot\n", All.Time);
+      return;
+    }
+
+  struct rd_ale_exact_triangle_record *new_triangle =
+      (struct rd_ale_exact_triangle_record *)mymalloc(
+          "RDExactNewTriangles", set->n * sizeof(*new_triangle));
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      int triangle = set->element[slot];
+      rd_ale_exact_make_record(T, triangle,
+                               set->ale_geometry[slot].normals[RD_ALE_OLD].area,
+                               &new_triangle[slot]);
+    }
+  qsort(new_triangle, set->n, sizeof(*new_triangle), rd_ale_exact_triangle_compare);
+  rd_ale_exact_assert_unique_keys(new_triangle, set->n, "new");
+
+  int changed_capacity = rd_ale_exact_old_triangle_count + set->n;
+  struct rd_ale_exact_changed_triangle *changed =
+      (struct rd_ale_exact_changed_triangle *)mymalloc(
+          "RDExactChangedTriangles", changed_capacity * sizeof(*changed));
+
+  int old_cursor = 0, new_cursor = 0, changed_count = 0;
+  int unchanged_count = 0, removed_count = 0, inserted_count = 0;
+  double max_unchanged_area_error = 0.0;
+  while(old_cursor < rd_ale_exact_old_triangle_count || new_cursor < set->n)
+    {
+      int comparison;
+      if(old_cursor >= rd_ale_exact_old_triangle_count)
+        comparison = 1;
+      else if(new_cursor >= set->n)
+        comparison = -1;
+      else
+        comparison = rd_ale_exact_triangle_compare(&rd_ale_exact_old_triangle[old_cursor],
+                                                   &new_triangle[new_cursor]);
+
+      if(comparison == 0)
+        {
+          max_unchanged_area_error =
+              dmax(max_unchanged_area_error,
+                   fabs(rd_ale_exact_old_triangle[old_cursor].area_third -
+                        new_triangle[new_cursor].area_third));
+          unchanged_count++;
+          old_cursor++;
+          new_cursor++;
+        }
+      else if(comparison < 0)
+        {
+          changed[changed_count].triangle = rd_ale_exact_old_triangle[old_cursor++];
+          changed[changed_count++].side = -1;
+          removed_count++;
+        }
+      else
+        {
+          changed[changed_count].triangle = new_triangle[new_cursor++];
+          changed[changed_count++].side = 1;
+          inserted_count++;
+        }
+    }
+
+  if(changed_count == 0)
+    {
+      mpi_printf("RD-TOPO-EXACT time=%.8g old=%d new=%d unchanged=%d removed=0 inserted=0 "
+                 "exact=0 support=%d split=0 merged_support=0 exact_in_merges=0 max_merge=0 "
+                 "max_nodes=0 max_diameter=0.000e+00 zero_rel=0.000e+00 first_rel=0.000e+00 "
+                 "dm_match_rel=0.000e+00 unchanged_area=%.3e dU_full=0.000e+00 "
+                 "dU_patch=0.000e+00 bad_full=0 bad_patch=0\n",
+                 All.Time, rd_ale_exact_old_triangle_count, set->n, unchanged_count,
+                 support_patch_count, max_unchanged_area_error);
+      myfree(changed);
+      myfree(new_triangle);
+      return;
+    }
+
+  int *changed_parent =
+      (int *)mymalloc("RDExactChangedParent", changed_count * sizeof(*changed_parent));
+  int *root_to_exact =
+      (int *)mymalloc("RDExactRootPatch", changed_count * sizeof(*root_to_exact));
+  for(int i = 0; i < changed_count; i++)
+    {
+      changed_parent[i] = i;
+      root_to_exact[i] = -1;
+    }
+  for(int i = 0; i < changed_count; i++)
+    for(int j = i + 1; j < changed_count; j++)
+      if(rd_ale_exact_triangles_share_edge(&changed[i].triangle, &changed[j].triangle))
+        rd_ale_topology_union(changed_parent, i, j);
+
+  int exact_patch_count = 0;
+  for(int i = 0; i < changed_count; i++)
+    {
+      int root = rd_ale_topology_find(changed_parent, i);
+      if(root_to_exact[root] < 0)
+        root_to_exact[root] = exact_patch_count++;
+    }
+
+  struct rd_ale_exact_id_index *id_map =
+      (struct rd_ale_exact_id_index *)mymalloc("RDExactIDMap", NumGas * sizeof(*id_map));
+  for(int i = 0; i < NumGas; i++)
+    {
+      id_map[i].id = P[i].ID;
+      id_map[i].index = i;
+    }
+  qsort(id_map, NumGas, sizeof(*id_map), rd_ale_exact_id_index_compare);
+  for(int i = 1; i < NumGas; i++)
+    if(id_map[i - 1].id == id_map[i].id)
+      terminate_program("RD exact-patch diagnostic requires unique local particle IDs");
+
+  size_t patch_node_count = (size_t)exact_patch_count * (size_t)NumGas;
+  double *old_patch_mass =
+      (double *)mymalloc("RDExactOldPatchMass", patch_node_count * sizeof(*old_patch_mass));
+  double *new_patch_mass =
+      (double *)mymalloc("RDExactNewPatchMass", patch_node_count * sizeof(*new_patch_mass));
+  memset(old_patch_mass, 0, patch_node_count * sizeof(*old_patch_mass));
+  memset(new_patch_mass, 0, patch_node_count * sizeof(*new_patch_mass));
+
+  int *old_triangles =
+      (int *)mymalloc("RDExactOldPatchTriangles", exact_patch_count * sizeof(*old_triangles));
+  int *new_triangles =
+      (int *)mymalloc("RDExactNewPatchTriangles", exact_patch_count * sizeof(*new_triangles));
+  memset(old_triangles, 0, exact_patch_count * sizeof(*old_triangles));
+  memset(new_triangles, 0, exact_patch_count * sizeof(*new_triangles));
+
+  for(int triangle = 0; triangle < changed_count; triangle++)
+    {
+      int patch = root_to_exact[rd_ale_topology_find(changed_parent, triangle)];
+      if(changed[triangle].side < 0)
+        old_triangles[patch]++;
+      else
+        new_triangles[patch]++;
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_exact_lookup_index(id_map, NumGas,
+                                                changed[triangle].triangle.id[vertex]);
+          size_t offset = (size_t)patch * NumGas + index;
+          if(changed[triangle].side < 0)
+            old_patch_mass[offset] += changed[triangle].triangle.area_third;
+          else
+            new_patch_mass[offset] += changed[triangle].triangle.area_third;
+        }
+    }
+
+  double(*delta_full)[4] =
+      (double(*)[4])mymalloc("RDExactDeltaFull", NumGas * sizeof(*delta_full));
+  double(*delta_patch)[4] =
+      (double(*)[4])mymalloc("RDExactDeltaPatch", NumGas * sizeof(*delta_patch));
+  memset(delta_full, 0, NumGas * sizeof(*delta_full));
+  memset(delta_patch, 0, NumGas * sizeof(*delta_patch));
+  double *reconstructed_dm =
+      (double *)mymalloc("RDExactReconstructedDM", NumGas * sizeof(*reconstructed_dm));
+  memset(reconstructed_dm, 0, NumGas * sizeof(*reconstructed_dm));
+
+  int support_storage_count = imax(1, support_patch_count);
+  int *support_exact_count =
+      (int *)mymalloc("RDExactSupportCount", support_storage_count * sizeof(*support_exact_count));
+  memset(support_exact_count, 0, support_storage_count * sizeof(*support_exact_count));
+
+  const double mean_area = boxSize_X * boxSize_Y / NumGas;
+  const double box_length = dmax(boxSize_X, boxSize_Y);
+  double max_zero_relative = 0.0, max_first_relative = 0.0;
+  double max_patch_diameter = 0.0;
+  int max_patch_nodes = 0, split_exact = 0, unmapped_exact = 0;
+  int integrity_fail = 0;
+
+  for(int patch = 0; patch < exact_patch_count; patch++)
+    {
+      if(old_triangles[patch] == 0 || new_triangles[patch] == 0)
+        integrity_fail = 1;
+
+      int node_count = 0, anchor = -1, support_label = -1, patch_split = 0;
+      double patch_dm = 0.0, patch_abs_dm = 0.0;
+      double full_weight_sum = 0.0, patch_weight_sum = 0.0;
+      double defect[4] = {0.0, 0.0, 0.0, 0.0};
+
+      for(int i = 0; i < NumGas; i++)
+        {
+          size_t offset = (size_t)patch * NumGas + i;
+          double old_mass = old_patch_mass[offset];
+          double new_mass = new_patch_mass[offset];
+          if(old_mass == 0.0 && new_mass == 0.0)
+            continue;
+          node_count++;
+          if(anchor < 0 || P[i].ID < P[anchor].ID)
+            anchor = i;
+          double dm = new_mass - old_mass;
+          reconstructed_dm[i] += dm;
+          patch_dm += dm;
+          patch_abs_dm += fabs(dm);
+          full_weight_sum += set->ale_pullback_area[i];
+          patch_weight_sum += new_mass;
+          for(int component = 0; component < 4; component++)
+            defect[component] += dm * set->ale_uold[i][component];
+
+          double support_tolerance =
+              RD_ALE_TOPOLOGY_SUPPORT_FACTOR * DBL_EPSILON *
+              dmax(mean_area, dmax(fabs(old_mass), fabs(new_mass)));
+          if(fabs(dm) > support_tolerance)
+            {
+              if(!affected[i])
+                integrity_fail = 1;
+              else
+                {
+                  int label = support_root_to_patch[rd_ale_topology_find(support_parent, i)];
+                  if(support_label < 0)
+                    support_label = label;
+                  else if(label != support_label)
+                    patch_split = 1;
+                }
+            }
+        }
+
+      max_patch_nodes = imax(max_patch_nodes, node_count);
+      if(anchor < 0 || !(full_weight_sum > 0.0) || !(patch_weight_sum > 0.0))
+        integrity_fail = 1;
+
+      double anchor_x = rd_ale_exact_wrap(P[anchor].Pos[0] - set->ale_dt * SphP[anchor].VelVertex[0], boxSize_X);
+      double anchor_y = rd_ale_exact_wrap(P[anchor].Pos[1] - set->ale_dt * SphP[anchor].VelVertex[1], boxSize_Y);
+      double first[2] = {0.0, 0.0};
+      for(int i = 0; i < NumGas; i++)
+        {
+          size_t offset = (size_t)patch * NumGas + i;
+          if(old_patch_mass[offset] == 0.0 && new_patch_mass[offset] == 0.0)
+            continue;
+          double dm = new_patch_mass[offset] - old_patch_mass[offset];
+          double x = rd_ale_exact_wrap(P[i].Pos[0] - set->ale_dt * SphP[i].VelVertex[0], boxSize_X);
+          double y = rd_ale_exact_wrap(P[i].Pos[1] - set->ale_dt * SphP[i].VelVertex[1], boxSize_Y);
+          double dx = nearest_x(x - anchor_x);
+          double dy = nearest_y(y - anchor_y);
+          first[0] += dm * (anchor_x + dx);
+          first[1] += dm * (anchor_y + dy);
+          max_patch_diameter = dmax(max_patch_diameter, sqrt(dx * dx + dy * dy));
+
+          double full_weight = set->ale_pullback_area[i] / full_weight_sum;
+          double patch_weight = new_patch_mass[offset] / patch_weight_sum;
+          for(int component = 0; component < 4; component++)
+            {
+              delta_full[i][component] -= full_weight * defect[component] / set->ale_pullback_area[i];
+              delta_patch[i][component] -= patch_weight * defect[component] / set->ale_pullback_area[i];
+            }
+        }
+
+      double zero_scale = dmax(mean_area, patch_abs_dm);
+      double first_scale = zero_scale * box_length;
+      max_zero_relative = dmax(max_zero_relative, fabs(patch_dm) / zero_scale);
+      max_first_relative =
+          dmax(max_first_relative, dmax(fabs(first[0]), fabs(first[1])) / first_scale);
+      if(fabs(patch_dm) > 1.0e-9 * mean_area || fabs(first[0]) > 1.0e-9 * mean_area * box_length ||
+         fabs(first[1]) > 1.0e-9 * mean_area * box_length)
+        integrity_fail = 1;
+
+      split_exact += patch_split;
+      if(support_label >= 0 && !patch_split)
+        support_exact_count[support_label]++;
+      else
+        unmapped_exact++;
+    }
+
+  int merged_support = 0, exact_in_merges = 0, max_merge = 0, support_unmapped = 0;
+  for(int patch = 0; patch < support_patch_count; patch++)
+    {
+      if(support_exact_count[patch] > 1)
+        {
+          merged_support++;
+          exact_in_merges += support_exact_count[patch];
+        }
+      if(support_exact_count[patch] == 0)
+        support_unmapped++;
+      max_merge = imax(max_merge, support_exact_count[patch]);
+    }
+
+  double max_dm_match_relative = 0.0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      double actual_dm = set->ale_pullback_area[i] - SphP[i].DualArea;
+      double scale = dmax(mean_area, dmax(fabs(actual_dm), fabs(reconstructed_dm[i])));
+      max_dm_match_relative =
+          dmax(max_dm_match_relative, fabs(reconstructed_dm[i] - actual_dm) / scale);
+    }
+  if(max_dm_match_relative > 1.0e-9)
+    integrity_fail = 1;
+
+  double max_full_change = 0.0, max_patch_change = 0.0;
+  int bad_full = 0, bad_patch = 0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      for(int component = 0; component < 4; component++)
+        {
+          max_full_change = dmax(max_full_change, fabs(delta_full[i][component]));
+          max_patch_change = dmax(max_patch_change, fabs(delta_patch[i][component]));
+        }
+      double rho_full = set->ale_uold[i][0] + delta_full[i][0];
+      double rho_patch = set->ale_uold[i][0] + delta_patch[i][0];
+      double mx_full = set->ale_uold[i][1] + delta_full[i][1];
+      double my_full = set->ale_uold[i][2] + delta_full[i][2];
+      double energy_full = set->ale_uold[i][3] + delta_full[i][3];
+      double mx_patch = set->ale_uold[i][1] + delta_patch[i][1];
+      double my_patch = set->ale_uold[i][2] + delta_patch[i][2];
+      double energy_patch = set->ale_uold[i][3] + delta_patch[i][3];
+      double press_full = (isfinite(rho_full) && rho_full > 0.0)
+                              ? GAMMA_MINUS1 * (energy_full - 0.5 * (mx_full * mx_full + my_full * my_full) / rho_full)
+                              : NAN;
+      double press_patch = (isfinite(rho_patch) && rho_patch > 0.0)
+                               ? GAMMA_MINUS1 * (energy_patch - 0.5 * (mx_patch * mx_patch + my_patch * my_patch) / rho_patch)
+                               : NAN;
+      bad_full += !isfinite(rho_full) || !isfinite(press_full) || rho_full <= 0.0 || press_full <= 0.0;
+      bad_patch += !isfinite(rho_patch) || !isfinite(press_patch) || rho_patch <= 0.0 || press_patch <= 0.0;
+    }
+
+  mpi_printf("RD-TOPO-EXACT time=%.8g old=%d new=%d unchanged=%d removed=%d inserted=%d "
+             "exact=%d support=%d split=%d unmapped_exact=%d merged_support=%d exact_in_merges=%d "
+             "support_unmapped=%d max_merge=%d max_nodes=%d max_diameter=%.3e zero_rel=%.3e "
+             "first_rel=%.3e dm_match_rel=%.3e unchanged_area=%.3e dU_full=%.3e dU_patch=%.3e "
+             "bad_full=%d bad_patch=%d integrity_fail=%d\n",
+             All.Time, rd_ale_exact_old_triangle_count, set->n, unchanged_count, removed_count,
+             inserted_count, exact_patch_count, support_patch_count, split_exact, unmapped_exact,
+             merged_support, exact_in_merges, support_unmapped, max_merge, max_patch_nodes,
+             max_patch_diameter, max_zero_relative, max_first_relative, max_dm_match_relative,
+             max_unchanged_area_error, max_full_change, max_patch_change, bad_full, bad_patch,
+             integrity_fail);
+
+  myfree(support_exact_count);
+  myfree(reconstructed_dm);
+  myfree(delta_patch);
+  myfree(delta_full);
+  myfree(new_triangles);
+  myfree(old_triangles);
+  myfree(new_patch_mass);
+  myfree(old_patch_mass);
+  myfree(id_map);
+  myfree(root_to_exact);
+  myfree(changed_parent);
+  myfree(changed);
+  myfree(new_triangle);
+
+  if(integrity_fail)
+    terminate_program("RD exact-patch diagnostic failed its reconstruction gates");
+}
+#endif
+
+/*! Apply a conservative representation transfer from the actual old P1 basis
+ *  to the new connectivity pulled back to the old physical time.
+ *
+ *  This first online diagnostic deliberately avoids retaining the old triangle
+ *  list. A vertex is marked when its pulled-back new-connectivity lumped mass
+ *  differs from the persistent old DualArea by more than a round-off envelope.
+ *  Marked vertices are connected through the new triangulation. Offline tests
+ *  in log section 69 found that this may merge neighbouring exact flip patches
+ *  but never splits one, and every resulting component retains zero total dm.
+ *
+ *  For each component P,
+ *
+ *      D_P       = sum_i dm_i U_i,
+ *      Q_i^plus  = Q_i^minus + dm_i U_i - w_i D_P,
+ *
+ *  with non-negative full pulled-back nodal-mass weights. Full nodal masses are
+ *  a diagnostic substitute for exact new patch masses; conservation and
+ *  uniform/linear exactness need only sum_i w_i=1. The final weight is formed
+ *  as one minus the preceding sum so conservation does not rely on a second
+ *  floating-point normalization.
+ */
+static void rd_ale_apply_topology_repair(tessellation *T, struct rd_element_set *set)
+{
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+  const double box_area = boxSize_X * boxSize_Y;
+  const double mean_area = box_area / NumGas;
+
+  int *parent = (int *)mymalloc("RDTopologyParent", NumGas * sizeof(*parent));
+  int *root_to_patch = (int *)mymalloc("RDTopologyRootPatch", NumGas * sizeof(*root_to_patch));
+  unsigned char *affected =
+      (unsigned char *)mymalloc("RDTopologyAffected", NumGas * sizeof(*affected));
+
+  int affected_count = 0;
+  double total_dm = 0.0, total_abs_dm = 0.0, max_relative_dm = 0.0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      const double old_area = SphP[i].DualArea;
+      const double pullback_area = set->ale_pullback_area[i];
+      if(!(pullback_area > 0.0) || !isfinite(pullback_area))
+        terminate_program("RD topology repair found a non-positive pulled-back nodal mass");
+
+      const double dm = pullback_area - old_area;
+      const double scale = dmax(mean_area, dmax(fabs(old_area), fabs(pullback_area)));
+      const double tolerance = RD_ALE_TOPOLOGY_SUPPORT_FACTOR * DBL_EPSILON * scale;
+      affected[i] = fabs(dm) > tolerance;
+      parent[i] = affected[i] ? i : -1;
+      root_to_patch[i] = -1;
+      affected_count += affected[i] != 0;
+      total_dm += dm;
+      total_abs_dm += fabs(dm);
+      max_relative_dm = dmax(max_relative_dm, fabs(dm) / old_area);
+    }
+
+  const double total_dm_tolerance =
+      RD_ALE_TOPOLOGY_AUDIT_FACTOR * DBL_EPSILON * dmax(box_area, total_abs_dm);
+  if(fabs(total_dm) > total_dm_tolerance)
+    {
+      printf("RD-TOPO-FAIL time=%.17g total_dm=%.17g tolerance=%.17g\n",
+             All.Time, total_dm, total_dm_tolerance);
+      terminate_program("RD topology repair: pulled-back and old meshes cover different areas");
+    }
+
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      int triangle = set->element[slot];
+      int first = -1;
+      for(int vertex = 0; vertex < DIMS + 1; vertex++)
+        {
+          int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
+          if(!affected[index])
+            continue;
+          if(first < 0)
+            first = index;
+          else
+            rd_ale_topology_union(parent, first, index);
+        }
+    }
+
+  int patch_count = 0;
+  for(int i = 0; i < NumGas; i++)
+    if(affected[i])
+      {
+        int root = rd_ale_topology_find(parent, i);
+        if(root_to_patch[root] < 0)
+          root_to_patch[root] = patch_count++;
+      }
+
+#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+  rd_ale_exact_patch_diagnostic(T, set, affected, parent, root_to_patch,
+                                patch_count);
+#endif
+
+  if(patch_count == 0)
+    {
+      mpi_printf("RD-TOPO-REPAIR time=%.8g affected=0 patches=0 "
+                 "max_dm_rel=%.3e max_patch_zero_rel=0.000e+00 max_dU=0.000e+00 "
+                 "raw=[+0.000000e+00 +0.000000e+00 +0.000000e+00 +0.000000e+00] "
+                 "repaired=[+0.000000e+00 +0.000000e+00 +0.000000e+00 +0.000000e+00]\n",
+                 All.Time, max_relative_dm);
+      myfree(affected);
+      myfree(root_to_patch);
+      myfree(parent);
+      return;
+    }
+
+  double *patch_weight =
+      (double *)mymalloc("RDTopologyPatchWeight", patch_count * sizeof(*patch_weight));
+  double *patch_dm =
+      (double *)mymalloc("RDTopologyPatchDM", patch_count * sizeof(*patch_dm));
+  double *patch_abs_dm =
+      (double *)mymalloc("RDTopologyPatchAbsDM", patch_count * sizeof(*patch_abs_dm));
+  double *weight_used =
+      (double *)mymalloc("RDTopologyWeightUsed", patch_count * sizeof(*weight_used));
+  int *anchor = (int *)mymalloc("RDTopologyAnchor", patch_count * sizeof(*anchor));
+  double(*defect)[4] =
+      (double(*)[4])mymalloc("RDTopologyDefect", patch_count * sizeof(*defect));
+
+  memset(patch_weight, 0, patch_count * sizeof(*patch_weight));
+  memset(patch_dm, 0, patch_count * sizeof(*patch_dm));
+  memset(patch_abs_dm, 0, patch_count * sizeof(*patch_abs_dm));
+  memset(weight_used, 0, patch_count * sizeof(*weight_used));
+  memset(defect, 0, patch_count * sizeof(*defect));
+  for(int patch = 0; patch < patch_count; patch++)
+    anchor[patch] = -1;
+
+  double raw_defect[4] = {0.0, 0.0, 0.0, 0.0};
+  for(int i = 0; i < NumGas; i++)
+    if(affected[i])
+      {
+        int patch = root_to_patch[rd_ale_topology_find(parent, i)];
+        const double dm = set->ale_pullback_area[i] - SphP[i].DualArea;
+        patch_weight[patch] += set->ale_pullback_area[i];
+        patch_dm[patch] += dm;
+        patch_abs_dm[patch] += fabs(dm);
+        anchor[patch] = i;
+        for(int component = 0; component < 4; component++)
+          {
+            const double contribution = dm * set->ale_uold[i][component];
+            defect[patch][component] += contribution;
+            raw_defect[component] += contribution;
+          }
+      }
+
+  double max_patch_zero_relative = 0.0;
+  for(int patch = 0; patch < patch_count; patch++)
+    {
+      if(!(patch_weight[patch] > 0.0) || anchor[patch] < 0)
+        terminate_program("RD topology repair constructed an empty patch");
+
+      const double zero_scale = dmax(mean_area, patch_abs_dm[patch]);
+      const double zero_tolerance =
+          RD_ALE_TOPOLOGY_AUDIT_FACTOR * DBL_EPSILON * zero_scale;
+      max_patch_zero_relative =
+          dmax(max_patch_zero_relative, fabs(patch_dm[patch]) / zero_scale);
+      if(fabs(patch_dm[patch]) > zero_tolerance)
+        {
+          printf("RD-TOPO-FAIL time=%.17g patch=%d dm=%.17g abs_dm=%.17g "
+                 "tolerance=%.17g anchor_id=%llu\n",
+                 All.Time, patch, patch_dm[patch], patch_abs_dm[patch],
+                 zero_tolerance, (unsigned long long)P[anchor[patch]].ID);
+          terminate_program("RD topology repair support component violates the zeroth moment");
+        }
+    }
+
+  double max_state_change = 0.0, state_scale = 1.0;
+  int bad_nodes = 0;
+
+  /* Apply every non-anchor weight first. */
+  for(int i = 0; i < NumGas; i++)
+    if(affected[i])
+      {
+        int patch = root_to_patch[rd_ale_topology_find(parent, i)];
+        if(i == anchor[patch])
+          continue;
+
+        const double weight = set->ale_pullback_area[i] / patch_weight[patch];
+        const double dm = set->ale_pullback_area[i] - SphP[i].DualArea;
+        double unew[4];
+        for(int component = 0; component < 4; component++)
+          {
+            const double uold = set->ale_uold[i][component];
+            const double qnew =
+                SphP[i].DualArea * uold + dm * uold - weight * defect[patch][component];
+            unew[component] = qnew / set->ale_pullback_area[i];
+            max_state_change = dmax(max_state_change, fabs(unew[component] - uold));
+            state_scale = dmax(state_scale, fabs(uold));
+          }
+
+        const double rho = unew[0];
+        const double press =
+            (isfinite(rho) && rho > 0.0)
+                ? GAMMA_MINUS1 *
+                      (unew[3] - 0.5 * (unew[1] * unew[1] + unew[2] * unew[2]) / rho)
+                : NAN;
+        if(!isfinite(rho) || !isfinite(press) || rho <= 0.0 || press <= 0.0)
+          {
+            bad_nodes++;
+            printf("RD-TOPO-BAD time=%.17g patch=%d ID=%llu rho=%.17g "
+                   "press=%.17g dm=%.17g weight=%.17g D=[%.17g %.17g %.17g %.17g]\n",
+                   All.Time, patch, (unsigned long long)P[i].ID, rho, press, dm,
+                   weight, defect[patch][0], defect[patch][1],
+                   defect[patch][2], defect[patch][3]);
+          }
+        for(int component = 0; component < 4; component++)
+          set->ale_uold[i][component] = unew[component];
+        weight_used[patch] += weight;
+      }
+
+  /* The anchor receives the exact remaining correction weight. */
+  for(int patch = 0; patch < patch_count; patch++)
+    {
+      int i = anchor[patch];
+      const double weight = 1.0 - weight_used[patch];
+      const double dm = set->ale_pullback_area[i] - SphP[i].DualArea;
+      double unew[4];
+      for(int component = 0; component < 4; component++)
+        {
+          const double uold = set->ale_uold[i][component];
+          const double qnew =
+              SphP[i].DualArea * uold + dm * uold - weight * defect[patch][component];
+          unew[component] = qnew / set->ale_pullback_area[i];
+          max_state_change = dmax(max_state_change, fabs(unew[component] - uold));
+          state_scale = dmax(state_scale, fabs(uold));
+        }
+
+      const double rho = unew[0];
+      const double press =
+          (isfinite(rho) && rho > 0.0)
+              ? GAMMA_MINUS1 *
+                    (unew[3] - 0.5 * (unew[1] * unew[1] + unew[2] * unew[2]) / rho)
+              : NAN;
+      if(!isfinite(rho) || !isfinite(press) || rho <= 0.0 || press <= 0.0)
+        {
+          bad_nodes++;
+          printf("RD-TOPO-BAD time=%.17g patch=%d ID=%llu rho=%.17g "
+                 "press=%.17g dm=%.17g weight=%.17g D=[%.17g %.17g %.17g %.17g]\n",
+                 All.Time, patch, (unsigned long long)P[i].ID, rho, press, dm,
+                 weight, defect[patch][0], defect[patch][1],
+                 defect[patch][2], defect[patch][3]);
+        }
+      for(int component = 0; component < 4; component++)
+        set->ale_uold[i][component] = unew[component];
+    }
+
+  if(bad_nodes > 0)
+    terminate_program("RD topology repair produced an inadmissible high-order state");
+
+  double repaired_change[4] = {0.0, 0.0, 0.0, 0.0};
+  double conservation_scale = 1.0;
+  for(int i = 0; i < NumGas; i++)
+    for(int component = 0; component < 4; component++)
+      repaired_change[component] +=
+          set->ale_pullback_area[i] * set->ale_uold[i][component];
+
+  for(int component = 0; component < 4; component++)
+    {
+      repaired_change[component] -= set->ale_old_total[component];
+      conservation_scale =
+          dmax(conservation_scale, fabs(set->ale_old_total[component]));
+    }
+
+  const double conservation_tolerance =
+      RD_ALE_TOPOLOGY_AUDIT_FACTOR * DBL_EPSILON * conservation_scale;
+  for(int component = 0; component < 4; component++)
+    if(fabs(repaired_change[component]) > conservation_tolerance)
+      terminate_program("RD topology repair failed its global conservation audit");
+
+  if(set->ale_uniform_initial)
+    {
+      const double state_tolerance =
+          RD_ALE_TOPOLOGY_AUDIT_FACTOR * DBL_EPSILON * state_scale;
+      if(max_state_change > state_tolerance)
+        terminate_program("RD topology repair changed a uniform state");
+    }
+
+  mpi_printf("RD-TOPO-REPAIR time=%.8g affected=%d patches=%d "
+             "max_dm_rel=%.3e max_patch_zero_rel=%.3e max_dU=%.3e "
+             "raw=[%+.6e %+.6e %+.6e %+.6e] "
+             "repaired=[%+.6e %+.6e %+.6e %+.6e]\n",
+             All.Time, affected_count, patch_count, max_relative_dm,
+             max_patch_zero_relative, max_state_change,
+             raw_defect[0], raw_defect[1], raw_defect[2], raw_defect[3],
+             repaired_change[0], repaired_change[1],
+             repaired_change[2], repaired_change[3]);
+
+  myfree(defect);
+  myfree(anchor);
+  myfree(weight_used);
+  myfree(patch_abs_dm);
+  myfree(patch_dm);
+  myfree(patch_weight);
+  myfree(affected);
+  myfree(root_to_patch);
+  myfree(parent);
+}
+#endif
 
 /*! Construct the post-rebuild new-connectivity geometry and switch the
  *  temporary AREPO storage from endpoint Q=m_old U_old to Qbar=mbar U_old. */
@@ -1419,12 +2408,18 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
   set->ale_geometry = (struct rd_ale_triangle_geometry *)mymalloc_movable(
       &set->ale_geometry, "RD_ALEGeometry", set->n * sizeof(*set->ale_geometry));
   set->ale_endpoint_area = (double *)mymalloc("RD_ALEEndpointArea", NumGas * sizeof(*set->ale_endpoint_area));
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+  set->ale_pullback_area = (double *)mymalloc("RD_ALEPullbackArea", NumGas * sizeof(*set->ale_pullback_area));
+#endif
   set->ale_divisor = (double *)mymalloc("RD_ALEDivisor", NumGas * sizeof(*set->ale_divisor));
 #ifdef RD_ALE_CFL_DIAGNOSTIC
   set->ale_cfl_alpha_sum = (double *)mymalloc("RD_ALECFLAlpha", NumGas * sizeof(*set->ale_cfl_alpha_sum));
 #endif
   set->ale_uold = (double(*)[4])mymalloc("RD_ALEUOld", NumGas * sizeof(*set->ale_uold));
   memset(set->ale_endpoint_area, 0, NumGas * sizeof(*set->ale_endpoint_area));
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+  memset(set->ale_pullback_area, 0, NumGas * sizeof(*set->ale_pullback_area));
+#endif
   memset(set->ale_divisor, 0, NumGas * sizeof(*set->ale_divisor));
 #ifdef RD_ALE_CFL_DIAGNOSTIC
   memset(set->ale_cfl_alpha_sum, 0, NumGas * sizeof(*set->ale_cfl_alpha_sum));
@@ -1552,6 +2547,9 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
         {
           int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
           set->ale_endpoint_area[index] += area_new / 3.0;
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+          set->ale_pullback_area[index] += area_old / 3.0;
+#endif
 #ifdef RD_ALE_CAMPOLI_MASS
           set->ale_divisor[index] += area_new / 3.0;
 #else
@@ -1590,6 +2588,10 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
       if(umax[component] - umin[component] > 4096.0 * DBL_EPSILON * scale)
         set->ale_uniform_initial = 0;
     }
+#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+  rd_ale_apply_topology_repair(T, set);
+#endif
+
 
   for(int i = 0; i < NumGas; i++)
     {
@@ -1723,6 +2725,290 @@ static void rd_ale_report_cfl(const struct rd_element_set *set)
 }
 #endif
 #endif /* RD_ALE_EQUALSTEP */
+#ifdef RD_ALE_HIERARCHICAL
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+static void rd_ale_hierarchical_q_from_particle(int i, double q[4])
+{
+  q[0] = P[i].Mass;
+  q[1] = SphP[i].Momentum[0];
+  q[2] = SphP[i].Momentum[1];
+  q[3] = SphP[i].Energy;
+}
+
+static void rd_ale_hierarchical_set_particle_q(int i, double area, const double u[4])
+{
+  P[i].Mass = area * u[0];
+  SphP[i].Momentum[0] = area * u[1];
+  SphP[i].Momentum[1] = area * u[2];
+  SphP[i].Energy = area * u[3];
+  if(SphP[i].DualArea > 0.0)
+    SphP[i].Momentum[2] *= area / SphP[i].DualArea;
+}
+#endif
+
+static int rd_ale_hierarchical_local_index(const point *dp)
+{
+  if(dp->task != ThisTask)
+    terminate_program("RD_ALE_HIERARCHICAL v1 encountered a remote vertex despite its one-rank guard");
+
+  int index = dp->index;
+  if(index >= NumGas)
+    index -= NumGas;
+  if(index < 0 || index >= NumGas)
+    terminate_program("RD_ALE_HIERARCHICAL could not map a periodic image to its primary generator");
+  return index;
+}
+
+/*! Prepare one concentrated moving-mesh hierarchy sweep on the current
+ * connectivity.  Every due triangle is pulled back over its own finest-bin
+ * interval.  The predictor sweep advances the scalar geometric ledger and
+ * closes synchronized vertices to the exact current median-dual mass; the
+ * corrector sweep only reconstructs the identical midpoint geometry. */
+static void rd_ale_hierarchical_prepare(tessellation *T, struct rd_element_set *set, int rd_stage)
+{
+  if(NTask != 1)
+    terminate_program("RD_ALE_HIERARCHICAL v1 is deliberately restricted to one MPI rank");
+  if(All.ComovingIntegrationOn)
+    terminate_program("RD_ALE_HIERARCHICAL v1 excludes comoving integration");
+
+  set->ale_hier_divisor_element_area =
+      (double *)mymalloc("RD_ALEHierElementDivisorArea", set->n * sizeof(*set->ale_hier_divisor_element_area));
+  set->ale_hier_endpoint_area =
+      (double *)mymalloc("RD_ALEHierEndpointArea", NumGas * sizeof(*set->ale_hier_endpoint_area));
+  memset(set->ale_hier_endpoint_area, 0, NumGas * sizeof(*set->ale_hier_endpoint_area));
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+  set->ale_hier_divisor =
+      (double *)mymalloc("RD_ALEHierArpaiaDivisor", NumGas * sizeof(*set->ale_hier_divisor));
+  memset(set->ale_hier_divisor, 0, NumGas * sizeof(*set->ale_hier_divisor));
+#endif
+
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+  double min_old = DBL_MAX, min_mid = DBL_MAX, min_new = DBL_MAX;
+  double geometric_change[4] = {0.0, 0.0, 0.0, 0.0};
+  double closing_change[4] = {0.0, 0.0, 0.0, 0.0};
+  double max_close_relative = 0.0;
+  int due_elements = 0, closed_vertices = 0;
+
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      int triangle = set->element[slot];
+      double current_area = set->normals[slot].area;
+
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_hierarchical_local_index(&DP[DT[triangle].p[vertex]]);
+          set->ale_hier_endpoint_area[index] += current_area / 3.0;
+        }
+
+      if(!set->active[slot])
+        continue;
+
+      int triangle_bin = rd_point_timebin(&DP[DT[triangle].p[0]]);
+      for(int vertex = 1; vertex < 3; vertex++)
+        triangle_bin = imin(triangle_bin, rd_point_timebin(&DP[DT[triangle].p[vertex]]));
+
+      double dt = (((integertime)1) << triangle_bin) * All.Timebase_interval;
+      double xnew[3][2], velocity[3][2];
+
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          const point *dp = &DP[DT[triangle].p[vertex]];
+          int index = rd_ale_hierarchical_local_index(dp);
+          xnew[vertex][0] = dp->x;
+          xnew[vertex][1] = dp->y;
+          velocity[vertex][0] = SphP[index].VelVertex[0];
+          velocity[vertex][1] = SphP[index].VelVertex[1];
+        }
+
+      struct rd_ale_triangle_geometry geometry;
+      rd_ale_triangle_geometry_build(xnew, velocity, dt, &geometry);
+
+      double area_old = geometry.normals[RD_ALE_OLD].area;
+      double area_mid = geometry.normals[RD_ALE_MID].area;
+      double area_new = geometry.normals[RD_ALE_NEW].area;
+      min_old = dmin(min_old, area_old);
+      min_mid = dmin(min_mid, area_mid);
+      min_new = dmin(min_new, area_new);
+
+      if(!(area_old > 0.0) || !(area_mid > 0.0) || !(area_new > 0.0))
+        {
+          printf("RD-ALE-HIER invalid element: triangle=%d bin=%d Aold=%.17g Amid=%.17g Anew=%.17g dt=%.17g\n",
+                 triangle, triangle_bin, area_old, area_mid, area_new, dt);
+          terminate_program("RD_ALE_HIERARCHICAL found an inverted pulled-back or midpoint triangle");
+        }
+      for(int vertex = 0; vertex < 3; vertex++)
+        if(!(geometry.normals[RD_ALE_MID].mag[vertex] > 0.0))
+          terminate_program("RD_ALE_HIERARCHICAL found a zero midpoint edge");
+
+      set->normals[slot] = geometry.normals[RD_ALE_MID];
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+      /* Published Arpaia pair: M_T=A_mid and
+       * D_T=A_mid+(A_new-A_old)/2. D_T is a temporary RK coefficient,
+       * not the physical endpoint dual area. */
+      set->ale_hier_divisor_element_area[slot] = geometry.arpaia_divisor;
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_hierarchical_local_index(&DP[DT[triangle].p[vertex]]);
+          set->ale_hier_divisor[index] += geometry.arpaia_divisor / 3.0;
+        }
+#else
+      set->normals[slot].area = 0.5 * (area_old + area_new);
+      set->ale_hier_divisor_element_area[slot] = area_new;
+#endif
+      due_elements++;
+
+      if(rd_stage == RD_RK_STAGE_PREDICTOR)
+        {
+          double dg = (area_new - area_old) / 3.0;
+
+          for(int vertex = 0; vertex < 3; vertex++)
+            {
+              int index = rd_ale_hierarchical_local_index(&DP[DT[triangle].p[vertex]]);
+              double rho = SphP[index].Density;
+              double velx = P[index].Vel[0], vely = P[index].Vel[1];
+              double u[4] = {rho, rho * velx, rho * vely,
+                             SphP[index].Pressure / GAMMA_MINUS1 +
+                                 0.5 * rho * (velx * velx + vely * vely)};
+
+              P[index].Mass += dg * u[0];
+              SphP[index].Momentum[0] += dg * u[1];
+              SphP[index].Momentum[1] += dg * u[2];
+              SphP[index].Energy += dg * u[3];
+              SphP[index].RD_GeoLedger += dg;
+              for(int component = 0; component < 4; component++)
+                geometric_change[component] += dg * u[component];
+            }
+        }
+    }
+
+  if(rd_stage == RD_RK_STAGE_PREDICTOR)
+    {
+      double endpoint_coverage = 0.0;
+      for(int index = 0; index < NumGas; index++)
+        {
+          endpoint_coverage += set->ale_hier_endpoint_area[index];
+          if(!(set->ale_hier_endpoint_area[index] > 0.0) || !isfinite(set->ale_hier_endpoint_area[index]))
+            terminate_program("RD_ALE_HIERARCHICAL found an incomplete current vertex star");
+
+          if(TimeBinSynchronized[P[index].TimeBinHydro])
+            {
+              double rho = SphP[index].Density;
+              double velx = P[index].Vel[0], vely = P[index].Vel[1];
+              double u[4] = {rho, rho * velx, rho * vely,
+                             SphP[index].Pressure / GAMMA_MINUS1 +
+                                 0.5 * rho * (velx * velx + vely * vely)};
+              double correction = set->ale_hier_endpoint_area[index] - SphP[index].RD_GeoLedger;
+
+              P[index].Mass += correction * u[0];
+              SphP[index].Momentum[0] += correction * u[1];
+              SphP[index].Momentum[1] += correction * u[2];
+              SphP[index].Energy += correction * u[3];
+              for(int component = 0; component < 4; component++)
+                closing_change[component] += correction * u[component];
+
+              max_close_relative =
+                  dmax(max_close_relative, fabs(correction) / set->ale_hier_endpoint_area[index]);
+              SphP[index].RD_GeoLedger = set->ale_hier_endpoint_area[index];
+              SphP[index].DualArea = set->ale_hier_endpoint_area[index];
+              closed_vertices++;
+            }
+        }
+
+      double box_area = boxSize_X * boxSize_Y;
+      if(fabs(endpoint_coverage - box_area) > 1.0e-10 * box_area)
+        terminate_program("RD_ALE_HIERARCHICAL current full mesh does not cover the periodic box");
+
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+      double divisor_sum = 0.0, min_divisor = DBL_MAX, max_rebase_relative = 0.0;
+      int rebased_vertices = 0;
+      for(int index = 0; index < NumGas; index++)
+        {
+          divisor_sum += set->ale_hier_divisor[index];
+          if(SphP[index].RD_StarTimeBin == P[index].TimeBinHydro &&
+             TimeBinSynchronized[P[index].TimeBinHydro])
+            {
+              double divisor = set->ale_hier_divisor[index];
+              if(!(divisor > 0.0) || !isfinite(divisor))
+                terminate_program("RD_ALE_HIERARCHICAL_ARPAIA found a non-positive live nodal divisor");
+              double q[4], u[4];
+              rd_ale_hierarchical_q_from_particle(index, q);
+              for(int component = 0; component < 4; component++)
+                u[component] = q[component] / set->ale_hier_endpoint_area[index];
+              rd_ale_hierarchical_set_particle_q(index, divisor, u);
+              SphP[index].DualArea = divisor;
+              min_divisor = dmin(min_divisor, divisor);
+              max_rebase_relative = dmax(max_rebase_relative,
+                  fabs(divisor - set->ale_hier_endpoint_area[index]) /
+                  set->ale_hier_endpoint_area[index]);
+              rebased_vertices++;
+            }
+        }
+      int all_due = due_elements == set->n;
+      mpi_printf("RD-ALE-HIER-ARPAIA time=%.8g stage=open live=%d all_due=%d "
+                 "active_divisor_sum=%.17g box_defect_if_full=%+.6e "
+                 "min_live=%.6e max_rebase_rel=%.6e\n",
+                 All.Time, rebased_vertices, all_due, divisor_sum,
+                 all_due ? divisor_sum - box_area : NAN, min_divisor,
+                 max_rebase_relative);
+#endif
+
+      mpi_printf("RD-ALE-HIER time=%.8g stage=ledger due=%d closed=%d minA=[%.3e,%.3e,%.3e] "
+                 "max_close_rel=%.3e geom=[%+.6e,%+.6e,%+.6e,%+.6e] "
+                 "basis=[%+.6e,%+.6e,%+.6e,%+.6e]\n",
+                 All.Time, due_elements, closed_vertices, min_old, min_mid, min_new, max_close_relative,
+                 geometric_change[0], geometric_change[1], geometric_change[2], geometric_change[3],
+                 closing_change[0], closing_change[1], closing_change[2], closing_change[3]);
+    }
+
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+  if(rd_stage == RD_RK_STAGE_CORRECTOR)
+    for(int index = 0; index < NumGas; index++)
+      if(SphP[index].RD_StarTimeBin == P[index].TimeBinHydro &&
+         TimeBinSynchronized[P[index].TimeBinHydro])
+        {
+          double divisor = set->ale_hier_divisor[index];
+          if(!(divisor > 0.0) || !isfinite(divisor))
+            terminate_program("RD_ALE_HIERARCHICAL_ARPAIA lost its live nodal divisor in the corrector");
+          double scale = dmax(1.0, dmax(fabs(divisor), fabs(SphP[index].DualArea)));
+          if(fabs(divisor - SphP[index].DualArea) > 4096.0 * DBL_EPSILON * scale)
+            terminate_program("RD_ALE_HIERARCHICAL_ARPAIA predictor/corrector divisor mismatch");
+        }
+#endif
+}
+
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+static void rd_ale_hierarchical_arpaia_finish(const struct rd_element_set *set)
+{
+  double rebase_change[4] = {0.0, 0.0, 0.0, 0.0};
+  double max_rebase_relative = 0.0;
+  int rebased_vertices = 0;
+  for(int index = 0; index < NumGas; index++)
+    if(SphP[index].RD_StarTimeBin == P[index].TimeBinHydro &&
+       TimeBinSynchronized[P[index].TimeBinHydro])
+      {
+        double qbar[4], unew[4], qnew[4];
+        rd_ale_hierarchical_q_from_particle(index, qbar);
+        for(int component = 0; component < 4; component++)
+          {
+            unew[component] = qbar[component] / set->ale_hier_divisor[index];
+            qnew[component] = set->ale_hier_endpoint_area[index] * unew[component];
+            rebase_change[component] += qnew[component] - qbar[component];
+          }
+        rd_ale_hierarchical_set_particle_q(index, set->ale_hier_endpoint_area[index], unew);
+        SphP[index].DualArea = set->ale_hier_endpoint_area[index];
+        max_rebase_relative = dmax(max_rebase_relative,
+            fabs(set->ale_hier_endpoint_area[index] - set->ale_hier_divisor[index]) /
+            set->ale_hier_endpoint_area[index]);
+        rebased_vertices++;
+      }
+  mpi_printf("RD-ALE-HIER-ARPAIA time=%.8g stage=commit live=%d max_rebase_rel=%.6e "
+             "dQ=[%+.6e,%+.6e,%+.6e,%+.6e]\n",
+             All.Time, rebased_vertices, max_rebase_relative, rebase_change[0],
+             rebase_change[1], rebase_change[2], rebase_change[3]);
+}
+#endif
+#endif
 
 /*! \brief Accumulate the median dual area over the complete physical set.
  *
@@ -1867,6 +3153,15 @@ void rd_apply_cfl_timestep_constraint(tessellation *T)
       if(!(cs2 > 0.0) || !isfinite(cs2))
         terminate_program("RD_ALE_CFL_TIMESTEP encountered an invalid Roe sound speed");
       double cs = sqrt(cs2);
+#ifdef RD_ALE_SHEAR_EIGENVALUE_FLOOR
+      const double shear_floor_epsilon = RD_ALE_SHEAR_EIGENVALUE_FLOOR;
+      if(!(shear_floor_epsilon > 0.0) || !(shear_floor_epsilon < 1.0) || !isfinite(shear_floor_epsilon))
+        terminate_program("RD_ALE_SHEAR_EIGENVALUE_FLOOR must satisfy 0 < epsilon < 1");
+      const double relative_x = velx_roe - sigma[0];
+      const double relative_y = vely_roe - sigma[1];
+      const int shear_floor_active =
+          sqrt(relative_x * relative_x + relative_y * relative_y) < shear_floor_epsilon * cs;
+#endif
 
       double alpha_triangle = 0.0;
       for(int vertex = 0; vertex < 3; vertex++)
@@ -1874,7 +3169,16 @@ void rd_apply_cfl_timestep_constraint(tessellation *T)
           double relative_normal =
               (velx_roe - sigma[0]) * set.normals[slot].normal[vertex][0] +
               (vely_roe - sigma[1]) * set.normals[slot].normal[vertex][1];
-          double alpha_vertex = 0.5 * set.normals[slot].mag[vertex] * (cs + fabs(relative_normal));
+          double alpha_speed = cs + fabs(relative_normal);
+#ifdef RD_ALE_SHEAR_EIGENVALUE_FLOOR
+          if(shear_floor_active)
+            {
+              const double shear_modulus = dmax(fabs(relative_normal), shear_floor_epsilon * cs);
+              const double shear_positive = 0.5 * (relative_normal + shear_modulus);
+              alpha_speed = dmax(alpha_speed, shear_positive);
+            }
+#endif
+          double alpha_vertex = 0.5 * set.normals[slot].mag[vertex] * alpha_speed;
           alpha_triangle = dmax(alpha_triangle, alpha_vertex);
         }
 
@@ -1915,8 +3219,200 @@ void reset_dualarea(tessellation *T)
 
   rd_build_element_set(T, &set, 0);
   rd_accumulate_dual_area(T, &set);
+#ifdef RD_ALE_HIERARCHICAL
+  for(int i = 0; i < NumGas; i++)
+    SphP[i].RD_GeoLedger = SphP[i].DualArea;
+#endif
   rd_free_element_set(&set);
 }
+
+#ifdef RD_ALE_APOSTERIORI_FALLBACK
+/* Diagnostic, deliberately global-retry implementation of an a-posteriori
+ * LDA-to-N fallback.  B_SCHEME is used only as an internal engine because it
+ * already forms coherent LDA and N branches for both RK stages.  The ordinary
+ * B indicator is overridden below by one binary element mask: zero is exactly
+ * the LDA branch and one is exactly the N/lumped branch.
+ *
+ * The trial is inspected before the predictor is consumed and again before
+ * the temporary Arpaia ledger is committed to endpoint storage.  A rejected
+ * trial restores Q and W from ale_uold while retaining the same mesh velocity,
+ * geometry and connectivity.  This is a diagnosis of whether a very local N
+ * substitution can save LDA; it is not the eventual pending-ledger design. */
+#define RD_ALE_APOSTERIORI_MAX_ATTEMPTS 12
+
+struct rd_aposteriori_trial_stats
+{
+  int bad_nodes;
+  int hard_bad_nodes;
+  double min_rho;
+  double min_press;
+  double min_rho_ratio;
+  MyIDType worst_id;
+};
+
+static void rd_aposteriori_restore_trial(const struct rd_element_set *set)
+{
+  for(int i = 0; i < NumGas; i++)
+    {
+      const double *u = set->ale_uold[i];
+      double rho      = u[0];
+      double velx     = u[1] / rho;
+      double vely     = u[2] / rho;
+      double press    = GAMMA_MINUS1 * (u[3] - 0.5 * (u[1] * u[1] + u[2] * u[2]) / rho);
+
+      if(!isfinite(rho) || !isfinite(press) || rho <= 0.0 || press <= 0.0)
+        terminate_program("a-posteriori fallback could not restore the admissible stage-0 state");
+
+      rd_ale_set_particle_q(i, set->ale_divisor[i], u);
+      SphP[i].DualArea = set->ale_divisor[i];
+      SphP[i].Density  = rho;
+      P[i].Vel[0]      = velx;
+      P[i].Vel[1]      = vely;
+      P[i].Vel[2]      = 0.0;
+      SphP[i].Pressure = press;
+      SphP[i].Utherm   = press / (GAMMA_MINUS1 * rho);
+#ifdef TREE_BASED_TIMESTEPS
+      SphP[i].Csnd = sqrt(GAMMA * press / rho);
+#endif
+      for(int component = 0; component < 4; component++)
+        SphP[i].RD_dU[component] = 0.0;
+    }
+}
+
+static struct rd_aposteriori_trial_stats rd_aposteriori_inspect_trial(const struct rd_element_set *set,
+                                                                      unsigned char *bad_vertex,
+                                                                      const unsigned char *relaxed_vertex)
+{
+  struct rd_aposteriori_trial_stats stats;
+  stats.bad_nodes     = 0;
+  stats.hard_bad_nodes = 0;
+  stats.min_rho       = DBL_MAX;
+  stats.min_press     = DBL_MAX;
+  stats.min_rho_ratio = DBL_MAX;
+  stats.worst_id      = 0;
+
+  const double ratio_floor = (double)(RD_ALE_APOSTERIORI_FALLBACK);
+  if(!(ratio_floor > 0.0) || !(ratio_floor < 1.0))
+    terminate_program("RD_ALE_APOSTERIORI_FALLBACK must be a density-ratio floor strictly between zero and one");
+
+  memset(bad_vertex, 0, (size_t)NumGas * sizeof(*bad_vertex));
+
+  for(int i = 0; i < NumGas; i++)
+    {
+      double q[4];
+      rd_ale_q_from_particle(i, q);
+
+      double rho       = q[0] / set->ale_divisor[i];
+      double press     = NAN;
+      double rho_ratio = rho / set->ale_uold[i][0];
+      if(isfinite(rho) && rho > 0.0)
+        press = GAMMA_MINUS1 * (q[3] / set->ale_divisor[i] -
+                                0.5 * (q[1] * q[1] + q[2] * q[2]) /
+                                    (set->ale_divisor[i] * q[0]));
+
+      if(isfinite(rho))
+        stats.min_rho = dmin(stats.min_rho, rho);
+      else
+        stats.min_rho = -DBL_MAX;
+      if(isfinite(press))
+        stats.min_press = dmin(stats.min_press, press);
+      else
+        stats.min_press = -DBL_MAX;
+
+      double ranked_ratio = isfinite(rho_ratio) ? rho_ratio : -DBL_MAX;
+      if(ranked_ratio < stats.min_rho_ratio)
+        {
+          stats.min_rho_ratio = ranked_ratio;
+          stats.worst_id      = P[i].ID;
+        }
+
+      int hard_bad = !isfinite(rho) || !isfinite(press) || !isfinite(rho_ratio) || rho <= 0.0 || press <= 0.0;
+      int soft_bad = !hard_bad && rho_ratio < ratio_floor && !relaxed_vertex[i];
+
+      if(hard_bad || soft_bad)
+        {
+          bad_vertex[i] = 1;
+          stats.bad_nodes++;
+          if(hard_bad)
+            stats.hard_bad_nodes++;
+        }
+    }
+
+  return stats;
+}
+
+static int rd_aposteriori_expand_star(const tessellation *T, const struct rd_element_set *set,
+                                      const unsigned char *bad_vertex, unsigned char *fallback_element,
+                                      int *masked_total)
+{
+  int added = 0;
+
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      if(!set->active[slot] || fallback_element[slot])
+        continue;
+
+      int triangle = set->element[slot];
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_local_point_index(&T->DP[T->DT[triangle].p[vertex]]);
+          if(bad_vertex[index])
+            {
+              fallback_element[slot] = 1;
+              added++;
+              break;
+            }
+        }
+    }
+
+  *masked_total += added;
+  return added;
+}
+static int rd_aposteriori_expand_halo(const tessellation *T, const struct rd_element_set *set,
+                                      unsigned char *fallback_element, int *masked_total)
+{
+  unsigned char *halo_vertex =
+      (unsigned char *)mymalloc("RD_AposterioriHaloVertex", (size_t)NumGas * sizeof(*halo_vertex));
+  memset(halo_vertex, 0, (size_t)NumGas * sizeof(*halo_vertex));
+
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      if(!set->active[slot] || !fallback_element[slot])
+        continue;
+
+      int triangle = set->element[slot];
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_local_point_index(&T->DP[T->DT[triangle].p[vertex]]);
+          halo_vertex[index] = 1;
+        }
+    }
+
+  int added = 0;
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      if(!set->active[slot] || fallback_element[slot])
+        continue;
+
+      int triangle = set->element[slot];
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_ale_local_point_index(&T->DP[T->DT[triangle].p[vertex]]);
+          if(halo_vertex[index])
+            {
+              fallback_element[slot] = 1;
+              added++;
+              break;
+            }
+        }
+    }
+
+  myfree(halo_vertex);
+  *masked_total += added;
+  return added;
+}
+
+#endif
 
 #ifdef RD_RK2_INTERNAL_LOOP
 /*! \brief Snapshot the intensive nodal state U^n before the predictor sweep. */
@@ -2159,8 +3655,14 @@ void compute_residuals(tessellation *T)
    * stays a property of the tessellation. */
   struct rd_element_set set;
   rd_build_element_set(T, &set, 1);
+#if defined(RD_ALE_HIERARCHICAL) && defined(RD_ALE_HIERARCHICAL_ARPAIA)
+  if(rd_stage == RD_RK_STAGE_PREDICTOR)
+    rd_prepare_vertex_star_context(T);
+#endif
 #ifdef RD_ALE_EQUALSTEP
   rd_ale_prepare_step(T, &set);
+#elif defined(RD_ALE_HIERARCHICAL)
+  rd_ale_hierarchical_prepare(T, &set, rd_stage);
 #elif !defined(RD_HIERARCHICAL_TIMESTEPS)
   rd_accumulate_dual_area(T, &set);
 #else
@@ -2194,7 +3696,9 @@ void compute_residuals(tessellation *T)
 #ifdef RD_HIERARCHICAL_TIMESTEPS
   if(rd_stage == RD_RK_STAGE_PREDICTOR)
     {
+#if !defined(RD_ALE_HIERARCHICAL_ARPAIA)
       rd_prepare_vertex_star_context(T);
+#endif
       rd_open_vertex_predictors();
     }
 
@@ -2218,6 +3722,18 @@ void compute_residuals(tessellation *T)
       (double(*)[4])mymalloc("RD_BPhiStage0", Ndt_thistask * sizeof(*rd_b_phi_stage0));
 #endif
 
+#ifdef RD_ALE_APOSTERIORI_FALLBACK
+  unsigned char *fallback_element =
+      (unsigned char *)mymalloc("RD_AposterioriElement", (size_t)Ndt_thistask * sizeof(*fallback_element));
+  unsigned char *bad_vertex =
+      (unsigned char *)mymalloc("RD_AposterioriVertex", (size_t)NumGas * sizeof(*bad_vertex));
+  unsigned char *relaxed_vertex =
+      (unsigned char *)mymalloc("RD_AposterioriRelaxedVertex", (size_t)NumGas * sizeof(*relaxed_vertex));
+  memset(fallback_element, 0, (size_t)Ndt_thistask * sizeof(*fallback_element));
+  memset(bad_vertex, 0, (size_t)NumGas * sizeof(*bad_vertex));
+  memset(relaxed_vertex, 0, (size_t)NumGas * sizeof(*relaxed_vertex));
+#endif
+
   Max_N_FluxRD_export = 0;
   for(i = 0; i < Ndt_thistask; i++)
     for(j = 0; j < DIMS + 1; j++)
@@ -2236,6 +3752,22 @@ void compute_residuals(tessellation *T)
 #else
   const int rd_number_of_passes = 2;
 #endif
+#ifdef RD_ALE_APOSTERIORI_FALLBACK
+  int fallback_attempt = 0;
+  int fallback_masked_total = 0;
+  int fallback_retry = 0;
+  const char *fallback_rejected_stage = NULL;
+  struct rd_aposteriori_trial_stats fallback_rejected_stats;
+
+  while(1)
+    {
+      if(fallback_attempt > 0)
+        {
+          rd_reset_solver_statistics();
+          rd_aposteriori_restore_trial(&set);
+        }
+      fallback_retry = 0;
+#endif
   for(rd_stage = 0; rd_stage < rd_number_of_passes; rd_stage++)
     {
       if(rd_stage == 0)
@@ -2251,6 +3783,15 @@ void compute_residuals(tessellation *T)
 #ifdef RD_DIAG_PREDICTOR_ONLY /* diagnostic only: stop after the predictor stage */
           break;
 #endif /* RD_DIAG_PREDICTOR_ONLY */
+#ifdef RD_ALE_APOSTERIORI_FALLBACK
+          fallback_rejected_stats = rd_aposteriori_inspect_trial(&set, bad_vertex, relaxed_vertex);
+          if(fallback_rejected_stats.bad_nodes > 0)
+            {
+              fallback_retry          = 1;
+              fallback_rejected_stage = "predictor";
+              break;
+            }
+#endif
 #ifndef RD_DIAG_SKIP_PREPARE /* diagnostic only: run stage 1 on the stage-0 inputs */
           rd_rk2_prepare_corrector();
           exchange_primitive_variables(); /* ghosts receive W* and RD_dU */
@@ -2889,6 +4430,10 @@ void compute_residuals(tessellation *T)
       rd_add_entropy_dissipation(velx_avg, vely_avg, h_avg, Cs_avg, velx_avg - Velvertex_avg[0],
                                  vely_avg - Velvertex_avg[1], Mag, kplus, kminus, Kmatrix);
 #endif
+#ifdef RD_ALE_SHEAR_EIGENVALUE_FLOOR
+      rd_apply_shear_eigenvalue_floor(velx_avg, vely_avg, Cs_avg, velx_avg - Velvertex_avg[0],
+                                      vely_avg - Velvertex_avg[1], N_X, N_Y, Mag, kplus, kminus, Kmatrix);
+#endif
 
       double Sminus[4][4];
 
@@ -3001,6 +4546,10 @@ void compute_residuals(tessellation *T)
          * relative velocity is the shifted velocity itself. */
         rd_add_entropy_dissipation(velx_shift, vely_shift, h_shift, Cs_avg, velx_shift, vely_shift, Mag,
                                    kplus, kminus, Kmatrix);
+#endif
+#ifdef RD_ALE_SHEAR_EIGENVALUE_FLOOR
+        rd_apply_shear_eigenvalue_floor(velx_shift, vely_shift, Cs_avg, velx_shift, vely_shift,
+                                        N_X, N_Y, Mag, kplus, kminus, Kmatrix);
 #endif
 
         for(k = 0; k < 4; k++)
@@ -3459,6 +5008,13 @@ void compute_residuals(tessellation *T)
         Theta_E[k] = theta_scalar;
 #endif
 
+#ifdef RD_ALE_APOSTERIORI_FALLBACK
+      /* The classical B sensor is intentionally bypassed: this experiment is
+       * pure LDA except on stars rejected by the complete candidate update. */
+      for(k = 0; k < 4; k++)
+        Theta_E[k] = fallback_element[i] ? 1.0 : 0.0;
+#endif
+
       for(k = 0; k < 4; k++)
         {
 #ifdef RD_DIAG_THETA
@@ -3728,6 +5284,11 @@ void compute_residuals(tessellation *T)
             Theta_total[k] = theta_total_scalar;
 #endif
 
+#ifdef RD_ALE_APOSTERIORI_FALLBACK
+          for(k = 0; k < 4; k++)
+            Theta_total[k] = fallback_element[i] ? 1.0 : 0.0;
+#endif
+
           for(k = 0; k < 4; k++)
             {
               double theta = Theta_total[k];
@@ -3891,6 +5452,30 @@ void compute_residuals(tessellation *T)
         }
 #endif
 
+#if defined(RD_ALE_HIERARCHICAL) && defined(N_SCHEME)
+      if(rd_stage == RD_RK_STAGE_CORRECTOR)
+        {
+          /* The concentrated two-half-call hierarchy has no explicit
+           * total-residual temporal sweep. Let D_T/3 contribute to the common
+           * two-stage nodal divisor and M_T/3 be the lumped temporal mass.
+           * The equal-step algebra leaves
+           *
+           *     Delta Q_i^mass = (D_T - M_T) dU_i / 3.
+           *
+           * Campoli uses (D_T,M_T)=(A_new,(A_old+A_new)/2); Arpaia uses
+           * (A_mid+(A_new-A_old)/2,A_mid). */
+          double area_gap =
+              (set.ale_hier_divisor_element_area[i] - tri_normals_list[i].area) / 3.0;
+
+          for(k = 0; k < 4; k++)
+            for(j = 0; j < 3; j++)
+              {
+                double q_correction = area_gap * dU_vertex[j][k];
+                Flux_RD[k][j] -= q_correction / triangle_dt;
+              }
+        }
+#endif
+
 #ifdef RD_ELEMENT_COMOVING_FRAME
       for(j = 0; j < 3; j++)
         {
@@ -3991,6 +5576,11 @@ void compute_residuals(tessellation *T)
 
   apply_FluxRD_list();
 
+#ifdef RD_ALE_HIERARCHICAL_ARPAIA
+  if(rd_stage == RD_RK_STAGE_CORRECTOR)
+    rd_ale_hierarchical_arpaia_finish(&set);
+#endif
+
 #ifdef RD_ALE_CFL_DIAGNOSTIC
   if(rd_stage == 0)
     rd_ale_report_cfl(&set);
@@ -4053,6 +5643,61 @@ void compute_residuals(tessellation *T)
     } /* stage loop */
 
   FluxRD_list = NULL; /* freed inside the stage loop */
+#ifdef RD_ALE_APOSTERIORI_FALLBACK
+      if(!fallback_retry)
+        {
+          fallback_rejected_stats = rd_aposteriori_inspect_trial(&set, bad_vertex, relaxed_vertex);
+          if(fallback_rejected_stats.bad_nodes > 0)
+            {
+              fallback_retry          = 1;
+              fallback_rejected_stage = "endpoint";
+            }
+        }
+
+      if(!fallback_retry)
+        {
+          if(fallback_attempt > 0)
+            mpi_printf("RD-APOSTERIORI-ACCEPT time=%.8g retries=%d masked_elements=%d/%d (%.6g%%) "
+                       "rho_ratio_floor=%.6g\n",
+                       All.Time, fallback_attempt, fallback_masked_total, Ndt_thistask,
+                       (Ndt_thistask > 0) ? 100.0 * (double)fallback_masked_total / (double)Ndt_thistask : 0.0,
+                       (double)(RD_ALE_APOSTERIORI_FALLBACK));
+          break;
+        }
+
+      int fallback_added = rd_aposteriori_expand_star(T, &set, bad_vertex, fallback_element,
+                                                      &fallback_masked_total);
+      for(int fallback_vertex = 0; fallback_vertex < NumGas; fallback_vertex++)
+        if(bad_vertex[fallback_vertex])
+          relaxed_vertex[fallback_vertex] = 1;
+
+      mpi_printf("RD-APOSTERIORI-REJECT time=%.8g attempt=%d stage=%s bad_nodes=%d hard_bad_nodes=%d worst_id=%llu "
+                 "min_rho=%.6e min_press=%.6e min_rho_ratio=%.6e added_elements=%d masked=%d/%d\n",
+                 All.Time, fallback_attempt, fallback_rejected_stage, fallback_rejected_stats.bad_nodes,
+                 fallback_rejected_stats.hard_bad_nodes,
+                 (unsigned long long)fallback_rejected_stats.worst_id, fallback_rejected_stats.min_rho,
+                 fallback_rejected_stats.min_press, fallback_rejected_stats.min_rho_ratio, fallback_added,
+                 fallback_masked_total, Ndt_thistask);
+
+      if(fallback_added == 0 && fallback_rejected_stats.hard_bad_nodes > 0)
+        {
+          fallback_added = rd_aposteriori_expand_halo(T, &set, fallback_element, &fallback_masked_total);
+          mpi_printf("RD-APOSTERIORI-HALO time=%.8g attempt=%d added_elements=%d masked=%d/%d\n", All.Time,
+                     fallback_attempt, fallback_added, fallback_masked_total, Ndt_thistask);
+        }
+
+      if(fallback_added == 0)
+        terminate_program("a-posteriori fallback could not enlarge the local N patch to recover hard positivity");
+      if(fallback_attempt + 1 >= RD_ALE_APOSTERIORI_MAX_ATTEMPTS)
+        terminate_program("a-posteriori fallback exceeded its diagnostic retry limit");
+
+      fallback_attempt++;
+    }
+
+  myfree(relaxed_vertex);
+  myfree(bad_vertex);
+  myfree(fallback_element);
+#endif
 #endif /* RD_RK2_INTERNAL_LOOP */
 
 #ifdef RD_ALE_EQUALSTEP
