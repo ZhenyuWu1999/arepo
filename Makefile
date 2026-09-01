@@ -90,28 +90,29 @@ endif
 # end of Ubuntu
 
 
-# insert the library paths for your system here, similar to SYSTYPE "Darwin" above
-ifeq ($(SYSTYPE),"MacBookPro")
+# Native Apple Silicon macOS using Homebrew in /opt/homebrew.
+ifeq ($(SYSTYPE),"LocalMac")
 # compiler and its optimization options
 CC        =  mpicc   # sets the C-compiler
 OPTIMIZE  =  -std=c11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas -Wno-unused-function
 
 # overwrite default:
-MPICH_LIB = -lmpi
-GSL_INCL  = -I/usr/local/include
-LAPACK_INCL = -I/usr/local/Cellar/lapack/3.11/include
-GSL_LIB   = -L/usr/local/lib -lgsl -lgslcblas 
-LAPACK_LIB = -L/usr/local/Cellar/lapack/3.11/lib -llapacke -llapack
-HWLOC_LIB = -L/usr/local/lib -lhwloc
+MPICH_LIB  = -lmpi
+GMP_LIB    = -L/opt/homebrew/lib -lgmp
+GSL_INCL   = -I/opt/homebrew/include
+GSL_LIB    = -L/opt/homebrew/lib -lgsl -lgslcblas
+LAPACK_INCL= -I/opt/homebrew/opt/openblas/include
+LAPACK_LIB = -L/opt/homebrew/opt/openblas/lib -lopenblas
+HWLOC_LIB  = -L/opt/homebrew/lib -lhwloc
 
 # libraries that are included on demand, depending on Config.sh options
-FFTW_INCL = -I/usr/local/include
-FFTW_LIBS = -L/usr/local/lib
-HDF5_INCL = -I/usr/local/include -DH5_USE_16_API
-HDF5_LIB  = -L/usr/local/lib -lhdf5 -lz
-HWLOC_INCL= -I/usr/local/include
+FFTW_INCL  = -I/opt/homebrew/include
+FFTW_LIBS  = -L/opt/homebrew/lib
+HDF5_INCL  = -I/opt/homebrew/include -DH5_USE_16_API
+HDF5_LIB   = -L/opt/homebrew/lib -lhdf5 -lz
+HWLOC_INCL = -I/opt/homebrew/include
 endif
-# end of MacBookPro
+# end of LocalMac
 
 
 ifeq ($(SYSTYPE),"Cuillin")
