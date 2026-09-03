@@ -19,6 +19,7 @@ replacing the moving-mesh scientific history in volume 2.
 | --- | --- |
 | 1 | COSMA compiler, MPI, HDF5 and MKL environment |
 | 2 | Static N+RK2 Yee build and one/two-rank smoke gate |
+| 3 | Chapter-3 fixed-buffer RT reproduction prepared; dine2 outage blocks execution |
 
 ---
 
@@ -108,3 +109,62 @@ conservation and MPI rank-invariance gate. The next environment-level test is
 the matching static LDA+GL/F1 smoke case. Moving equal-step and hierarchical N
 gates should follow after the COSMA support is reviewed and a clean artifact
 is built.
+
+---
+
+## 3. Chapter-3 fixed-buffer RT reproduction prepared; dine2 outage blocks execution
+
+**Date:** 2026-09-03
+
+The recent local-Mac record in volume 3 was reviewed before returning to the
+Chapter-3 figures. The Yee result remains the existing convergence-order
+figure. The current Gresho result is the matched local n=48 comparison, while
+the COSMA work here targets the missing N-versus-LDA Rayleigh--Taylor
+morphology.
+
+The retained Cuillin fixed-buffer report was used as the reference rather than
+the rejected reflective-wall pilot. The reproduction therefore uses a static
+0.5 by 1.5 mesh with 6912 vertices (nominal n=96), gamma=1.4, gy=-0.5, a
+logistic rho=1 to 2 transition at y=0.75 with width 0.025, interface pressure
+10/7, and the localized perturbation coefficient 0.025 (actual peak vy is
+0.09992899687639602). Vertices below y=0.15 and at or above y=1.35 are fixed
+reservoirs. This is analogous to SWIFT's fixed boundary-particle strips and the
+AREPO wind-tunnel injection region, but the RD implementation rejects both
+hydrodynamic RK-stage increments and gravity kicks at every fixed vertex.
+Results will be presented only through t=4 because the old Cuillin audit found
+material boundary interaction after that time.
+
+The Hydro_data_analysis RT generator was made portable: analysis imports,
+data roots, the parameter template and the 48^2 SWIFT glass no longer require
+/home/zwu. Defaults are repository-relative and SWIFT_GLASS_48 remains an
+explicit override. A self-contained static RT parameter template and a common
+colour-scale N/LDA morphology plot were added. A temporary n=48 IC-generation
+gate produced 1731 finite states with rho in [1,2] and the expected seed peak.
+
+Matched n=96 campaigns were then prepared in the larger COSMA apps allocation:
+
+- cosma_gizmo_fixed_n96_seed0025_t4_20260903, IC SHA-256
+  f82e8c5ba9a6f57fb60ad53a75c72c7a6844d174c321aea7da52ff455c69df27;
+- cosma_gizmo_fixed_n96_control_t4_20260903, IC SHA-256
+  43331d2c39d6c934fea96fd11c65967228fadca614d1e639a7304dab0b84cfe1.
+
+Their coordinates, masses/density samples, internal energies and particle IDs
+are bitwise identical; only the seeded velocity differs, and the seed vanishes
+inside both fixed strips. Both contain N and LDA cases, output every 0.5, end at
+t=4, and retain the Cuillin maximum step 5/8192. The LDA build uses the current
+standard GL+F1 total-residual RK2 formulation, not the older experimental
+rate-consistent Heun variant; its generated config SHA-256 is
+5185e4e2f1194915536db695ab38472809a5c048b6c1898fe26f5ec347cf6173.
+
+Managed build jobs 11915280 (N) and 11915281 (LDA) were submitted. At submission
+all eight gc nodes were idle, but partition dine2 was administratively DOWN;
+Slurm therefore left the N build pending with PartitionDown and the dependent
+LDA build pending. The COSMA maintenance notice subsequently identified this as
+a planned system-wide window beginning Wednesday 2 September at 15:00 British
+time. It states that all Slurm partitions are affected, login nodes and storage
+remain available, and queued jobs should remain queued. At 05:22 BST on 3
+September both jobs were still pending and all 512 dine2 CPU cores were idle.
+COSMA exposed no FCFS partition or resolvable fcfs1 host, so no Cuillin-style
+FCFS shortcut was assumed and no computation was run on the login node. This
+section records preparation only and must not be cited as a hydrodynamic
+validation until the jobs run and the short seeded/control gates pass.
