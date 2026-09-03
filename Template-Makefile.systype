@@ -6,5 +6,7 @@
 
 #SYSTYPE="Darwin"
 #SYSTYPE="LocalMac"
+#SYSTYPE="Cuillin"
+#SYSTYPE="COSMA"
 
 #determine SYSTYPE#

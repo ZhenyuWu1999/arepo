@@ -144,6 +144,37 @@ endif
 # end of Cuillin
 
 
+# COSMA (Rocky Linux 9): GNU + OpenMPI modules, parallel HDF5 and oneAPI MKL.
+# Load the pinned environment with source ./cosma_env.sh before building.
+ifeq ($(SYSTYPE),"COSMA")
+# compiler and its optimization options
+CC        =  mpicc   # sets the C-compiler
+OPTIMIZE  =  -std=c11 -ggdb -O3 -Wall -Wno-format-security -Wno-unknown-pragmas -Wno-unused-function
+
+# The COSMA module stack injects the compiler/MPI/GSL/FFTW/hwloc include and
+# runtime paths into the mpicc wrapper. Keep the actual libraries explicit so
+# that the link line and immutable-build provenance remain easy to audit.
+MPICH_LIB  = -lmpi
+GSL_LIB    = -lgsl -lgslcblas
+HWLOC_LIB  = -lhwloc
+
+# AREPO-RD includes <lapacke.h>; the compatibility header maps that include to
+# MKL's mkl_lapacke.h. COSMA oneAPI installs libmkl_rt directly in
+# $(MKLROOT)/lib (unlike Cuillin's $(MKLROOT)/lib/intel64 layout).
+LAPACK_INCL = -I$(CURDIR)/src/mkl_compat -I$(MKLROOT)/include
+LAPACK_LIB  = -L$(MKLROOT)/lib -Wl,-rpath,$(MKLROOT)/lib -lmkl_rt -lpthread -lm -ldl
+
+# HDF5_HOME is exported by the parallel_hdf5 module. FFTW and hwloc paths are
+# already part of mpicc's wrapper flags after the corresponding modules load.
+FFTW_INCL  =
+FFTW_LIBS  =
+HDF5_INCL  = -I$(HDF5_HOME)/include -DH5_USE_16_API
+HDF5_LIB   = -L$(HDF5_HOME)/lib -Wl,-rpath,$(HDF5_HOME)/lib -lhdf5 -lz
+HWLOC_INCL =
+endif
+# end of COSMA
+
+
 
 
 ifndef LINKER

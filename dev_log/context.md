@@ -96,7 +96,10 @@ The development notes therefore live in `arepo/dev_log/` so that they are
 version controlled together with the code:
 
     arepo/dev_log/context.md                        (this file)
+    arepo/dev_log/context_localMac.md               (Apple Silicon environment)
+    arepo/dev_log/context_cosma.md                  (COSMA environment)
     arepo/dev_log/RD_DEVELOPMENT_LOG_2.md           (ACTIVE main log: moving mesh)
+    arepo/dev_log/RD_DEVELOPMENT_LOG_4_cosma.md     (COSMA setup and validation)
     arepo/dev_log/RD_DEVELOPMENT_LOG.md             (volume 1, closed 2026-08-05)
     arepo/dev_log/B_scheme_complete_mathematics.md
     arepo/dev_log/LDA_F1_Heun_vs_standard_LDA_RK2.md
@@ -135,6 +138,10 @@ agent's name instead.
 for python data analysis, there is an existing environment yt: source ~/.bashrc   tmox2024    conda activate yt
 
 ## cluster (Slurm) — read this before building or running
+
+This section describes Cuillin. For the current COSMA module stack, dine2
+partition/account settings, batch wrappers and validated smoke test, read
+`dev_log/context_cosma.md`.
 
 The machine you land on, `cuillin`, is the **login node**. Do not build or run
 simulations there. Slurm is available: partition `all` (35 nodes, 24+ cores
