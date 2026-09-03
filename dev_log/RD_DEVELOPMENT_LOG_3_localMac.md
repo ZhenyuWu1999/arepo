@@ -32,6 +32,7 @@ handoff for the intervening moving-mesh hierarchy work.
 | 6 | GIZMO n48 meshless finite-volume Gresho run to t=3 |
 | 7 | Controlled GIZMO MFV mesh-motion, neighbour and limiter tests |
 | 8 | Matched AREPO MMFV and static RK2 RD Gresho results |
+| 9 | Matched static N/LDA fixed-buffer Rayleigh--Taylor results |
 
 ---
 
@@ -453,3 +454,84 @@ outputs. The production archive is split by solver family under
 `/Users/zhenyuwu/Hydro_data_analysis/Data_arepo_MMFV/gresho_2d/mmfv_glass48_t3`
 and
 `/Users/zhenyuwu/Hydro_data_analysis/Data_arepo_RD/gresho_2d/rk2_static_glass48_t3`.
+
+---
+
+## 9. Matched static N/LDA fixed-buffer Rayleigh--Taylor results
+
+**Date:** 2026-09-03
+
+The Chapter-3 Rayleigh--Taylor campaign prepared on COSMA was reproduced
+locally while the COSMA Slurm partitions were down for maintenance.  The
+preferred `gizmo-fixed` setup was retained: a static `0.5 x 1.5` glass with
+6912 vertices (nominal `n=96`), `gamma=1.4`, `g_y=-0.5`, a logistic density
+transition from one to two of width `0.025` at `y=0.75`, interface pressure
+`10/7`, and perturbation coefficient `0.025`.  The actual peak seed velocity
+is `0.09992899687639602`.  Vertices with `y<0.15` or `y>=1.35` are fixed
+reservoirs.  Five snapshots were written at `t=0,1,2,3,4`; the boundary-
+affected `t=5` endpoint was deliberately excluded.
+
+The N executable used
+`examples/rt_2d/Config_RT_GIZMO_FIXED_N_RK2.sh`.  The new standard LDA+GL/F1
+configuration is
+`examples/rt_2d/Config_RT_GIZMO_FIXED_LDA_RK2.sh`: it differs from the N file
+only by selecting `LDA_SCHEME`, and its SHA-256 is
+`5185e4e2f1194915536db695ab38472809a5c048b6c1898fe26f5ec347cf6173`.
+This exactly matches the generated LDA configuration recorded in the COSMA
+campaign.  It does not enable the older experimental
+`RD_RK2_RATE_CONSISTENT_HEUN` option.  Both native arm64 binaries were rebuilt
+from commit `cd0a7ffd8a7ffbd97c7397a2a714810c0fd346e3` plus this new tracked
+configuration, using the `LocalMac` Homebrew/OpenBLAS target.
+
+A zero-seed `n=48`, `t=0.02` gate passed first for both schemes.  All fields
+were finite and positive, fixed-layer velocity and internal energy remained
+bitwise unchanged, and the maximum element conservation defects were
+`2.425e-16` for N and `1.388e-17` for LDA.  Matched seeded and zero-seed
+`n=96` cases were then each advanced for 8192 equal steps to `t=4`.  All four
+runs exited normally.  The two seeded runs each required about 211 seconds
+when run concurrently as independent one-rank processes.
+
+At `t=4`, the principal diagnostics are:
+
+| case | rho min | seed-mode amplitude | non-mode RMS vy | reservoir mass fraction | near-boundary max abs(vy) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| seeded N | 0.848850 | 0.081521 | 0.108359 | 0.065299 | 0.061691 |
+| control N | 0.990795 | 0.005323 | 0.017345 | 0.020943 | 0.016872 |
+| seeded LDA | 0.676675 | 0.063917 | 0.137959 | 0.066191 | 0.052979 |
+| control LDA | 0.954407 | 0.005153 | 0.029032 | 0.016024 | 0.022170 |
+
+Every final pressure is positive; the minimum pressure in every case is
+`0.6872674`.  The minimum predictor densities over the complete seeded runs
+are `0.84854` for N and `0.49541` for LDA.  Maximum element conservation
+defects are `1.272e-16` and `6.939e-18`, respectively.  Fixed-layer velocity
+and internal energy remain bitwise unchanged in all four runs.  Summed
+reservoir mass exchange closes against the snapshot mass change to
+`6.48e-11` (seeded N), `1.43e-10` (seeded LDA), `3.87e-12` (control N), and
+`1.36e-11` (control LDA) in absolute mass units.
+
+The local N numbers reproduce the retained Cuillin report: at `t=4` the
+reservoir fraction is 6.53 per cent, the adjacent active-layer maximum
+`abs(vy)` is 0.0617, and the seeded/control non-mode RMS values are
+0.1084/0.01734.  Thus the local Apple-Silicon result independently recovers
+the earlier x86-64 morphology and diagnostics within the reported precision.
+
+Both schemes form the imposed large-scale mushroom through `t=2`.  N remains
+the smoother and more dissipative solution at `t=3--4`; LDA retains and
+amplifies substantially more small-scale structure.  The controls develop
+only much weaker glass/contact-seeded fingers and no comparable coherent
+primary mushroom, confirming that the main mode is imposed-seed driven.
+Late LDA filaments are nevertheless not claimed to be a converged physical
+roll-up; they should be presented as the scheme admitting more secondary
+structure on this glass.
+
+The complete local work directories are
+`/Users/zhenyuwu/arepo_rd/local_runs/ch3_arepo_rt_n96_static_rk2_seed0025_t4`
+and `ch3_arepo_rt_n96_static_rk2_control_t4`.  Compact production archives are
+under
+`/Users/zhenyuwu/Hydro_data_analysis/Data_arepo_RD/rt_2d/`
+`rk2_static_gizmo_fixed_n96_d0025_seed0025_t4_localmac` and
+`rk2_static_gizmo_fixed_n96_d0025_control_t4_localmac`.  They retain the IC,
+five snapshots per scheme, exact executable and configuration, parameters,
+compressed run log, JSON diagnostics, seeded/control plots, and the common-
+colour N/LDA comparison in PNG and PDF.  Restart files and large per-step CPU,
+time-bin, and balance logs were not duplicated into the production archive.
