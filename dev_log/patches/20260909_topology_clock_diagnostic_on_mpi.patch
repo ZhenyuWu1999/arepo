@@ -1,0 +1,128 @@
+--- a/src/hydro/residual_distribution_solver.c
++++ b/src/hydro/residual_distribution_solver.c
+@@ -2812,6 +2812,15 @@
+  * corrector sweep only reconstructs the identical midpoint geometry. */
+ static void rd_ale_hierarchical_prepare(tessellation *T, struct rd_element_set *set, int rd_stage)
+ {
++  if(rd_stage == RD_RK_STAGE_PREDICTOR)
++    {
++      double q[4] = {0,0,0,0};
++      for(int i=0; i<NumGas; i++)
++        { q[0]+=P[i].Mass; q[1]+=SphP[i].Momentum[0]; q[2]+=SphP[i].Momentum[1]; q[3]+=SphP[i].Energy; }
++      MPI_Allreduce(MPI_IN_PLACE,q,4,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
++      mpi_printf("RD-AUDIT-Q time=%.17g stage=before q=[%.17e,%.17e,%.17e,%.17e]\n",All.Time,q[0],q[1],q[2],q[3]);
++    }
++
+   if(All.ComovingIntegrationOn)
+     terminate_program("RD_ALE_HIERARCHICAL v1 excludes comoving integration");
+ 
+@@ -5660,6 +5669,27 @@
+ 
+   apply_FluxRD_list();
+ 
++#ifdef RD_ALE_HIERARCHICAL
++  if(rd_stage == RD_RK_STAGE_CORRECTOR)
++    {
++      double q[4] = {0,0,0,0};
++      int active=0, total=NumGas, bin_min=TIMEBINS, bin_max=0;
++      for(int i=0; i<NumGas; i++)
++        {
++          q[0]+=P[i].Mass; q[1]+=SphP[i].Momentum[0]; q[2]+=SphP[i].Momentum[1]; q[3]+=SphP[i].Energy;
++          active += TimeBinSynchronized[P[i].TimeBinHydro] != 0;
++          bin_min=imin(bin_min,P[i].TimeBinHydro); bin_max=imax(bin_max,P[i].TimeBinHydro);
++        }
++      MPI_Allreduce(MPI_IN_PLACE,q,4,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE,&active,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE,&total,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE,&bin_min,1,MPI_INT,MPI_MIN,MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE,&bin_max,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
++      mpi_printf("RD-AUDIT-Q time=%.17g stage=after all_active=%d bins=[%d,%d] q=[%.17e,%.17e,%.17e,%.17e]\n",
++                 All.Time,active==total,bin_min,bin_max,q[0],q[1],q[2],q[3]);
++    }
++#endif
++
+ #ifdef RD_ALE_HIERARCHICAL_ARPAIA
+   if(rd_stage == RD_RK_STAGE_CORRECTOR)
+     rd_ale_hierarchical_arpaia_finish(&set);
+--- a/src/time_integration/timestep.c
++++ b/src/time_integration/timestep.c
+@@ -226,15 +226,26 @@
+ #ifndef RD_HIER_TEST_SPLIT_FRAC
+ #define RD_HIER_TEST_SPLIT_FRAC 0.5
+ #endif
+-      if(P[i].Pos[0] < RD_HIER_TEST_SPLIT_FRAC * boxSize_X)
+-        {
+-          integertime coarse_step = TIMEBASE;
+-          while(coarse_step > ti_step)
+-            coarse_step >>= 1;
+-
+-          if(coarse_step > 2)
+-            ti_step = coarse_step >> 1;
+-        }
++
++      int level = 0;
++      const char *pattern = getenv("RD_AUDIT_PATTERN");
++      int id = (int)P[i].ID - 1;
++      if(!pattern || strcmp(pattern,"baseline")==0)
++        level = P[i].Pos[0] < 0.5*boxSize_X;
++      else if(strcmp(pattern,"stripes8")==0)
++        level = 3 - imin(3, (int)(4*P[i].Pos[0]/boxSize_X));
++      else if(strcmp(pattern,"fixed8")==0)
++        level = 3 - (id/16)%4;
++      else if(strcmp(pattern,"equal")==0)
++        level = 0;
++      else if(strncmp(pattern,"single",6)==0)
++        level = P[i].ID == atoi(pattern+6) ? 3 : 0;
++      else
++        terminate_program("Unknown isolated audit bin pattern");
++      integertime coarse_step=TIMEBASE;
++      while(coarse_step>ti_step) coarse_step >>= 1;
++      if((coarse_step >> level)>2) ti_step=coarse_step >> level;
++
+ #endif
+ 
+       timebins_get_bin_and_do_validity_checks(ti_step, &bin, binold);
+--- a/src/mesh/set_vertex_velocities.c
++++ b/src/mesh/set_vertex_velocities.c
+@@ -269,6 +269,20 @@
+       for(j = 0; j < 3; j++)
+         SphP[i].VelVertex[j] = 0;
+     }
++
++  /* Fixed per-ID velocity: identical generator trajectories for every bin
++   * pattern and rank count. The audit IC has exactly an 8 by 8 ID ordering. */
++  if(getenv("RD_AUDIT_PRESCRIBED_MESH"))
++    for(int audit_idx=0; audit_idx<TimeBinsHydro.NActiveParticles; audit_idx++)
++      {
++        int audit_i=TimeBinsHydro.ActiveParticleList[audit_idx];
++        if(audit_i<0) continue;
++        int id=(int)P[audit_i].ID-1;
++        double x=((id/8)+0.5)/8., y=((id%8)+0.5)/8.;
++        SphP[audit_i].VelVertex[0]=0.19*sin(2*M_PI*y)+0.11*cos(2*M_PI*x);
++        SphP[audit_i].VelVertex[1]=0.13*sin(2*M_PI*x)+0.07*cos(2*M_PI*y);
++        SphP[audit_i].VelVertex[2]=0.;
++      }
+   TIMER_STOP(CPU_SET_VERTEXVELS);
+   return;
+ #endif /* #if defined (VORONOI_STATIC_MESH) || defined (NOHYDRO) */
+@@ -510,6 +524,20 @@
+   validate_vertex_velocities_1d();
+ #endif /* #ifdef ONEDIMS_SPHERICAL */
+ 
++
++  /* Fixed per-ID velocity: identical generator trajectories for every bin
++   * pattern and rank count. The audit IC has exactly an 8 by 8 ID ordering. */
++  if(getenv("RD_AUDIT_PRESCRIBED_MESH"))
++    for(int audit_idx=0; audit_idx<TimeBinsHydro.NActiveParticles; audit_idx++)
++      {
++        int audit_i=TimeBinsHydro.ActiveParticleList[audit_idx];
++        if(audit_i<0) continue;
++        int id=(int)P[audit_i].ID-1;
++        double x=((id/8)+0.5)/8., y=((id%8)+0.5)/8.;
++        SphP[audit_i].VelVertex[0]=0.19*sin(2*M_PI*y)+0.11*cos(2*M_PI*x);
++        SphP[audit_i].VelVertex[1]=0.13*sin(2*M_PI*x)+0.07*cos(2*M_PI*y);
++        SphP[audit_i].VelVertex[2]=0.;
++      }
+   TIMER_STOP(CPU_SET_VERTEXVELS);
+ }
+ 

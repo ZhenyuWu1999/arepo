@@ -1,0 +1,281 @@
+--- a/src/hydro/residual_distribution_solver.c
++++ b/src/hydro/residual_distribution_solver.c
+@@ -2746,17 +2746,63 @@
+ }
+ #endif
+ 
+-static int rd_ale_hierarchical_local_index(const point *dp)
+-{
+-  if(dp->task != ThisTask)
+-    terminate_program("RD_ALE_HIERARCHICAL v1 encountered a remote vertex despite its one-rank guard");
+-
+-  int index = dp->index;
+-  if(index >= NumGas)
+-    index -= NumGas;
+-  if(index < 0 || index >= NumGas)
+-    terminate_program("RD_ALE_HIERARCHICAL could not map a periodic image to its primary generator");
+-  return index;
++
++/* MPI geometry spike: each owned simplex deposits once on vertex primaries.
++ * The records carry extensive geometry; no primitive or stage divisor is
++ * reconstructed until every remote incident contribution has arrived. */
++struct rd_hier_geometry_record
++{
++  int task, index;
++  double endpoint, divisor, dg;
++};
++
++#ifdef RD_ALE_HIERARCHICAL_ARPAIA
++static double rd_hier_open_rebase[4];
++#endif
++
++static int rd_hier_geometry_compare(const void *a, const void *b)
++{
++  int aa = ((const struct rd_hier_geometry_record *)a)->task;
++  int bb = ((const struct rd_hier_geometry_record *)b)->task;
++  return (aa > bb) - (aa < bb);
++}
++
++static void rd_hier_exchange_geometry(struct rd_hier_geometry_record *records, int count,
++                                      double *endpoint, double *divisor, double *dg)
++{
++  mysort(records, count, sizeof(*records), rd_hier_geometry_compare);
++  int *sc = mymalloc("RDHierSendCount", NTask * sizeof(int));
++  int *rc = mymalloc("RDHierRecvCount", NTask * sizeof(int));
++  int *so = mymalloc("RDHierSendOffset", NTask * sizeof(int));
++  int *ro = mymalloc("RDHierRecvOffset", NTask * sizeof(int));
++  memset(sc, 0, NTask * sizeof(int));
++  for(int j = 0; j < count; j++)
++    sc[records[j].task] += sizeof(*records);
++  MPI_Alltoall(sc, 1, MPI_INT, rc, 1, MPI_INT, MPI_COMM_WORLD);
++  int total = 0;
++  for(int task = 0; task < NTask; task++)
++    {
++      so[task] = task ? so[task-1] + sc[task-1] : 0;
++      ro[task] = total;
++      total += rc[task];
++    }
++  struct rd_hier_geometry_record *got = mymalloc("RDHierGeometryImport", total);
++  MPI_Alltoallv(records, sc, so, MPI_BYTE, got, rc, ro, MPI_BYTE, MPI_COMM_WORLD);
++  for(int j = 0; j < total / (int)sizeof(*got); j++)
++    {
++      int i = got[j].index;
++      if(i < 0 || i >= NumGas || got[j].task != ThisTask)
++        terminate_program("RD hierarchy geometry import has an invalid primary");
++      endpoint[i] += got[j].endpoint;
++      if(divisor)
++        divisor[i] += got[j].divisor;
++      dg[i] += got[j].dg;
++    }
++  myfree(got);
++  myfree(ro);
++  myfree(so);
++  myfree(rc);
++  myfree(sc);
+ }
+ 
+ /*! Prepare one concentrated moving-mesh hierarchy sweep on the current
+@@ -2766,8 +2812,6 @@
+  * corrector sweep only reconstructs the identical midpoint geometry. */
+ static void rd_ale_hierarchical_prepare(tessellation *T, struct rd_element_set *set, int rd_stage)
+ {
+-  if(NTask != 1)
+-    terminate_program("RD_ALE_HIERARCHICAL v1 is deliberately restricted to one MPI rank");
+   if(All.ComovingIntegrationOn)
+     terminate_program("RD_ALE_HIERARCHICAL v1 excludes comoving integration");
+ 
+@@ -2782,6 +2826,11 @@
+   memset(set->ale_hier_divisor, 0, NumGas * sizeof(*set->ale_hier_divisor));
+ #endif
+ 
++  double *geo_delta = mymalloc("RDHierGeoDelta", NumGas * sizeof(double));
++  memset(geo_delta, 0, NumGas * sizeof(double));
++  struct rd_hier_geometry_record *records =
++      mymalloc("RDHierGeometryExport", 3 * set->n * sizeof(*records));
++
+   point *DP = T->DP;
+   tetra *DT = T->DT;
+   double min_old = DBL_MAX, min_mid = DBL_MAX, min_new = DBL_MAX;
+@@ -2797,8 +2846,12 @@
+ 
+       for(int vertex = 0; vertex < 3; vertex++)
+         {
+-          int index = rd_ale_hierarchical_local_index(&DP[DT[triangle].p[vertex]]);
+-          set->ale_hier_endpoint_area[index] += current_area / 3.0;
++          const point *dp = &DP[DT[triangle].p[vertex]];
++          struct rd_hier_geometry_record *rec = &records[3 * slot + vertex];
++          rec->task = dp->task;
++          rec->index = dp->task == ThisTask ? rd_local_point_index(dp) : dp->originalindex;
++          rec->endpoint = current_area / 3.0;
++          rec->divisor = rec->dg = 0.0;
+         }
+ 
+       if(!set->active[slot])
+@@ -2814,11 +2867,11 @@
+       for(int vertex = 0; vertex < 3; vertex++)
+         {
+           const point *dp = &DP[DT[triangle].p[vertex]];
+-          int index = rd_ale_hierarchical_local_index(dp);
+           xnew[vertex][0] = dp->x;
+           xnew[vertex][1] = dp->y;
+-          velocity[vertex][0] = SphP[index].VelVertex[0];
+-          velocity[vertex][1] = SphP[index].VelVertex[1];
++          for(int axis = 0; axis < 2; axis++)
++            velocity[vertex][axis] = dp->task == ThisTask ?
++                SphP[rd_local_point_index(dp)].VelVertex[axis] : PrimExch[dp->index].VelVertex[axis];
+         }
+ 
+       struct rd_ale_triangle_geometry geometry;
+@@ -2849,8 +2902,7 @@
+       set->ale_hier_divisor_element_area[slot] = geometry.arpaia_divisor;
+       for(int vertex = 0; vertex < 3; vertex++)
+         {
+-          int index = rd_ale_hierarchical_local_index(&DP[DT[triangle].p[vertex]]);
+-          set->ale_hier_divisor[index] += geometry.arpaia_divisor / 3.0;
++          records[3 * slot + vertex].divisor = geometry.arpaia_divisor / 3.0;
+         }
+ #else
+       set->normals[slot].area = 0.5 * (area_old + area_new);
+@@ -2859,28 +2911,34 @@
+       due_elements++;
+ 
+       if(rd_stage == RD_RK_STAGE_PREDICTOR)
+-        {
+-          double dg = (area_new - area_old) / 3.0;
+-
+-          for(int vertex = 0; vertex < 3; vertex++)
+-            {
+-              int index = rd_ale_hierarchical_local_index(&DP[DT[triangle].p[vertex]]);
+-              double rho = SphP[index].Density;
+-              double velx = P[index].Vel[0], vely = P[index].Vel[1];
+-              double u[4] = {rho, rho * velx, rho * vely,
+-                             SphP[index].Pressure / GAMMA_MINUS1 +
+-                                 0.5 * rho * (velx * velx + vely * vely)};
+-
+-              P[index].Mass += dg * u[0];
+-              SphP[index].Momentum[0] += dg * u[1];
+-              SphP[index].Momentum[1] += dg * u[2];
+-              SphP[index].Energy += dg * u[3];
+-              SphP[index].RD_GeoLedger += dg;
+-              for(int component = 0; component < 4; component++)
+-                geometric_change[component] += dg * u[component];
+-            }
+-        }
+-    }
++        for(int vertex = 0; vertex < 3; vertex++)
++          records[3 * slot + vertex].dg = (area_new - area_old) / 3.0;
++    }
++
++#ifdef RD_ALE_HIERARCHICAL_ARPAIA
++  rd_hier_exchange_geometry(records, 3 * set->n, set->ale_hier_endpoint_area,
++                            set->ale_hier_divisor, geo_delta);
++#else
++  rd_hier_exchange_geometry(records, 3 * set->n, set->ale_hier_endpoint_area, NULL, geo_delta);
++#endif
++  myfree(records);
++
++  if(rd_stage == RD_RK_STAGE_PREDICTOR)
++    for(int i = 0; i < NumGas; i++)
++      {
++        double rho = SphP[i].Density;
++        double vx = P[i].Vel[0], vy = P[i].Vel[1];
++        double u[4] = {rho, rho*vx, rho*vy,
++                       SphP[i].Pressure/GAMMA_MINUS1 + 0.5*rho*(vx*vx+vy*vy)};
++        double dg = geo_delta[i];
++        P[i].Mass += dg*u[0];
++        SphP[i].Momentum[0] += dg*u[1];
++        SphP[i].Momentum[1] += dg*u[2];
++        SphP[i].Energy += dg*u[3];
++        SphP[i].RD_GeoLedger += dg;
++        for(int k = 0; k < 4; k++) geometric_change[k] += dg*u[k];
++      }
++  myfree(geo_delta);
+ 
+   if(rd_stage == RD_RK_STAGE_PREDICTOR)
+     {
+@@ -2915,6 +2973,10 @@
+             }
+         }
+ 
++      MPI_Allreduce(MPI_IN_PLACE, &endpoint_coverage, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, geometric_change, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, closing_change, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &max_close_relative, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+       double box_area = boxSize_X * boxSize_Y;
+       if(fabs(endpoint_coverage - box_area) > 1.0e-10 * box_area)
+         terminate_program("RD_ALE_HIERARCHICAL current full mesh does not cover the periodic box");
+@@ -2922,6 +2984,7 @@
+ #ifdef RD_ALE_HIERARCHICAL_ARPAIA
+       double divisor_sum = 0.0, min_divisor = DBL_MAX, max_rebase_relative = 0.0;
+       int rebased_vertices = 0;
++      memset(rd_hier_open_rebase, 0, sizeof(rd_hier_open_rebase));
+       for(int index = 0; index < NumGas; index++)
+         {
+           divisor_sum += set->ale_hier_divisor[index];
+@@ -2934,7 +2997,10 @@
+               double q[4], u[4];
+               rd_ale_hierarchical_q_from_particle(index, q);
+               for(int component = 0; component < 4; component++)
+-                u[component] = q[component] / set->ale_hier_endpoint_area[index];
++                {
++                  u[component] = q[component] / set->ale_hier_endpoint_area[index];
++                  rd_hier_open_rebase[component] += (divisor-set->ale_hier_endpoint_area[index])*u[component];
++                }
+               rd_ale_hierarchical_set_particle_q(index, divisor, u);
+               SphP[index].DualArea = divisor;
+               min_divisor = dmin(min_divisor, divisor);
+@@ -2944,7 +3010,12 @@
+               rebased_vertices++;
+             }
+         }
++      MPI_Allreduce(MPI_IN_PLACE, &divisor_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+       int all_due = due_elements == set->n;
++      MPI_Allreduce(MPI_IN_PLACE, &all_due, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &rebased_vertices, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &min_divisor, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &max_rebase_relative, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+       mpi_printf("RD-ALE-HIER-ARPAIA time=%.8g stage=open live=%d all_due=%d "
+                  "active_divisor_sum=%.17g box_defect_if_full=%+.6e "
+                  "min_live=%.6e max_rebase_rel=%.6e\n",
+@@ -2953,9 +3024,14 @@
+                  max_rebase_relative);
+ #endif
+ 
++      MPI_Allreduce(MPI_IN_PLACE, &due_elements, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &closed_vertices, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &min_old, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &min_mid, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
++      MPI_Allreduce(MPI_IN_PLACE, &min_new, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+       mpi_printf("RD-ALE-HIER time=%.8g stage=ledger due=%d closed=%d minA=[%.3e,%.3e,%.3e] "
+-                 "max_close_rel=%.3e geom=[%+.6e,%+.6e,%+.6e,%+.6e] "
+-                 "basis=[%+.6e,%+.6e,%+.6e,%+.6e]\n",
++                 "max_close_rel=%.3e geom=[%+.17e,%+.17e,%+.17e,%+.17e] "
++                 "basis=[%+.17e,%+.17e,%+.17e,%+.17e]\n",
+                  All.Time, due_elements, closed_vertices, min_old, min_mid, min_new, max_close_relative,
+                  geometric_change[0], geometric_change[1], geometric_change[2], geometric_change[3],
+                  closing_change[0], closing_change[1], closing_change[2], closing_change[3]);
+@@ -3002,6 +3078,14 @@
+             set->ale_hier_endpoint_area[index]);
+         rebased_vertices++;
+       }
++  double net_rebase[4];
++  for(int k = 0; k < 4; k++) net_rebase[k] = rd_hier_open_rebase[k] + rebase_change[k];
++  MPI_Allreduce(MPI_IN_PLACE, net_rebase, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
++  MPI_Allreduce(MPI_IN_PLACE, rebase_change, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
++  MPI_Allreduce(MPI_IN_PLACE, &rebased_vertices, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
++  MPI_Allreduce(MPI_IN_PLACE, &max_rebase_relative, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
++  mpi_printf("RD-ALE-HIER-REBASE-NET time=%.8g dQ=[%+.17e,%+.17e,%+.17e,%+.17e]\n",
++             All.Time, net_rebase[0], net_rebase[1], net_rebase[2], net_rebase[3]);
+   mpi_printf("RD-ALE-HIER-ARPAIA time=%.8g stage=commit live=%d max_rebase_rel=%.6e "
+              "dQ=[%+.6e,%+.6e,%+.6e,%+.6e]\n",
+              All.Time, rebased_vertices, max_rebase_relative, rebase_change[0],
+--- a/src/main/run.c
++++ b/src/main/run.c
+@@ -354,6 +354,7 @@
+        * Concentrate both RK sweeps at this event; the predictor call performs
+        * the geometric-ledger close, and the corrector reuses the same mesh. */
+       compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR);
++      exchange_primitive_variables(); /* completed owner dU and endpoint stamps */
+       compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR);
+ #else
+       compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR);

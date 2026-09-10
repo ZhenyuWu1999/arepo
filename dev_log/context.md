@@ -98,7 +98,8 @@ version controlled together with the code:
     arepo/dev_log/context.md                        (this file)
     arepo/dev_log/context_localMac.md               (Apple Silicon environment)
     arepo/dev_log/context_cosma.md                  (COSMA environment)
-    arepo/dev_log/RD_DEVELOPMENT_LOG_2.md           (ACTIVE main log: moving mesh)
+    arepo/dev_log/RD_DEVELOPMENT_LOG_3_localMac.md (CURRENT log: local development)
+    arepo/dev_log/RD_DEVELOPMENT_LOG_2.md           (historical moving-mesh record)
     arepo/dev_log/RD_DEVELOPMENT_LOG_4_cosma.md     (COSMA setup and validation)
     arepo/dev_log/RD_DEVELOPMENT_LOG.md             (volume 1, closed 2026-08-05)
     arepo/dev_log/B_scheme_complete_mathematics.md
@@ -111,9 +112,11 @@ version controlled together with the code:
     arepo/dev_log/regularize_matrix_debug_report.md
     arepo/dev_log/RK2_timestep_movingmesh_analysis.md
 
-**Start a new session by reading `RD_DEVELOPMENT_LOG_2.md` section 1**, which
-carries forward everything settled, deferred and still open at the end of
-volume 1. Volume 1 is 9000 lines and does not need to be read in full; it is
+**Current logging convention, confirmed 2026-09-10:** append current work to
+`RD_DEVELOPMENT_LOG_3_localMac.md`; do not append new entries to volume 2.
+Start a new local session with `context_localMac.md` and the latest entries in
+volume 3. Read `RD_DEVELOPMENT_LOG_2.md` section 1 as needed for the historical
+handover from volume 1. Volume 1 is 9000 lines and does not need to be read in full; it is
 the archive of the static-mesh phase and is still authoritative for anything
 section 1 points into. The companion documents above remain live references for
 both volumes.

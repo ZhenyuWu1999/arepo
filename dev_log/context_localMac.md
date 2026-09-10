@@ -6,6 +6,11 @@ This file records the local Apple Silicon development environment for small
 two-dimensional AREPO residual-distribution tests. It supplements `context.md`;
 the cluster development logs remain the scientific history of the project.
 
+**Logging convention, confirmed 2026-09-10:** all current work continues in
+`RD_DEVELOPMENT_LOG_3_localMac.md`. Keep volume 2 as the historical moving-mesh
+record; do not append new local findings there. For the current scientific
+status, read the latest volume-3 entries; the setup-era handoff below is historical.
+
 ## Scope and data policy
 
 - The immediate goal is to compile AREPO-RD natively and rerun inexpensive 2-D
