@@ -1,6 +1,6 @@
 # AREPO-RD local macOS context
 
-Updated: 2026-09-01
+Updated: 2026-09-13
 
 This file records the local Apple Silicon development environment for small
 two-dimensional AREPO residual-distribution tests. It supplements `context.md`;
@@ -175,8 +175,15 @@ distinct working directory and `OutputDir`. Never run concurrent builds in the
 same build directory or concurrent simulations in the same output directory.
 On this 10-core/16-GB laptop, begin with no more than 6--8 total MPI ranks and
 reduce that limit for larger meshes after measuring memory use. Set
-`OPENBLAS_NUM_THREADS=1` for MPI runs so that each rank does not create its own
-pool of BLAS threads.
+both `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` for MPI and singleton
+runs so that each rank does not create its own pool of BLAS threads.
+
+**Verified 2026-09-11:** the Homebrew OpenBLAS 0.3.29 on this machine reports
+`openblas_get_parallel()=2` (OpenMP). `OPENBLAS_NUM_THREADS=1` alone still
+reports 10 BLAS threads; adding `OMP_NUM_THREADS=1` reports one. Sampling the
+96² Sod run found substantial time in OpenMP barriers inside the tiny
+`dgetrs` solves. Preserve both settings in run provenance; the earlier local
+campaigns that recorded only the OpenBLAS variable did not enforce one thread.
 
 Routine production and comparison runs should write only 3--5 snapshots in
 total, normally including the initial and final states. Increase the output
@@ -330,3 +337,186 @@ sequence.
   and small tests work.
 - After the N path is stable locally, validate moving MPI before attempting
   hierarchical LDA/F1.
+
+## Sod comparison conventions (user confirmed 2026-09-11)
+
+- Use relaxed **glass IC** as the primary Sod comparison mesh. A jittered
+  Cartesian lattice is a separate diagnostic, not a glass.
+- Label the initial effective resolution of one shock tube as the main N_x.
+  For the current unit-square periodic box, the comparison interval has
+  length0.5, so full96² is actualNx48 and full128² is actualNx≈64. On glass use
+  h=sqrt(A_box/N_total) and Nx=L_tube/h; there are no literal columns.
+- Preserve full-box counts and old directory names as provenance, and state
+  both counts in figures. Morton Figure7 uses first-order LDA/N, not GL/F1 RK2.
+- See log3 section24 for matched glass controls isolating GL/F1 undershoot and
+  contour-residual scatter even with sigma=0 and no flips. Do not attribute
+  the previous static/moving difference entirely to movement or repair.
+
+**Current priority (2026-09-12, log3 §§28–29):** pause new CR/basis-repair extensions
+and recover the physical baseline first. Keep lumped LDA Heun, standard GL/F1,
+and F1 rate-consistent Heun distinct; the latter was not rejected for failing
+time order. Separate fixed-h temporal tests, smooth advected spatial tests,
+and all-node glass Sod shock quality. See `colombo_re_spike/heun_baseline_history.md`.
+
+The matched 48/96/192 static glass advected-Yee campaign is now complete:
+lumped Heun gives density h-orders .902/1.001 despite time p≈2; standard
+GL/F1 gives1.879/1.737 with fixed-h time p≈1; F1 rate-Heun gives1.881/1.741
+with time p≈2. Halving the spatial-test dt changes density L1 by less than1%
+at48/96. Rate-Heun retains the strong glass Sod undershoot (minvx=-.762 versus
+-.777 for standard GL/F1). No default was changed, and this is not a proof of
+asymptotic order2 on arbitrary glass; the older mass-order note records the
+384 glass degradation. Full results: `colombo_re_spike/lda_baseline_convergence.md`.
+
+The moving counterpart is complete (45 native runs, source `11d8abc`):
+48/96/192 glass Yee density h-orders are .792/.886 for ALE lumped temporal
+RK2, 1.816/1.763 for standard GL/F1, and 1.832/1.777 for a direct ALE
+four-pass diagnostic. The last is **not a validated moving rate-Heun**:
+its static proof does not transfer through the existing frozen ALE slab.
+A derived endpoint defect, independent contour/algebra checks, and no-flip
+Campoli controls demonstrate an extra conservation error. Moving Sod at
+initial effective Nx≈64 gives relative mass drift 8.59e-5 for this diagnostic
+versus 1.19e-9 for standard GL/F1. Do not promote it as a moving alternative.
+Lumped Sod is smoother but more diffuse; GL/F1 retains severe vx scatter
+(range −.672 to1.352), also with element frame. New frame Sod reproduces
+the previous archive exactly. Roe zero-motion and deforming uniform-flow
+gates pass; the earlier zero-motion **contour shock** problem remains open.
+Main Yee dt halving changes density L1 by <.7%; moving matched-ID time
+differences are not formal fixed-grid time orders. Only a protected lumped
+diagnostic guard was extended; no default, CR/hierarchy, thesis or log1/log2
+change. Full report: `colombo_re_spike/lda_moving_baseline.md`; data and
+PNG/PDF figures: `local_runs/lda_moving_baseline_glass_20260911` under the
+workspace root. Result/source commits and SHA256 provenance are archived.
+
+**Latest targeted fix (log3 §28):** the user prioritised the large Sod
+shock-plateau scatter at x_tube=.7–.8, accepting a static-like negative-vx
+trough. Implemented the Gauss-on-P1-U physical-flux quadrature proposed in
+log2 §36.4, retaining GL/F1, mesh transport and basis repair. Eleven new
+native runs pass. At effective initial Nx≈64, moving plateau vx standard
+deviation in [.70,.76] falls from .08256 to .02273 (Gauss3) / .02244 (Gauss5),
+versus static Roe .02239; maxvx falls1.3655→1.0510. Density L1 changes
+by only+.13%. Zero-motion contour scatter also shrinks substantially.
+Moving mass drift remains≈1.5e-9, not the earlier four-pass defect. Yee48/96
+density/velocity h-orders are1.874/1.763; no lumped-like order degradation.
+Use `RD_ALE_CONTOUR_GAUSS=3` (or5 for integration accuracy control), a
+guarded equal-step LDA option; default builds unchanged. This is a promising
+physical baseline candidate, not validation for all flows or hierarchy.
+Initial Gauss3 artifacts use source559f8a4 and its historical flag name;
+Gauss5 usesa4d5a76. Full report: `colombo_re_spike/sod_contour_quadrature.md`.
+Archive: workspace `local_runs/sod_contour_gauss3_20260912`.
+
+
+**Latest KH/cost follow-up (log3 §29):** matched glass48² moving smooth KH
+(tanh width .025, historical physical profile) now runs to t=10 with pure
+LDA Gauss3 and Gauss5, as does current scalar B; old nodal LDA fails at
+t=.444717 with negative mass. Mass/energy drift stays O(2e-8). Late Gauss
+morphology, kinetic energy and entropy-proxy excursions differ from B and
+between G3/G5; completion is not a long-time accuracy/positivity proof.
+All four sharp-interface cases instead stop at the first-step A2 assertion,
+before flips. Captured rank3 Sminus cannot represent the full contour Phi:
+80-digit least squares and forced SVD confirm a genuine outside-range
+residual (1.263e-11,129x A2 tolerance), also present with old nodal contour.
+Keep guards intact; conservative spatial null-space completion is a separate
+unresolved operator issue. Do not confuse it with the earlier F1 time-mass
+problem or describe these sharp failures as late physical KH instability.
+Eighteen serial,512-step timings measure G3/G5 CPU overhead about2.9%/4.0%
+in early smooth KH (current diagnostic build; not a release/MPI prediction).
+Report: `colombo_re_spike/kh_gauss_and_cost.md`; archive under workspace
+`local_runs/kh_gauss_20260912`. Main source59b2161, capture source3d6eea9.
+
+
+**Mathematical clarification and literature (log3 §30):** see
+`colombo_re_spike/gauss_p1_ale_math_and_kh_literature.md` for the full ALE/P1
+chain and primary-source comparisons. Mean-sigma contour spatial residual
+must not be confused with the actual moving-control-volume flux: the latter
+has a geometric volume term when related to the former. Gauss integrates
+F(U_h) instead of I_hF, fully compatible with P1 but not a positivity proof.
+SWIFT/SPHENIX reports highly mixed late KH; AREPO regularization studies also
+show that mesh noise can create false secondary structures. Current48² KH
+resolves each seeded wavelength with only24 initial spacings. Late disorder
+alone neither invalidates nor validates our solution; no new native runs in
+this literature/math follow-up.
+
+
+**Latest old-form control / Chapter4 update (log3 §31):** explicit user
+request added Gauss-versus-nodal/split equations to local Chapter4 math draft
+(section label ALE_RD_Gauss_physical_flux), with isolated compile/visual QA;
+no Overleaf sync or changes to Chapters1–3. Current-source legacy Roe-Uhat/U
+split was re-enabled by config only and tested in lab/frame. Both smoothKH
+runs fail at t=.800476 (same negative-mass particle), versus nodal.444717
+and Gauss3/5 normal completion10. Both sharp controls first-step A2 fail.
+Sod succeeds: old split plateau vx std≈.0230, almost Gauss3 .02273, versus
+nodal .08256. Hence Gauss is not the only Sod fix; old split remains a useful
+control but does not replace Gauss on smoothKH survival. Full report
+`colombo_re_spike/legacy_split_kh_sod.md`; archive `local_runs/legacy_split_20260912`.
+Eight new native starts, four normal/four diagnosed failures, seven reused
+references; no C/default/hierarchy edits. Build sourcee33aea3.
+
+
+**Legacy+Gauss identity (log3 §32):** Gauss on linear Roe Z already equals the
+old physical residual (quadratic flux, Gauss2 exact). Adding the full edge
+flux difference F(P1-U)-F(U(P1-Z)) to old split recovers existing Gauss-U,
+not a distinct scheme. Include all4 components and consistent frame handling;
+current nodal-to-Gauss helper cannot be pasted onto old split.200 random
+triangle algebra checks pass≈1e-14; no new native fluid tests or thesis edit.
+See `colombo_re_spike/legacy_split_gauss_identity.md`.
+
+
+**Static Gauss hierarchy/MPI (log3 §33, 2026-09-12–13):** narrow guard
+extension permits static full-mesh LDA/F1 contour Gauss3/5 with existing
+hierarchy and MPI. Build source255046f;27 native glass uniform/Yee/Sod runs
+all pass. Ranks1/2/4 agree by ID to1.36e-14; equal-bin hierarchy degenerates
+to internal RK at1.29e-14. Final relative mass/energy drift≤1.45e-16/6.47e-16;
+Sod natural CFL hierarchy reaches three bins, completes t=.08, actualNx≈64.
+No new Gauss communication fields, limiter or loosened assertions.
+Important accuracy qualification: both standard equal-step F1 and mixed-bin
+F1 self-converge at fixed-h time order≈1 (equal-step limitation already known).
+Frozen mask P changes the leading rate from v+(I-S^-1 M)v to
+v+(I-S^-1 M)Pv; measured hierarchy-minus-equal difference plateaus as dt shrinks.
+Thus this is a conservative parallel hierarchy baseline, not an equivalent
+multirate realization of equal-step F1. Short t=.125 Yee48/96/192 errors fall
+but show no stable second-order h convergence; hierarchy velocity error is
+larger. Sod negative-vx trough is smaller in these hierarchy controls.
+Moving LDA hierarchy/MPI, active-only reconstruction and domain migration
+remain outside this validation; existing moving guards remain intact.
+Report `colombo_re_spike/static_gauss_hierarchy_mpi.md`; reproducible Config
+`examples/yee_2d/Config_RD_RK2_LDA_GAUSS3_HIER.sh`; archive workspace
+`local_runs/static_gauss_hierarchy_mpi_20260912`. No thesis/default change.
+
+**Sod coordinate/clock clarification (log3 §34):** plotted xi=2(x-.25)
+maps xi=.8 to raw x=.65, outside forced left-half refinement. Hierarchy
+still applies globally. In the330 final vertices at xi∈[.78,.82), forced and
+natural runs have131/129 reconstructed frozen vertices; their bins20/21 give
+2–4 times the equal-run bin19 step. Frozen-F1 therefore acts near the shock
+too. Independent periodic-star counts match native diagnostics; no new runs.
+The unit-length tube also needs tau=2t, so current t=.08 corresponds to.16.
+Morton2023 uses gamma5/3, CFL.4, first-order LDA/N and row-offset Cartesian,
+not current gamma1.4/CFL.08/glass/F1. Paper §5.1.1/Fig7 do not specify final
+time; tau≈.2 inferred from its wave positions is not an original-data check.
+Current rescaling/actualNx is valid but does not make it a Morton reproduction.
+Audit/figure under workspace local_runs/sod_coordinates_20260913.
+
+**Moving Euler hierarchy retry (log3 §35, 2026-09-13):** new independent
+Python P1/Gauss3/LDA/F1 experiment closes full old vertex stars and uses
+actual triangle birth/last-integrated times before same-time basis repair.
+Critical addition: a predictor is live only on complete stars whose actual
+integration starts agree; equal bins alone fail after event truncation.
+Conservative Campoli-endpoint two-stage deposits and zero-sum F1 action
+then close Euler extensive conservation through real periodic Delaunay
+changes. This is a new candidate, not an enabled native AREPO solver.
+22 positive controls pass, three deliberately wrong rules fail (dying-only
+geometric coverage; bin-live/all-closed-live conservation7.65e-7/2.47e-6).
+Moving glass Sod t=.08, effectiveNx24:384 changed-cavity events, conservation
+5.53e-15; moving glass KH t=.5:2092 events,4.44e-15, admissible checked
+states. Uniform depth1024 error2.38e-14; seven populated bins1–64 also pass.
+All remaps use theta1, i.e. original basis high, not CR low diffusion.
+Static two-step native reference agrees2.665e-15; native binary reused from
+source255046f, no production C/build/default changes. All failed exploratory
+and setup attempts are retained separately. The source/analysis/case runners
+are under tests/rd; report `colombo_re_spike/euler_flip_closure.md`, archive
+workspace `local_runs/euler_flip_closure_20260913`.
+Still missing: actual native triangle history and forced-refresh lifecycle,
+changing CFL bins, moving MPI/migration/restart, geometric-step policy,
+long-time stability and accuracy convergence. Frozen-F1 leading-operator
+problem (§33) remains. Chapter4 static hierarchy/MPI → equal-step moving
+extension is still recommended; this candidate can support an ongoing-work
+subsection, not a completed moving-hierarchy claim. Thesis untouched.

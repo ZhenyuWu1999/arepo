@@ -52,6 +52,23 @@ static lapack_int solve_system(int n, double *A, double *b);
 
 #ifdef RESIDUAL_DISTRIBUTION
 
+/* Static full-mesh LDA uses the same P1-U edge states, including the
+ * synchronized/frozen predictor states already exchanged by the hierarchy.
+ * Quadrature adds no topology state or MPI payload. Keep the moving-hierarchy
+ * and active-mesh extensions guarded until separately validated. */
+#if defined(RD_ALE_CONTOUR_GAUSS) &&                                                            \
+    (!defined(RD_ALE_CONTOUR_RESIDUAL) || !defined(LDA_SCHEME) ||                               \
+     (!defined(RD_ALE_EQUALSTEP) &&                                                            \
+      !(defined(VORONOI_STATIC_MESH) && defined(CREATE_FULL_MESH) && defined(RD_RK2_TOTAL_RESIDUAL))))
+#error "RD_ALE_CONTOUR_GAUSS requires equal-step ALE LDA or static full-mesh total-residual RK2 LDA."
+#endif
+#if defined(RD_ALE_CONTOUR_GAUSS) && (RD_ALE_CONTOUR_GAUSS != 3 && RD_ALE_CONTOUR_GAUSS != 5)
+#error "RD_ALE_CONTOUR_GAUSS must be 3 or 5 quadrature points."
+#endif
+#ifdef RD_ALE_CONTOUR_GAUSS
+#include "rd_contour_quadrature.h"
+#endif
+
 #if !defined(TWODIMS)
 #error "The current residual-distribution solver is implemented only for TWODIMS."
 #endif
@@ -124,9 +141,11 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "Use separate builds for RD_ELEMENT_COMOVING_FRAME and the lab-vs-frame diagnostic."
 #endif
 #if defined(RD_ALE_CONTOUR_RESIDUAL) &&                                                          \
-    ((!defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_HIERARCHICAL)) ||                            \
+    ((!defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_HIERARCHICAL) &&                            \
+      !(defined(VORONOI_STATIC_MESH) && defined(CREATE_FULL_MESH) &&                            \
+        defined(LDA_SCHEME) && defined(RD_RK2_TOTAL_RESIDUAL))) ||                              \
      (!defined(LDA_SCHEME) && !defined(N_SCHEME) && !defined(B_SCHEME)))
-#error "RD_ALE_CONTOUR_RESIDUAL requires the equal-step ALE path or the concentrated moving hierarchy."
+#error "RD_ALE_CONTOUR_RESIDUAL requires equal-step ALE, concentrated moving hierarchy, or static full-mesh RK2 LDA."
 #endif
 /* N's contour reconciliation is covariant too: it distributes
  * (Phi_contour - sum_i phi_i^N)/3, and G is linear, so both totals transform
@@ -4423,6 +4442,10 @@ void compute_residuals(tessellation *T)
         }
 #endif
 
+#if defined(RD_ALE_CONTOUR_GAUSS) && !defined(RD_ELEMENT_COMOVING_FRAME)
+      rd_contour_gauss_correction(U_fluid, N_X, N_Y, Mag, GAMMA, Phi, &phi_scale);
+#endif
+
             /* S^- = sum_{j in T} K_j^-  (thesis notation, chapter 3) */
 #ifdef RD_ALE_ENTROPY_DISSIPATION
       /* Laboratory frame: the mesh velocity is explicit, so the element
@@ -4676,6 +4699,12 @@ void compute_residuals(tessellation *T)
                 phi_scale += fabs(contribution);
               }
           }
+#ifdef RD_ALE_CONTOUR_GAUSS
+        double gauss_u_shift[3][4];
+        for(j = 0; j < 3; j++)
+          for(k = 0; k < 4; k++) gauss_u_shift[j][k] = U_fluid_shift[k][j];
+        rd_contour_gauss_correction(gauss_u_shift, N_X, N_Y, Mag, GAMMA, Phi, &phi_scale);
+#endif
 #else
         for(k = 0; k < 4; k++)
           {

@@ -11,6 +11,13 @@
 > `residual_distribution_solver.c:2272-2320` 的生产 repair，因此那不是一个
 > 待研究的新算子。真正的开放代价是正性检查被推迟到顶点唤醒时刻。
 
+> **2026-09-10 后续复核（log 3 §18）：** 上述两点需要限定：规则 star 的
+> r=13 是 full-patch 高阶映射的阈值，active-only 的总质量目标在 r>6
+> 已不可行；异步“恒等”还遗漏 Q-gU 历史余项。新的实际账本 Q/g 转移可
+> 条件性保证翻边瞬间正性，但已复现其后粗步变负的标量 N 例子，并给出
+> 为剩余 frozen outflow 预留预算的标量构造。调度与修正支撑确实应分开。
+> 见 [后续推导](RD_P1_full_patch_ledger_20260910.md)；Euler/ALE 仍未解决。
+
 日期：2026-09-09。源码基线 `75c3d6ac65b8edce2741a372fc9507dacf22151e`。
 起因：用户指出 cosmological simulation 的时间层级差异可能很大，旧 RD
 连接等到所有顶点同步时可能已经严重偏离 Delaunay。这个顾虑成立：上一轮
