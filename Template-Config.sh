@@ -73,6 +73,7 @@
 #RD_ALE_CFL_TIMESTEP             # Experimental: include the current-mesh ALE-RD spectral bound in timestep selection
 #RD_ELEMENT_COMOVING_FRAME       # Experimental LDA/N solve and distribution in element co-moving conservative variables
 #RD_ALE_CONTOUR_RESIDUAL          # Experimental P1 conservative-state contour residual; laboratory or element frame
+#RD_ALE_CONTOUR_GAUSS=3          # P1-U edge Gauss3/5: static full-mesh LDA/F1 or equal-step ALE LDA; no positivity limiter
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh
