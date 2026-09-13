@@ -1,5 +1,8 @@
 # AREPO-RD local macOS context
 
+Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
+this file holds local paths, toolchains and the evolving handoff.
+
 Updated: 2026-09-13
 
 This file records the local Apple Silicon development environment for small

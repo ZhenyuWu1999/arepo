@@ -1,3 +1,7 @@
+Agent entry point: [AGENTS.md](../AGENTS.md) contains stable working rules and
+the reading order. This file retains project background and detailed conventions;
+read the latest development-log entries for evolving scientific conclusions.
+
 This directory (/home/zwu/arepo_rd) contains the public version of the state-of-art astrophysics code AREPO. We aim to implement a new hydrodynamics solver based on the Residual Distribution (RD) method to test how it can improve the performance of the existing solver.
 
 ## useful links:
