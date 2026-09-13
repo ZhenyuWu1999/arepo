@@ -89,9 +89,27 @@ def build(root):
     (root/'toolchain.txt').write_text(subprocess.check_output(['/opt/homebrew/bin/mpicc','--version'],text=True)+
                                      subprocess.check_output(['/opt/homebrew/bin/mpiexec','--version'],text=True))
 
+def spatial(root):
+    """Add t=1 Gauss h refinement; old Roe t=1 evidence is not interchangeable."""
+    path=root/'campaign.json';campaign=json.loads(path.read_text())
+    for n,denom in [(48,256),(96,512),(192,1024)]:
+        ic=root/'inputs'/f'yee_glass{n}_boost1.hdf5'
+        if not ic.exists():shutil.copy2(DATA/'lda_baseline_glass_20260911/inputs'/ic.name,ic)
+        for method in ['g3_equal','g3_hier_two']:
+            name=f'yee_t1_n{n}_{method}_r4';folder=root/'runs'/name;folder.mkdir(exist_ok=False)
+            template=(OLD/'runs'/f'yee_{method}_r4_dt256'/'param.txt').read_text()
+            param=rewrite(template,{'InitCondFile':ic.with_suffix(''),'OutputDir':str(folder/'output')+'/',
+                                   'TimeMax':1.,'TimeBetSnapshot':.25,'TimeBetStatistics':.25,'MaxSizeTimestep':1/denom})
+            (folder/'param.txt').write_text(param)
+            campaign['cases'].append(dict(name=name,problem='yee_spatial',method=method,ranks=4,end=1.,n=n,
+                                         denominator=denom,ic=str(ic),ic_sha256=sha(ic),param_sha256=sha(folder/'param.txt')))
+    path.write_text(json.dumps(campaign,indent=2)+'\n');print('Added six t=1 Yee cases.',flush=True)
+
 def run(root):
     for c in json.loads((root/'campaign.json').read_text())['cases']:
-        folder=root/'runs'/c['name'];assert not (folder/'run.log').exists(),str(folder)
+        folder=root/'runs'/c['name']
+        if (folder/'run.log').exists():
+            print('Preserve existing run',c['name'],flush=True);continue
         assert sha(c['ic'])==c['ic_sha256'] and sha(folder/'param.txt')==c['param_sha256']
         binary=root/'build_artifacts'/c['method']/'Arepo';start=time.monotonic()
         cmd=['/opt/homebrew/bin/mpiexec','-n',str(c['ranks']),str(binary),'param.txt']
@@ -127,6 +145,14 @@ def analyze(root):
                    max_mesh_velocity=max(float(np.max(abs(s['w']))) for s in saved),
                    max_area_change=max(float(np.max(abs(s['g']-initial['g']))) for s in saved),
                    distinct_final_bins=list(map(int,np.unique(final['bins']))))
+        counts=re.findall(r'live_vertices=(\d+) frozen_vertices=(\d+) max_ratio=(\d+)',log)
+        row['max_frozen_vertices']=max((int(v[1]) for v in counts),default=0)
+        row['max_star_ratio']=max((int(v[2]) for v in counts),default=1)
+        if c['problem']=='uniform':
+            row['uniform_max_U_difference']=float(np.max(abs(final['u']-initial['u'])))
+            assert row['uniform_max_U_difference']<1e-12
+        if 'hier' in c['method'] and not c['method'].endswith('equal'):
+            assert row['max_frozen_vertices']>0 and row['max_star_ratio']>=2
         assert np.array_equal(initial['id'],final['id']) and abs(final['time']-c['end'])<1e-10
         assert row['min_rho']>0 and row['min_pressure']>0 and row['max_conservation']<1e-11
         assert row['max_coordinate_change']==0 and row['max_mesh_velocity']==0 and row['max_area_change']<1e-12
@@ -135,6 +161,13 @@ def analyze(root):
             assert np.array_equal(ref['id'],final['id'])
             row['test_branch_max_U_difference']=float(np.max(abs(ref['u']-final['u'])))
             assert row['test_branch_max_U_difference']<1e-11
+        if c['problem']=='yee_spatial':
+            xy=(final['x'][:,:2]-np.array([6.,5.])+5)%10-5;r2=np.sum(xy*xy,axis=1)
+            temperature=1-.4*25/(8*np.pi**2*1.4)*np.exp(1-r2);rho=temperature**2.5
+            factor=2.5/np.pi*np.exp(.5*(1-r2));vel=np.column_stack((1-xy[:,1]*factor,xy[:,0]*factor))
+            w=final['g']/final['g'].sum()
+            row['rho_l1']=float(w@abs(final['u'][:,0]-rho))
+            row['velocity_l1']=float(w@np.linalg.norm(final['u'][:,1:3]/final['u'][:,0,None]-vel,axis=1))
         rows.append(row)
     for row in rows:
         if not row['completed'] or row['ranks']!=1:continue
@@ -148,11 +181,35 @@ def analyze(root):
         eq=states[f'yee_g3_equal_r{rank}_dt256'];hier=states[f'yee_g3_hier_equal_r{rank}_dt256']
         difference=float(np.max(abs(eq['u']-hier['u'])))
         checks.append(dict(left='equal',right='hier_equal',rank=rank,max_U_difference=difference));assert difference<1e-11
-    (root/'summary.json').write_text(json.dumps(dict(cases=rows,comparisons=checks),indent=2)+'\n')
+    refinement=[]
+    for method in ['g3_equal','g3_hier_two']:
+        chosen=sorted([r for r in rows if r['completed'] and r['problem']=='yee_spatial' and r['method']==method],key=lambda r:r['n'])
+        if chosen:
+            refinement.append(dict(method=method,n=[r['n'] for r in chosen],rho_l1=[r['rho_l1'] for r in chosen],
+                                   rho_orders=np.log2(np.array([r['rho_l1'] for r in chosen[:-1]])/np.array([r['rho_l1'] for r in chosen[1:]])).tolist(),
+                                   velocity_l1=[r['velocity_l1'] for r in chosen],
+                                   velocity_orders=np.log2(np.array([r['velocity_l1'] for r in chosen[:-1]])/np.array([r['velocity_l1'] for r in chosen[1:]])).tolist()))
+    (root/'summary.json').write_text(json.dumps(dict(cases=rows,comparisons=checks,refinement=refinement),indent=2)+'\n')
+    if len(refinement)==2:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import NullLocator
+        figs=root/'figures';figs.mkdir(exist_ok=True)
+        fig,axes=plt.subplots(1,2,figsize=(9.4,4.1),layout='constrained')
+        for r,label in zip(refinement,['Equal-step Gauss3/F1','Frozen-star Gauss3/F1 hierarchy']):
+            for ax,key in zip(axes,['rho_l1','velocity_l1']):ax.loglog(r['n'],r[key],'o-',label=label)
+        for ax,label in zip(axes,[r'Density $L_1$',r'Velocity-vector $L_1$']):
+            ax.set(xlabel='Full-box resolution per axis',ylabel=label,xticks=[48,96,192],xticklabels=['48','96','192'])
+            ax.xaxis.set_minor_locator(NullLocator())
+            ax.grid(alpha=.2);ax.legend(fontsize=8)
+        fig.suptitle('Static glass advected Yee, t=1 — native develop-branch baseline\nSpatial refinement with timestep caps 1/256, 1/512, 1/1024')
+        for ext in ['png','pdf']:fig.savefig(figs/f'yee_t1_spatial.{ext}',dpi=180)
+        plt.close(fig)
     print(json.dumps(dict(completed=sum(r['completed'] for r in rows),failed=sum(not r['completed'] for r in rows),
                          max_test_branch_difference=max(r.get('test_branch_max_U_difference',0) for r in rows),
-                         comparisons=checks),indent=2))
+                         comparisons=checks,refinement=refinement),indent=2))
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['prepare','build','run','analyze']);p.add_argument('root',type=Path)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['prepare','build','spatial','run','analyze']);p.add_argument('root',type=Path)
     a=p.parse_args();globals()[a.action](a.root.resolve())

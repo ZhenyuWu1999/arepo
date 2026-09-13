@@ -1,7 +1,7 @@
 #!/bin/bash
 # Static full-mesh P1-U Gauss3 LDA/F1 with CFL-selected hierarchy and MPI.
 # Frozen-star hierarchy is conservative; it is not second-order multirate F1.
-# See dev_log/colombo_re_spike/static_gauss_hierarchy_mpi.md for validation.
+# See dev_log/RD_STATIC_BASELINE_CHAPTER4.md for choices and validation limits.
 
 TWODIMS
 GAMMA=1.4

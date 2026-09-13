@@ -2977,3 +2977,99 @@ Archive: workspace `local_runs/euler_flip_closure_20260913`, including
 source snapshots, failure records, JSON/NPZ outputs, native reference, and
 `figures/closure_controls` and `figures/glass_sod_profiles` PNG/PDF pairs.
 No production source/default Config, thesis, log1 or log2 changes.
+
+
+## 36. Static Chapter4 baseline audit and selective return to develop (2026-09-13)
+
+User requested a review of remaining static AREPO-RD issues, allowed returning
+to develop_pureC_RD, and requested a Markdown table of the mathematical and
+technical baseline. User clarified that static mesh should be treated as the
+sigma=0, fixed-connectivity limit of the moving formulation. New primary note:
+[RD_STATIC_BASELINE_CHAPTER4.md](RD_STATIC_BASELINE_CHAPTER4.md).
+It records the unified ALE choices, their static degenerations, actual code
+flags, measured evidence and limits on thesis claims. No thesis text edited.
+
+The clean research branch remains test/colombo-re-explicit-hierarchy at53cb65a.
+Switched this checkout back to develop_pureC_RD (previous315bece). Selectively
+ported the existing Gauss helper, its lab/frame call sites, and static
+full-mesh LDA/F1 contour guards; CR transfer, topology primitive-refresh,
+moving Euler local-closure scripts and lumped diagnostic solver changes were
+not merged. Carried forward the continuous log3/context and historical
+reports, whose experimental code still belongs to their referenced branch.
+
+Source484512a initially failed the standard make macro check because the
+new option was not yet registered. Registered RD_ALE_CONTOUR_GAUSS in
+Template-Config and froze corrected source943f7ae. All five configurations
+then compile through normal make; no checks bypassed. The initial build
+failure is retained separately and never entered fluid evolution.
+Default Config.sh remains untouched. Two explicit reference configurations:
+
+- examples/yee_2d/Config_RD_RK2_LDA_GAUSS3_EQUAL.sh
+- examples/yee_2d/Config_RD_RK2_LDA_GAUSS3_HIER.sh
+
+**26 new native runs complete normally.** Twelve replay gates (uniform;
+equal, equal-bin hierarchy, mixed-bin Yee; Gauss3/5; natural hierarchy Sod,
+ranks1/4) reproduce archived test-branch final conservative densities exactly
+by particle ID: maximum U difference0. The new build retains the previous
+static solver behavior without requiring unrelated moving experiments.
+Maximum saved normalized four-component conservation drift across all26 is
+2.0573e-14; maximum1/4-rank state difference, including KH t2,3.9524e-14.
+Equal-bin degeneration difference≤1.2879e-14. Coordinates and generator
+velocities are exactly static; area reconstructed from Masses/Density varies
+by≤2.0817e-17. All saved rho/p positive and IDs intact. make check_rd passes.
+
+Eight new static glass48 KH controls use the prior smooth width.025 and
+sharp ICs, gamma1.4, p2.5, vy=.1 sin4pi x, CFL.3/cap.02, and zero mesh
+motion. Both equal and natural hierarchy complete smooth t2 and sharp t.05
+on1/4 ranks. Smooth minimum saved rho/p equal=.75707/2.07039,
+hierarchy=.81522/2.08697; sharp=.91912/2.29443 versus.90513/2.31707.
+Natural hierarchy actually has two bins, max ratio2 and max frozen counts
+322/101. Static sharp KH does NOT reproduce the earlier moving sharp KH
+first-step range failure; do not transfer that failure indiscriminately
+between mesh-motion choices. These endpoints do not prove long-time accuracy.
+
+Six additional Gauss3 advected-Yee t1 runs fill the gap left by the shorter
+§33 Gauss sequence and the older Roe t1 references. Same glass family,
+box10/gamma1.4/beta5/boost1, ranks4, n48/96/192, caps1/256,1/512,1/1024:
+
+| Method | rho L1,48/96/192 | rho h slopes | velocity-vector h slopes |
+|---|---|---|---|
+| Equal Gauss3/F1 | 6.15304e-4 /1.67929e-4 /5.13448e-5 | 1.873/1.710 | 1.809/1.856 |
+| Forced2:1 frozen-star Gauss3/F1 | 1.07819e-3 /3.59428e-4 /1.13916e-4 | 1.585/1.658 | 1.712/1.736 |
+
+At192, hierarchy rho/velocity errors are2.22/1.75 times equal-step. This is
+a coupled h/dt finite-resolution sequence, not a dt-extrapolated spatial-order
+proof. The old fixed-h Gauss time orders≈1 and persistent hierarchy-minus-equal
+limit from §33 remain valid; no time algorithm was changed here. Gauss t1
+equal-step trends are comparable to old Roe/F1, but old tables were not
+substituted for new Gauss measurements.
+
+The baseline table makes distinctions that remain essential in the static
+limit. Arpaia A_mid/modified-divisor and Campoli endpoint-average/new-area
+weights coincide when Aold=Amid=Anew. The implemented local frame uses the
+mean GENERATOR velocity, so sigma0 gives the identity Galilean transform;
+it is separate from cosmological comoving coordinates, which are disabled.
+However F1 versus lumped, and F(P1-U) versus F(U(P1-Z)), do not collapse when
+sigma0. Select P1-U contour Gauss3, Roe K matrices, LDA/F1, lab-frame extensive
+ledgers, full local mesh and existing ownership/exchange. Gauss5 is a control,
+N/lumped and rate-Heun separate references. No Gauss point becomes a degree
+of freedom or requires an additional MPI field.
+
+**Audit decision:** freeze these named configurations as reproducible,
+qualified Chapter4 experimental baselines; do not label the static solver
+problem-free. Remaining material limits: standard two-stage GL/F1 fixed-h
+time order1; frozen mask changes leading F1 operator; shock undershoot and
+no general positivity theorem; hierarchical mid-stage restart unsupported
+(run.c deliberately rejects stop/scheduled checkpoints there); no large-rank
+scaling, active-only Gauss, forced migration, 3-D or cosmological validation.
+Existing finite-row rank fallback is a temporal mass fallback, not a spatial
+range completion or a limiter. If the chapter requires an accuracy-equivalent
+second-order multirate LDA method, these results do not establish it.
+
+Reproduction: tests/rd/review_static_baseline.py, stages
+prepare/build/spatial/run/analyze, no CR imports. Archive:
+workspace local_runs/static_baseline_review_20260913/native; includes frozen
+source/configs/binaries, linkage, IC hashes, logs, snapshots, summary and
+figures/yee_t1_spatial PNG/PDF. Failed initial build/check_rd log and branch
+provenance are retained in the parent. New solver build source943f7ae;
+later runner additions are case/analysis-only. No log1/log2 or thesis edits.

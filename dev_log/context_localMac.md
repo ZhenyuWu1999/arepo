@@ -11,6 +11,16 @@ the cluster development logs remain the scientific history of the project.
 record; do not append new local findings there. For the current scientific
 status, read the latest volume-3 entries; the setup-era handoff below is historical.
 
+**Current checkout/baseline (2026-09-13, log3 §36):** returned to
+`develop_pureC_RD`; selective static contour/Gauss port build source943f7ae.
+The experimental branch is preserved at53cb65a. Primary baseline/choice table:
+`RD_STATIC_BASELINE_CHAPTER4.md`. Static is the sigma0 fixed-connectivity ALE
+limit: Arpaia/Campoli geometry choices coincide and the implemented local
+mesh frame is the identity; F1/lumped and P1-U/P1-Z flux choices still differ.
+The named equal/hierarchy Gauss3 configs are qualified experimental baselines,
+not a claim of problem-free or second-order multirate LDA. Default Config
+and thesis are untouched. Details and latest measurements are appended below.
+
 ## Scope and data policy
 
 - The immediate goal is to compile AREPO-RD natively and rerun inexpensive 2-D
@@ -66,7 +76,7 @@ At the time this file was created:
   necessary supplementary handoff until sections 74--83 can be recovered from
   Cuillin or another backup.
 
-The latest local handoff says that one-rank moving-mesh N hierarchy has passed
+The setup-era handoff (superseded by current log3 audits) said that one-rank moving-mesh N hierarchy had passed
 the existing equal-bin, two-bin, stationary-mesh, known-flip and KH gates for
 both the Arpaia and Campoli temporal-mass forms. Arpaia remains the intended
 Chapter 4/production form; Campoli is its endpoint-mass sibling and control.
@@ -520,3 +530,27 @@ long-time stability and accuracy convergence. Frozen-F1 leading-operator
 problem (§33) remains. Chapter4 static hierarchy/MPI → equal-step moving
 extension is still recommended; this candidate can support an ongoing-work
 subsection, not a completed moving-hierarchy claim. Thesis untouched.
+
+**Static baseline review (log3 §36, 2026-09-13):** develop_pureC_RD now has
+the selected Gauss helper/static LDA contour permissions; no CR, moving
+Euler interval-closure or topology-refresh solver code was merged. Historical
+log/report continuity was retained; old experimental scripts remain at their
+referenced test-branch commits. Initial source484512a failed option registration
+before evolution; corrected build source943f7ae passes standard make for5configs.
+Two explicit examples/yee_2d configs: Config_RD_RK2_LDA_GAUSS3_EQUAL.sh and
+Config_RD_RK2_LDA_GAUSS3_HIER.sh. Default Config unchanged.
+26 new native runs all complete:12 replay gates exactly match archived test
+branch U by ID;8 static KH (smooth t2, sharp t.05, equal/natural,1/4ranks)
+pass, including actual mixed bins;6 Gauss Yee t1 h cases. Max conservation
+2.06e-14; max rank-state difference3.96e-14; equal-bin degeneration1.29e-14.
+Static sharp KH does not reproduce the moving sharp first-step A2 failure.
+Gauss Yee t1 rho slopes equal1.873/1.710, hierarchy1.585/1.658; at192²,
+hierarchy rho/velocity errors are2.22/1.75x equal. h/dt refined together;
+no strict asymptotic second-order claim. make check_rd passes.
+Persistent limits: GL/F1 fixed-h time1; frozen hierarchy changes leading
+operator; shock undershoot/no general positivity; mid-stage hierarchy
+restart rejected by existing guards; no active-only Gauss/migration/large-rank
+or cosmological validation. Qualified Chapter4 experimental baseline only.
+Chinese summary/table: RD_STATIC_BASELINE_CHAPTER4.md. Native archive:
+workspace local_runs/static_baseline_review_20260913/native; source943f7ae,
+tests/rd/review_static_baseline.py and Yee t1 PNG/PDF. Thesis untouched.
