@@ -3,7 +3,7 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-09-13
+Updated: 2026-09-14
 
 This file records the local Apple Silicon development environment for small
 two-dimensional AREPO residual-distribution tests. It supplements `context.md`;
@@ -23,6 +23,33 @@ mesh frame is the identity; F1/lumped and P1-U/P1-Z flux choices still differ.
 The named equal/hierarchy Gauss3 configs are qualified experimental baselines,
 not a claim of problem-free or second-order multirate LDA. Default Config
 and thesis are untouched. Details and latest measurements are appended below.
+
+**Current code trial (2026-09-14, log3 §42):** opt-in
+`RD_RK2_SPLIT_STAGES` moves static equal N/LDA predictor/corrector to the two
+main-loop hydro hooks without changing the GL/F1 update. Named trial Config:
+`examples/yee_2d/Config_RD_RK2_LDA_GAUSS3_EQUAL_SPLIT.sh`. See
+`RD_EQUAL_SPLIT_STAGES_20260914.md` for the frozen source,24 native cases,
+restart/extension and actual1155-node MPI remapping gate. Same-rank reference
+states match exactly; other comparisons are at roundoff. The original named
+reference and default Config are retained. Trial source is currently an
+uncommitted working change; no runtime-speed claim or hierarchy F1 change.
+
+**Current common RD hooks (2026-09-14, log3 §47):** Zhenyu explicitly rejects
+the §46 extra mesh build; that preview implementation has been removed.
+The main loop calls rd_step_begin / rd_step_end. Static split still performs
+predictor/corrector at those hooks; equal ALE begin only records the interval,
+then end runs the original two sweeps on the single normally rebuilt mesh.
+No node/DC/RNG rollback, extra tree build, per-node preview cache or duplicate
+ALE geometry remains. Report: `RD_MOVING_SINGLE_MESH_HOOKS_20260914.md`;
+archive: `../local_runs/moving_single_mesh_hooks_20260914_v1`.
+All25 moving cases and14 comparisons pass, including exact t=1/restart
+agreement;1216 hook intervals each have one mesh, one geometry preparation
+and two sweeps. Named Config retains its historical SPLIT filename, with
+updated semantics: `examples/yee_2d/Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh`.
+Moving hierarchy's actual call order and the ALE conservation limitations
+remain. User-edited draw.io is preserved; its two red labels should be
+begin/end, not a claim of moving predictor execution before rebuilding.
+Source/Config/log changes are uncommitted, existing staged work is preserved.
 
 ## Scope and data policy
 

@@ -45,10 +45,34 @@ handoff for the intervening moving-mesh hierarchy work.
 | 19 | Reassessing Colombo--Re: published P1 geometry, implicit time coupling, and AREPO port cost |
 | 20 | Test branch: explicit geometric generator, local nodal closure, five-agent validation and C kernel |
 | 21 | Native CR-inspired Euler tests, limited high repair, RK2 dissipation audit and Campoli controls |
-| 22 | Sod actual Nx=48 (full box 96²): matched N/LDA RK2 topology comparisons and OpenMP runtime correction |
+| 22 | Sod actual Nx=48 (full box 96^2): matched N/LDA RK2 topology comparisons and OpenMP runtime correction |
 | 23 | High-repair semantics, LDA velocity ablations and older Sod plotting conventions |
 | 24 | Actual Sod resolution and glass controls: GL/F1 undershoot and contour scatter without flips |
 | 25 | Baseline first: four Heun paths, temporal versus spatial accuracy, and historical decisions |
+| 26 | Matched advected-Yee baseline and auxiliary time ladder |
+| 27 | Moving LDA baselines and the limit of direct ALE rate-Heun |
+| 28 | Gauss physical-flux contour suppresses the Sod plateau scatter |
+| 29 | Gauss contour cost and smooth/sharp moving KH |
+| 30 | P1/ALE contour derivation and late-KH literature comparison |
+| 31 | Chapter 4 Gauss draft and legacy Roe-split KH/Sod controls |
+| 32 | Extending legacy split with Gauss: equivalence, not a third scheme |
+| 33 | Static contour Gauss with hierarchy and MPI; frozen-F1 accuracy boundary |
+| 34 | Sod plotted coordinates, shock-local hierarchy and Morton comparison |
+| 35 | Moving Euler hierarchy retry: actual-interval star closure |
+| 36 | Static Chapter 4 baseline audit and selective return to develop |
+| 37 | Review of the static Chapter 4 baseline; accepted corrections, F1 hierarchy consistency, weakened spatial-order claim |
+| 38 | Codex review of section 37: geometry bug in its scalar model, and five further qualifications |
+| 39 | Static Chapter 4 priorities and a bounded F1 hierarchy repair direction |
+| 40 | Where F1 enters the complete static update |
+| 41 | Chapter 4 flowchart, hierarchy and MPI figure feasibility |
+| 42 | Split static equal RK2 between the main-loop hydro hooks |
+| 43 | Revise a copy of the AREPO flowchart to the loop body |
+| 44 | Editable draw.io version of the revised main-loop figure |
+| 45 | Moving-RD scope and proposed flowchart numbering |
+| 46 | Experimental moving equal RK2 split; short gates pass, long pointwise gates fail |
+| 47 | Remove the preview; common RD begin/end hooks with one mesh per step |
+| 48 | Claude review handoff: current RD begin/end structure, one-mesh evidence, and editable flowchart locations |
+| 49 | Review of the begin/end refactor and the revised main-loop figure; section 38 accepted |
 
 ---
 
@@ -1038,6 +1062,22 @@ and sections 13--15 above. Raw campaigns are under
 `/Users/zhenyuwu/arepo_rd/local_runs/p1_active_transfer_20260909`.
 
 ## 17. 2026-09-10: independent review of the topology/hierarchy proposals, with two corrections to section 16 and two to my own first pass
+
+> **2026-09-13 correction notice (see section 37).** Codex's section 18.1 raises
+> four qualifications to this section and all four are verified correct. Three
+> are errors of mine: (a) 17.6's regular-star threshold r*=13 describes the
+> FULL-PATCH map and does not rehabilitate the active-only map, whose obstruction
+> survives a regular star for r>6, so using it to "correct" section 16's
+> active-only counterexample conflated two different operators; (b) 17.6's random
+> Euler scan used low-Mach velocities and cannot support a positivity statement
+> for arbitrary admissible states -- counter-streaming at density contrast 1
+> already breaks the high map; (c) 17.4's convex-hull argument bounds CONSERVED
+> components only, not pressure or specific entropy, so the relaxed-DMP limiter
+> proposed there does NOT target the section-71.4 entropy excursion, which was
+> its stated rationale. The limiter may still be worth having for positivity, at
+> lower priority and for a different reason. 17.7's operator identity also holds
+> only when the asynchronous remainder Q^- - g^- U vanishes.
+
 
 **Author:** Claude Code (Opus 5), at Zhenyu's request. **Baseline:**
 `75c3d6ac65b8edce2741a372fc9507dacf22151e`. No production C or thesis file was
@@ -3073,3 +3113,1035 @@ source/configs/binaries, linkage, IC hashes, logs, snapshots, summary and
 figures/yee_t1_spatial PNG/PDF. Failed initial build/check_rd log and branch
 provenance are retained in the parent. New solver build source943f7ae;
 later runner additions are case/analysis-only. No log1/log2 or thesis edits.
+
+## 37. 2026-09-13: review of the static Chapter 4 baseline; accepted corrections, an F1 hierarchy consistency finding, and a weakened claim about spatial order
+
+> **2026-09-14 correction notice (see sections 38 and 49).** Three errors in this
+> section. (a) The scalar model of 37.5 wrapped connectivity indices but not
+> coordinates, so seam triangles were built from opposite sides of the box: its
+> operator norms are inflated by about 35% and its area sum was 3.4 rather than 1.
+> Corrected in 49.1; the plateau and the stale-rate mechanism both survive the fix.
+> (b) 37.4 offered the median-dual/Voronoi mismatch as a live competing
+> explanation, but that attribution was withdrawn in volume 1 and the code uses
+> DualArea throughout; the recommendation there stands, its stated reason does not.
+> (c) 37.3 cited Morton figure 7 / section 5.1.1 for KH conservation; the correct
+> reference is figure 6 / section 5.2.1.
+
+
+**Author:** Claude Code (Opus 5), at Zhenyu's request. **Source reviewed:**
+`603465e` (`943f7ae` for the native solver build). No production C, Config or
+thesis file was changed in this entry and no native run was made; the checks
+below are independent Python model problems and algebra, listed in 37.6.
+
+Scope: review of sections 18--36 and `RD_STATIC_BASELINE_CHAPTER4.md`, answering
+Zhenyu's two questions -- whether Chapter 4 may present the static mesh first
+with moving mesh following, and whether the static solver can now be called
+problem-free -- and recording his three directions on the answers.
+
+### 37.1 Codex's four qualifications to section 17 are accepted
+
+All four were re-derived in exact rational arithmetic and all four hold. A
+correction notice now heads section 17. In summary:
+
+1. The active-only obstruction is **not** an artefact of small exterior masses.
+   With old nodal masses (1,1,1,1), new (5/6,7/6,5/6,7/6), A and C active and
+   rho=(1,r,1,r), the required active mass is 2-r/3, negative for r>6. My
+   r*=13 table describes the full-patch high map, a different operator; using it
+   against section 16's active-only counterexample was a conflation.
+2. Low density contrast does not imply positivity of the full-patch high map.
+   On the same regular star with gamma=1.4, rho=p=1, vx=(4,-4,4,-4), E=10.5, the
+   high map gives pressures (-7/45, 89/45, -7/45, 89/45). My random scan drew
+   velocities from N(0,0.3) and never sampled counter-streaming; it cannot
+   establish a theorem for arbitrary admissible states.
+3. The section-17.7 identity between the widened active-only map and the
+   production map omits the asynchronous remainder Q^- - g^- U, and holds only
+   where that vanishes.
+4. **The most consequential.** A convex hull of conserved vectors bounds
+   conserved components, not pressure or specific entropy. On the same
+   counter-streaming state every old p=1 while the conservative patch average
+   has p=4.2: mixing converts kinetic to internal energy. Section 71.4 measured
+   the excursion in specific entropy, so a relaxed component DMP does not bound
+   it. **The stated rationale for the section-17.4 limiter is therefore wrong.**
+   The limiter remains defensible as a positivity device -- qualification 2
+   shows the high map does produce negative pressure -- but it is not the remedy
+   for the recorded entropy excursion, and it drops in priority accordingly.
+
+### 37.2 Chapter 4 organisation: agreed, with the emphasis made explicit
+
+Zhenyu clarified that "moving mesh as ongoing work" always meant: present the
+**equal-step** moving-mesh results as the substantive content, and mention
+hierarchical timesteps briefly as ongoing work whose conclusions are not
+settled. That is the same position reached independently here, and my earlier
+concern was a misreading of the shorthand rather than a disagreement.
+
+Writing the static mesh as the sigma=0, fixed-connectivity limit of the unified
+ALE formulation is the right construction. The mathematics is stated once, the
+chapter needs no restructuring when the moving material arrives, and the table
+in section 2 of `RD_STATIC_BASELINE_CHAPTER4.md` does the load-bearing work by
+naming what does **not** degenerate at sigma=0 -- F1 versus lumped, and
+F(P1-U) versus F(U(P1-Z)). Those are exactly the two places where a static
+result would otherwise be over-extended to the moving case.
+
+The distinction worth keeping visible in the chapter is that the static limit
+is a controlled baseline rather than a contribution: static triangular RD is
+established work. The contribution lives in the ALE/moving material of tier 2,
+and the chapter's framing should make that ordering evident so the static
+sections read as validation rather than as the result.
+
+### 37.3 Measuring the hierarchy's benefit: two figures, not one
+
+Zhenyu asks for a figure demonstrating the benefit of hierarchical timesteps,
+citing Morton (2023), where -- in his account -- the hierarchical timestep was
+not conservative and the paper therefore plotted the relative energy error
+against time on Kelvin--Helmholtz. Agreed, and the present situation calls for
+two distinct figures because our conservation status is different.
+
+1. **A relative-drift-against-time figure on KH.** Our static hierarchy is
+   conservative to roundoff: section 36 records maximum normalised
+   four-component drift 2.0573e-14 over 26 runs. Plotted against a
+   Morton-style curve this shows directly that the predecessor's known
+   non-conservation has been removed. This is a comparison to prior work, and
+   its value is precisely that our curve is flat.
+2. **A work-precision figure.** Because our curve is flat, figure 1 says nothing
+   about whether multirate *pays*. That requires error against cost -- L1 error
+   versus wall-clock time for equal-step and hierarchy at several resolutions,
+   run to the same final time with the same spatial discretisation. This is the
+   figure that answers the question the chapter actually poses.
+
+**The second is currently unsupported: no speedup, wall-time or efficiency
+measurement appears anywhere in the logs or reports.** Meanwhile the accuracy
+cost is now measured -- section 36 gives hierarchy errors 2.22x (density) and
+1.75x (velocity) of equal-step at 192^2. A chapter about hierarchical timesteps
+that quantifies only the cost and not the benefit is incomplete, and the missing
+half is cheap: the existing Sod and KH configurations need only to be timed.
+
+Two cautions on the figures. Wall-clock on this laptop is noisy and was already
+flagged as unusable for the earlier moving-mesh timing (section 71.2 of volume 2
+recorded a shared node); cost should be reported as a machine-independent count
+-- due-element sweeps or residual evaluations -- with wall time as a secondary
+column. And `RD_STATIC_BASELINE_CHAPTER4.md` section 3 notes the Gauss contour
+already raises flux evaluations per sweep from 3 to about 15/21, so the cost
+axis must be defined consistently across both methods. On the Morton details,
+`context_localMac.md` already records that his setup uses gamma 5/3, CFL 0.4 and
+first-order LDA/N, and that section 5.1.1 / figure 7 do not state a final time;
+any comparison figure must be labelled as a comparison, not a reproduction.
+
+### 37.4 Spatial order: my contamination claim is weakened to an open question
+
+I had argued that the section-36 Yee t=1 table cannot establish second-order
+spatial accuracy because dt is refined proportionally to h while the measured
+fixed-h time order is about 1, so the total error behaves as A h^2 + B dt and
+the observed order drifts down rather than up. A two-term least-squares fit to
+the equal-step density sequence gives A=5.54e-4, B=6.10e-5, reproducing the
+observed 1.873 -> 1.710 and putting the linear term at 10%/18%/31% of the total
+at n=48/96/192.
+
+**Zhenyu's recollection that the time error was not important on earlier Yee
+experiments is well founded, and it exposes a gap in that argument.** The fit
+establishes only that a term **linear in h** contributes about a third of the
+error at n=192. It cannot attribute that term to the time discretisation,
+because a spatial error linear in h fits identically. There is a specific
+competing candidate already on record: the median-dual versus Voronoi cell
+inconsistency, open question 1 of `context.md` and still open, which the
+2026-07-30 volume-1 entry proposed as the cause of exactly this signature.
+
+The historical record does not separate them either. That entry measured
+advected Yee orders 1.55 then 1.31 -- the same downward drift -- and attributed
+it to geometry. Its boost=0 control gave clean 2.01/2.07, but a stationary
+vortex is a steady solution, so the time-discretisation error vanishes
+identically there; the control is therefore consistent with both hypotheses and
+discriminates neither.
+
+The decisive experiment is cheap and should replace the argument: **hold h fixed
+at the finest resolution and refine dt alone.** If the L1 error against the
+analytic solution falls by roughly the predicted third, the linear term is
+temporal; if it barely moves, it is spatial or geometric and Zhenyu's
+recollection is confirmed. Either way the presentational conclusion is
+unchanged and modest -- a sequence with dt tied to h does not by itself
+establish a spatial order -- but the cause should not be asserted until that
+run exists.
+
+### 37.5 The frozen-star F1 hierarchy is not a consistent refinement of equal-step
+
+This is the one finding here that is not a qualification of something already
+recorded, and Zhenyu has asked Codex to re-verify it. The model specification is
+given in full so that it can be checked independently.
+
+Sections 33 and 36 state that with lumped S, F1 mass action M, v=-S^{-1}R and
+live mask P, the equal-step leading rate is v+(I-S^{-1}M)v while the hierarchy
+gives v+(I-S^{-1}M)Pv, and that the difference survives dt->0. An independent
+reimplementation confirms this and adds two observations.
+
+First, the two-pass structure is exactly one Jacobi iteration preconditioned by
+S toward the consistent-mass system M w = -R: starting from w0 = v,
+w1 = w0 + S^{-1}(-R - M w0) = v + (I - S^{-1}M)v. This identifies what the
+second pass is approximating and why masking it is not a neutral scheduling
+choice.
+
+Second, the magnitude. On a periodic perturbed structured triangulation with
+scalar advection and LDA betas, ||I - S^{-1}M||_2 = 1.3012, 1.3747, 1.4163 at
+n=12, 24, 48: an O(1) operator that grows slightly under refinement rather than
+vanishing. Masking it at frozen vertices is therefore an O(1) relative change of
+the rate there, not a small perturbation. (Uniform states remain exact because R
+annihilates constants, giving v=0; this does not come from the row sums of
+I - S^{-1}M, which are not zero.)
+
+At fixed mesh n=24 with a fixed 50% frozen mask, RK2, T=0.05, the difference
+between hierarchy and equal-step is 1.101510e-2, 1.101511e-2, 1.101512e-2,
+1.101512e-2, 1.101512e-2, 1.101512e-2 for 50 to 1600 steps, i.e. constant to six
+significant figures across a 32-fold reduction in dt. This reproduces the
+native Yee48 observation in section 33, where the difference moved from 5.028e-4
+to 5.078e-4 instead of falling.
+
+**The mechanism is the masking, not the multirate schedule.** Replacing the
+zeroed frozen rate with a stale one -- the frozen vertices contribute v
+evaluated on their own frozen state, refreshed once per coarse step -- gives
+differences 1.226056e-4, 6.103277e-5, 3.044877e-5, 1.520747e-5, 7.599507e-6,
+3.798696e-6 over the same ladder: clean first-order convergence to the
+equal-step answer. The cost is one extra residual evaluation per coarse vertex
+per coarse step.
+
+**Limits of this model.** Scalar advection, linear flux, fixed mask, fixed
+geometry, no MPI, and the scalar beta rather than the matrix beta of the Euler
+system. It locates a mechanism and is not a proposed production algorithm; in
+particular it does not address how a frozen vertex's stale rate would be
+obtained when its incident triangles are not due, nor what the equivalent
+statement is once the mask itself changes with the solution. The value of the
+finding, if Codex's re-verification sustains it, is that section 36's "frozen
+mask changes the leading F1 operator" moves from an intrinsic accuracy cost to
+be reported, to an implementation choice that may be repairable -- which would
+also change what the work-precision figure of 37.3 is measuring.
+
+### 37.6 Assessment and suggested order
+
+The static baseline should not be described as problem-free, and
+`RD_STATIC_BASELINE_CHAPTER4.md` is right to decline that description. It is a
+defensible frozen baseline with declared limits. The material open items, in the
+order I would address them:
+
+| priority | item | state |
+| --- | --- | --- |
+| P0 | Timing/cost measurement for the hierarchy, and the two figures of 37.3 | benefit never measured anywhere; cost already measured at 2.22x |
+| P0 | Fixed-h dt refinement at the finest Yee resolution (37.4) | decides between temporal and geometric attribution; either way the table cannot alone establish spatial order |
+| P1 | Codex re-verification of 37.5, then a decision on the stale-rate variant | determines whether the hierarchy's accuracy cost is intrinsic or an implementation choice |
+| P2 | Naming: standard two-pass GL/F1 has fixed-h time order about 1 while the configurations are named RK2 | already recorded in section 36; needs to be explicit in the chapter text, not only in the log |
+| P3 | Section-17.4 limiter, on positivity grounds only | rationale corrected in 37.1; qualification 2 shows the need is real |
+| declared | Sod undershoot and absence of a positivity theorem; mid-stage restart unsupported; MPI limited to 1/2/4 ranks with CREATE_FULL_MESH | acceptable as stated limitations |
+
+Reproduction, all NumPy-only and independent of the solver:
+
+```sh
+PY=/Users/zhenyuwu/miniconda3/envs/21cmfast/bin/python
+$PY verify_codex.py      # 37.1, exact rational checks of the four qualifications
+$PY f1_consistency.py    # 37.5, operator norm and the dt ladder plateau
+$PY f1_fix.py            # 37.5, stale-rate variant restoring first-order convergence
+$PY order_fit.py         # 37.4, two-term fit; see the attribution caveat there
+```
+
+These are scratch model problems rather than archived campaigns; they are
+retained under the session scratchpad and should be re-run from the listing
+above rather than cited as provenance. They are not Euler PDE, MPI, moving-mesh
+or convergence validation of the solver itself.
+
+## 38. 2026-09-13: Codex review of Claude's Chapter 4 writing comments
+
+**Author:** Codex (GPT-6), at Zhenyu's request. Reviewed section 37, its four
+scratch scripts, the current static source, Chapter 4 draft, later historical
+corrections and Morton2023. HEAD5f3db11; native baseline remains943f7ae.
+No thesis, production C or Config edits; no new native AREPO runs. Claude's
+235 staged log lines are preserved. Full review:
+[RD_CHAPTER4_CLAUDE_REVIEW_20260913.md](RD_CHAPTER4_CLAUDE_REVIEW_20260913.md).
+
+The proposed chapter structure and the fixed-h F1 mask diagnosis are accepted,
+with six corrections/qualifications:
+
+1. The median-dual/Voronoi mismatch invoked in37.4 was explicitly excluded in
+   log1: update, primitive recovery and norms use DualArea, as current code
+   still does. August1 completed dt ladders already separated the old jittered
+   h-order defect from its sub-2% temporal effect. September11 Roe/glass native
+   controls also measured small temporal effects. New Gauss192,t1 needs its
+   own check; this does not make the historical evidence absent.
+2. The scalar model wraps connectivity indices but not triangle coordinates.
+   Its unit-box area sums are3.360967/3.673606/3.835069, with44/92/188 inverted
+   triangles at n12/24/48. Independent assembly reproduces its reported norms
+   and ladders. Correct periodic lifting gives area1, no inversions and norms
+   1.020864/1.021939/1.022443, replacing1.301185/1.374722/1.416294.
+3. The corrected n24 model still has a masked/equal plateau: mean nodal L1
+   1.33024105e-2 to1.33024211e-2 for50--1600 steps, T.05. Cached-rate error
+   falls1.13441625e-4 to3.52298429e-6; maximum weighted mass drift1.35e-16.
+   Thus the mechanism survives the geometry correction. This all-node Heun
+   ODE model implements no due-triangle scheduler, live-star closure or MPI;
+   it establishes neither a production repair nor its claimed coarse-vertex
+   cost. An operator norm is not a lower bound on every state's masked error.
+4. A fitted31% linear-in-h share is not a measured temporal-error budget.
+   Total L1 can rise as dt shrinks because errors cancel; historical native
+   runs show that. Compare numerical states and use a verified dt ladder,
+   not a predicted one-third drop. Continuous stationary Yee does not imply
+   a discrete exact equilibrium or identically zero time error.
+5. Morton KH conservation is Fig6 / section5.2.1. The Fig7/section5.1.1 and
+   first-order solver details copied into37.3 belong to the earlier Sod audit.
+   Use case-specific KH energy history and matched/declared settings; the
+   26-run maximum four-component drift is not a KH energy time series.
+6. Existing Gauss CPU/wall timings, GL/F1--rate-Heun timings and moving-model
+   work counts refute the blanket claim of no cost measurements anywhere.
+   They still do not supply the missing current static-hierarchy work-precision
+   comparison. Timing Sod/KH alone is insufficient without an accuracy target.
+
+Writing may proceed with static implementation/validation followed by equal-step
+moving results and a brief moving-hierarchy outlook. Static RD theory is prior
+work, but the conservative AREPO implementation and MPI/hierarchy audit remain
+reportable project results. Efficiency claims require matched cost evidence;
+implementing stale-rate is not a prerequisite for describing the existing
+qualified baseline. Keep fixed-h time order and hierarchy operator differences
+explicit, and retain section37.1's accepted corrections.
+
+Reproduction: tests/rd/review_ch37_models.py (NumPy/SciPy, one OMP/BLAS thread).
+Archive: workspace local_runs/chapter4_claude_review_20260913, with original
+scripts/log snapshot and hashes, independent script, geometry/model JSON,
+and exact active-only/pressure counterexamples. This is algebra/model evidence,
+not new Euler, moving-mesh, MPI or spatial-order validation.
+
+## 39. 2026-09-13: static Chapter 4 priorities and a bounded F1 hierarchy repair direction
+
+**Author:** Codex (GPT-6), responding to Zhenyu's follow-up. Zhenyu agrees
+that the hierarchical implementation needs a figure showing its benefit,
+referring to Morton2023's non-conservative DRIFT KH energy history, recalls
+small temporal effects on earlier Yee tests, and asks for an opinion on F1
+hierarchical timesteps. This entry records advice, not authorization to switch
+the baseline or a completed solver change.
+
+A KH fractional-energy-drift history is a worthwhile result in its own right:
+it demonstrates the conservation improvement relative to the earlier method.
+Use current equal/hierarchical runs with actual bins and matching settings,
+and describe any unmatched Morton comparison explicitly. A speed/efficiency
+claim additionally needs work versus accuracy; the conservation figure alone
+does not measure that. The September11 Roe/glass controls support Zhenyu's
+memory: halving dt changes analytic density L1 by under1%, with state
+differences about1.3--1.4% of the original error. A matched latest-Gauss check
+is useful, but there is no basis to assert a one-third temporal contamination.
+
+Recommendation: retain F1 and the current frozen-star implementation as an
+identified reference, while prioritising recovery of the equal-step fixed-h
+limit in an isolated static experiment. The current mask changes that limit;
+this does not by itself prove failure of joint h/dt convergence to the PDE,
+nor establish that the accuracy penalty is intrinsic to multirate methods.
+The first repair target is consistency with the existing equal-step GL/F1,
+whose measured fixed-h time order remains one, rather than simultaneous
+replacement of the mass matrix, time integrator and spatial residual.
+
+A concrete candidate is to separate the F1 mass rate from the hydrodynamic
+stage trace. Preserve the existing shared frozen spatial trace. For mass
+correction only, use current full-star v at live vertices and a timestamped,
+previously complete full-star v at frozen vertices. On a static triangle let
+a_i^T=h_T r_i and use the entire correction
+
+    delta Q_i^T = (A_T/3) [ a_i^T - beta_i^T sum_j a_j^T ].
+
+Its sum is zero when sum_i beta_i^T=I; apply the existing lumped fallback as
+a whole on rank-deficient elements. Replacing both terms together preserves
+this algebraic property for any common element rate data. Do not simply put
+a coarse predictor into RD_dU: that field also changes spatial stage states.
+The cached v must be normalised by the full nodal area and assembled over
+the full star, not over only currently due triangles. Obtaining and exchanging
+that rate with correct timestamps is the unresolved implementation/cost issue.
+
+For a fixed smooth stable branch, a cache age of O(h_coarse) and a bounded
+mass action would leave an O(h_coarse) rate perturbation, consistent with the
+corrected scalar model in section38. This is a candidate derivation only.
+The decisive next native gate would use fixed geometry and a fixed2:1 pattern,
+refining both bins together and verifying that hierarchy-minus-equal tends
+to zero while conservation remains at roundoff. Only after that gate should
+one assess Yee h-error, Sod/KH behaviour, MPI and work--precision for the new
+candidate. No native runs, C/Config changes or thesis edits made here.
+
+## 40. 2026-09-13: where F1 enters the complete static update
+
+**Author:** Codex (GPT-6). Zhenyu asks for the full-update position of F1
+and why the current hierarchy is more than an equal-step scheduling change.
+Source/read-only derivation; no implementation, run or thesis change.
+
+For static median-dual S, Q=SU and assembled LDA residual R, write
+w(U)=-S^-1 R(U). The equal-step predictor is delta U=dt w(Un), U*=Un+delta U.
+F1 has element blocks m_ij^T=(A_T/3) beta_i^T for every j in T, so its mass
+action couples the three nodal time increments. With the current mixed-stage
+convention, the temporal mass uses beta* and the spatial halves use beta^n
+and beta*, respectively. The full GL/F1 update is exactly
+
+    Unew = U* - S^-1 M* delta U - (dt/2) S^-1 [R(Un)+R(U*)]
+         = Un - (dt/2) S^-1 [R(Un)+R(U*)] + (I-S^-1 M*) delta U.
+
+Thus F1 sits in the corrector's temporal residual; the method does not invert
+the global F1 mass matrix. Setting M=S removes the last correction and gives
+ordinary lumped Heun. The code's U*+delta U/2 form is algebraically identical
+after substituting delta U=-dt S^-1 R(Un).
+
+For each due hierarchy triangle with interval dt_T, the combined opening and
+closing ledger increment is
+
+    delta Q_iT = -(dt_T/2)[phi_iT(U0)+phi_iT(U1)]
+                 +(A_T/3)[delta U_i - beta_iT* sum_j delta U_j].
+
+The hierarchy supplies a full predictor at a stage-live vertex and zero at
+a frozen vertex. Its Q ledger still receives increments: zero RD_dU is a
+stage-trace policy, not zero conserved evolution. Reusing that zero in the
+F1 mass action suppresses the frozen coupling and also changes neighbouring
+vertices' temporal corrections. The correction still sums to zero per
+element; global spatial conservation additionally relies on shared traces
+and complete interval coverage. The rank-deficient lumped fallback removes
+the temporal correction locally and does not invalidate this distinction.
+
+For fixed mask P, smooth states and coherent interval coverage, taking all
+steps to zero at fixed mesh yields w+(I-S^-1M)w for equal-step, versus
+w+(I-S^-1M)Pw for the current hierarchy. Their rate difference need not
+vanish. A scheduling approximation to the same discretisation should instead
+recover the same fixed-mesh rate as all bins shrink with their ratios fixed;
+finite-step equality is not required. Equal-bin degeneration P=I and exact
+conservation therefore do not by themselves establish that stronger property.
+
+Follow-up notation preference from Zhenyu: explain this using Chapter3's
+existing nodal/element notation and define every added symbol before use.
+Re-read chapter3.tex lines1009--1112: lowercase phi_i^T is the distributed
+spatial residual, uppercase Phi_i^T includes the temporal mass contribution,
+and F1 is the displayed LDA choice m_ij^T=(|T|/3) beta_i^{LDA,T}. If used,
+delta U_i is explicitly U_i* minus U_i^n, the predictor increment, not the
+completed step U_i^{n+1} minus U_i^n. Prefer these element formulas to newly
+introduced global S/M/P/rate notation when explaining the mechanism. No
+Chapter3 or Chapter4 edits made.
+
+Zhenyu's subsequent assessment: a test can demonstrate that the conservative
+hierarchy is not exactly equivalent to advancing all vertices at the finest
+bin; he regards this as potentially a manageable limitation and asks whether
+live/frozen interleaving is common to hierarchical methods. Agreed that this
+need not block static Chapter4 writing or force an immediate repair. Distinguish
+ordinary finite-step differences from the persistent fixed-mesh limiting-rate
+difference already measured here. The current complete-star frozen rule is
+stronger than simply being inactive on one fine tick; zeroing its F1 stage
+increment is a specific choice, not a mathematical necessity of asynchronous
+clocks. Existing cached-rate scalar controls illustrate the distinction without
+establishing a native alternative. A useful presentation pairs conservation
+with a controlled fixed2:1 timestep ladder against equal steps at the finest
+interval, plus actual error/cost when judging utility. Severity should follow
+observed accuracy, robustness and cost for the intended cases; disagreement
+with equal-step alone neither disqualifies a method nor proves acceptable
+PDE accuracy. User has not requested implementation of a new F1 variant.
+
+## 41. 2026-09-14: Chapter 4 flowchart, hierarchy and MPI figure feasibility
+
+**Author:** Codex (GPT-6). Zhenyu asks to consult log1/2 and the old thesis
+resources, assess the feasibility of an AREPO/RD flowchart, a triangle-based
+hierarchical-timestep algorithm with KH conservation/cost results, and MPI
+responsibility illustrations. Full recommendations and source anchors:
+[RD_CHAPTER4_STRUCTURE_FEASIBILITY_20260914.md](RD_CHAPTER4_STRUCTURE_FEASIBILITY_20260914.md).
+
+Inspected the complete one-page 2023 Arepo_flowchart.pdf under MyThesis,
+relevant old logs/notes, current source hooks, and the old task-responsibility
+PNG/notebook under Desktop/arepo_test. The flowchart already includes RD;
+redrawing must distinguish equal internal two-stage execution at the later
+hook from static hierarchy predictor/corrector at separate hooks. The old
+notebook uses majority-task ownership: reuse its visual style, not that rule.
+Current full/persistent mesh ownership uses the minimum (ID,task) vertex's
+primary instance, independently of due activity; active-only rebuild has a
+conditional minimum-finest-bin rule. Large source refactoring is not a
+prerequisite to drawing or writing.
+
+Recommend three method figures (outer flow plus RD inset; triangle bins and
+opening/closing timeline; MPI ownership and state/increment exchanges), then
+KH energy history and matched work--precision results. The node remains the
+unknown/timebin owner; the triangle is the residual scheduling unit. Use
+Chapter3 notation and define additional symbols. Keep current frozen F1 as
+an explicitly characterised implementation choice; user has not requested
+a replacement and this need not block Chapter4 writing.
+
+Read-only inventory of archived 943f7ae outputs is saved at
+`../local_runs/chapter4_structure_review_20260913/existing_result_inventory_20260914.json`,
+including snapshot hashes, actual times, energy histories and raw wall times.
+Smooth KH equal/hierarchy at ranks1/4 each have11 snapshots through t=2;
+maximum sampled fractional energy drift across them is2.77e-16. Hierarchy
+rank1 sums to zero in this analysis and rank4 reaches1.38e-16: this is a
+floating-point sampled result, not an all-stage exactness claim. Natural KH
+has at most two bins here. The conservation history can be drawn now.
+
+Found an important performance-comparison mismatch: forced two-bin Yee at
+t=1 uses a finest step half the equal case under the same stated cap. For
+48/96/192, equal uses1/256,1/512,1/1024 and hierarchy finest uses1/512,1/1024,
+1/2048, respectively. Existing wall-time ratios are therefore not speedup
+relative to equal-at-finest. The original times are also single-shot DEBUG
+runs. Add matched actual finest steps and repeated, controlled timing before
+an efficiency claim; pair analytic Yee error with cost and use KH for the
+conservation/flow example. No new native simulations, C/Config changes or
+thesis edits. Preserved the existing235 staged log insertions untouched.
+
+## 42. 2026-09-14: split static equal RK2 between the main-loop hydro hooks
+
+**Author:** Codex (GPT-6). Zhenyu authorizes trying the equal predictor at the
+first hydro hook and corrector at the second, as the first implementation
+step. He also clarifies the later diagram: timebins belong to nodes;
+triangles use the finest incident-node frequency; frozen nodes passively
+receive conserved increments without refreshing their stage state on each
+such event. This turn implements and validates the code change only.
+
+Implemented opt-in RD_RK2_SPLIT_STAGES and the explicit Gauss3/F1 trial Config
+`examples/yee_2d/Config_RD_RK2_LDA_GAUSS3_EQUAL_SPLIT.sh`. Static equal N/LDA
+reuse the original full-step predictor/F1 corrector algebra across two calls;
+hierarchy's ledger and frozen policy are unchanged. Stage Un lives in SphP,
+predictor DualArea survives the corrector, and temporary triangle indices
+are rebuilt. Renamed the internal algebra guard RD_RK2_INTERNAL_LOOP to
+RD_RK2_EQUALSTEP so its name also fits split calls. Moving/B/four-pass Heun
+remain internal and incompatible split combinations are guarded.
+
+Added All.RD_EqualStepEnd as a binary-restart stage marker and endpoint
+assertion. Pending checkpoints resume the corrector; a completed restart
+starts a new predictor when extended. The initial extension test exposed
+static restart mesh construction restoring particle bins but leaving
+timebin lists in the temporary all-active bin. Split restart setup now
+reconstructs the lists and active-bin metadata after restoring actual bins;
+timebase extension also rescales the pending endpoint.
+
+Full report: [RD_EQUAL_SPLIT_STAGES_20260914.md](RD_EQUAL_SPLIT_STAGES_20260914.md).
+Final archive: `../local_runs/equal_split_stages_20260914_v2`. Frozen base
+5f3db112 plus source patch SHA256
+67d22fd4d3c1646f81a9bf4f9ebdb9f0222c1de176360f6a7284a0d6e9f2f7a9;
+source tar SHA25636e534ca5ed2c57ddc2572c5a39a2f4208c73e4dc985349ce283c25c201c0d81.
+Eight isolated configs;24 successful native cases/30 launches. Both thread
+limits set to1. Same-rank split vs internal U is exactly identical for Yee,
+uniform, Sod, N and KH(t=2), including Yee96 t=1 against the frozen archive.
+All compared MPI/hierarchy degeneration differences <=1.29e-14; maximum
+sampled normalized global conservation defect7.50e-15. Stop/resume and both
+completed/pending checkpoint extensions reproduce continuous runs exactly.
+Changing allowed domain parameters on resume migrates1155/2304 nodes before
+the pending corrector; final difference6.66e-15. Ordinary repeated rebuilds
+settle to zero transfers, so that separate remap gate supplies actual
+migration evidence. All existing make check_rd algebra checks passed.
+
+Preserved a setup-name failure, sandbox MPI launch failure and v1 endpoint
+assertion failure; details in the report. The final working C/config source
+matches the v2 archive. No speedup claim: split calls classify geometry twice.
+Reference/default configs, thesis, historical logs and the existing235 staged
+log insertions remain unchanged. No commit made; the opt-in code is ready
+for review without promoting it over the named September13 reference.
+
+## 43. 2026-09-14: revise a copy of the AREPO flowchart to the loop body
+
+**Author:** Codex (GPT-6). Zhenyu requests retaining only the main-loop body,
+lightly revising the wording, and editing a copy without touching the original.
+Copied the 2023 PDF first, preserved its coloured vector layout, removed the
+initialization/pre-loop lanes, and updated the two red blocks to the static
+RD predictor/corrector hooks validated in section42. Retained FV labels and
+conditional gravity/source/mesh context; no new equation notation added.
+
+Merged mark_active_timebins into the next-sync-point box, matching the actual
+call and removing the old crossing. Removed all seven FV formula /Stamp
+annotations; replaced old outlined labels with searchable embedded-font text.
+Rendered and inspected the complete final page, checked extracted labels and
+verified that the original SHA256 is unchanged:
+48d19858dcd4d93a478c4dd2105d4556803a78e7c01cec3132f962dca7af5d9a.
+
+Delivered a new file beside the original:
+`/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/Arepo_flowchart_main_loop_RD_20260914.pdf`.
+Final SHA256718c231c340926e239f2fe7c703b422038622ed40a303534203fa7444f9b1e15.
+An identical workspace copy is under `output/pdf/`. Reproducible label editor
+and notes are in `dev_log/figures/build_arepo_main_loop_flowchart.py` and
+[AREPO_MAIN_LOOP_20260914.md](figures/AREPO_MAIN_LOOP_20260914.md).
+No C, Config, thesis chapter or staged content changed in this figure turn.
+
+## 44. 2026-09-14: editable draw.io version of the revised main-loop figure
+
+**Author:** Codex (GPT-6). Zhenyu has installed draw.io and requests converting
+the existing revised flowchart for manual editing, then explicitly requests
+a white background for the thesis. Reconstructed 14 process nodes and their
+14 attached loop connectors plus one entry arrow as native mxGraph objects,
+with editable text, legend and notes on three layers. Preserved the PDF's
+wording, colours and node geometry; no embedded raster/flattened PDF.
+
+Opened and saved in draw.io 31.4.5, inspected the complete white layout,
+verified attached-arrow behaviour by moving the predictor and undoing, then
+checked the saved XML: white #FFFFFF background, original title, all14 stage
+labels/positions and15 valid edges. Editor appearance changed from automatic
+dark to Light following the user's white-background instruction. Original
+and revised PDFs retain their previous checksums.
+
+Delivered alongside the PDFs:
+`/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/Arepo_flowchart_main_loop_RD_20260914.drawio`.
+SHA2569e17fc08018e39f0b45094fe21dec585d66ed5d342d75a13375b995557b47c5b.
+An identical native source and its standard-library builder are in
+`dev_log/figures/`; see [figure notes](figures/AREPO_MAIN_LOOP_20260914.md).
+No solver, Config, thesis chapter or existing staged content changed.
+
+Zhenyu then requests a second editable version retaining function names for
+comparison. Delivered `Arepo_flowchart_main_loop_RD_functions_20260914.drawio`
+in the same resource directory and `dev_log/figures/`, preserving the concise
+version. It keeps the same14-node loop and descriptions, with wider boxes and
+monospaced calls checked against current run.c/predict.c, including explicit
+predictor/corrector stage arguments and the internal mark_active_timebins call.
+Opened in draw.io and inspected a complete native CLI white-background render;
+validated14 process vertices/15 edges and unchanged concise-source checksum.
+Function-version SHA256cf149b7e0a4713b41482609eb14c745e9aa3db86994462204d31406a071919c4.
+Builder and details are in the same figure directory/notes. No PDF, code,
+Config, thesis chapter or staged content changed for this comparison version.
+
+## 45. 2026-09-14: moving-RD scope and proposed flowchart numbering
+
+**Author:** Codex (GPT-6). Zhenyu prefers the function-name figure, has made
+minor edits, and asks whether it can also represent current moving-mesh RD
+and whether its14 blocks should be numbered for Chapter4 references.
+Located his edits in the workspace `dev_log/figures/` copy: the two gravity
+boxes omit their in-box "(if enabled)" text; the optional legend remains.
+Current user-edited SHA256645d20cf7045140d18e680f2c7904eac1acc5f91eadf18fdb55a3fe3fdd651d6.
+The Desktop resource copy still has the original function-version checksum.
+Preserved both copies, including the user's native-editor backup.
+
+Code inspection on develop_pureC_RD confirms a common outer loop but distinct
+RD stage placement. In run.c's first hydro hook (proposed block7), static
+hierarchy and opt-in static equal split call the predictor; ALE hierarchy
+skips it, and equal total-residual ALE also has no call. After drift and mesh
+reconstruction, proposed block12 calls compute_residuals(&Mesh) for equal ALE
+(both stages inside the solver), or calls predictor and corrector successively
+for ALE hierarchy. Sources: run.c249--262,343--379; solver2427,2798,3827--3863.
+The equal split option is explicitly restricted to static N/LDA at solver200--208.
+Moving geometry is built on the post-rebuild connectivity, pulled back over
+the drift/element interval; the two stages reuse that connectivity. This is
+the current implementation's choice, not a necessity for every ALE method.
+
+Recommend retaining one general AREPO/RD loop figure, qualifying blocks7/12
+by static split versus moving RD, and describing moving mesh reconstruction
+explicitly at block10. Simply removing "static" would misstate current calls.
+Number1--14 along the actual edges (left1--5, middle6--10, right11--14);
+use attached small corner labels so manual moves retain their numbers. Text
+can discuss1--5 preparation,6--7 first hydro hook,8--11 time/mesh transition,
+and12--14 closure. No figure edits or thesis prose were requested/performed
+in this review; no code change or new numerical test is needed for this
+call-graph inspection. Existing staged log content preserved.
+
+## 46. 2026-09-14: experimental moving equal RK2 split; short gates pass, long pointwise gates fail
+
+**Author:** Codex (GPT-6). Zhenyu asks to extend the two main-loop stage hooks
+to moving mesh, testing at least equal timesteps. Implemented an opt-in
+RD_ALE_EQUALSTEP + RD_RK2_SPLIT_STAGES path for one-rank N and standard LDA/F1.
+The first hook runs a real predictor on a preview of the endpoint mesh;
+the ordinary loop owns the physical drift/rebuild and the later corrector.
+This retains the existing new-connectivity ALE formulation, but costs an
+extra mesh build and a full temporary node/connectivity snapshot per step.
+It is not a performance optimization or a default/reference replacement.
+
+Node caches hold the original physical Q, repaired old U where enabled,
+temporal divisor and endpoint area alongside the existing RK stage fields.
+The second hook checks an order-independent connectivity fingerprint,
+element count and per-node geometric agreement before consuming its saved
+stage. Persistent DC lists and both RNG states are rolled back with the
+node/timeline state; the neighbour tree is restored by rebuilding. Pending
+and closed binary checkpoints, including TimeMax extensions, are supported
+within this single-rank equal-step scope. Moving hierarchy/B/four-pass/MPI
+remain outside this change. No change to the hierarchical F1 frozen policy.
+
+Report: [RD_MOVING_EQUAL_SPLIT_STAGES_20260914.md](RD_MOVING_EQUAL_SPLIT_STAGES_20260914.md).
+Named experimental Config:
+`examples/yee_2d/Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh`.
+Final archive: `../local_runs/moving_equal_split_stages_20260914_v4`, base
+5f3db112, source patch SHA256
+a11c167175a4fd53ba29a2f3c5aac02fcd33705fe41a36ec57265e3f04d5f7fc;
+source tar SHA256433784d67e4a98ce21c386cdd4bbb4566e79d190fa115f20903849752f01275c.
+All10 configs have isolated native binaries/headers/provenance. The25 cases
+(28 launches) use2304-node glass48, periodic box10², gamma1.4, Yee boost1,
+CFL.2, actualdt1/256 and one MPI rank with both thread limits1.
+
+All25 runs complete, but this is **not an all-pass comparison campaign**:
+11 of14 gates pass, while all3 t=1 pointwise pairs fail the original1e-10
+threshold. Short Yee/N/Campoli/repair differences are <=9.77e-15; zero-motion
+matches exactly. At t=.25,3 steps have changed connectivity and the LDA
+maximum U difference is2.22e-14. Uniform error <=6.22e-15, normalized sampled
+conservation <=9.95e-16. Pending stop/resume and both completed/pending
+extensions reproduce continuous split runs exactly. All geometry guards
+and predictor/corrector event-count checks pass.
+
+At t=1, Arpaia/Campoli/Arpaia+repair have maximum U differences
+9.25e-5/8.04e-4/1.41e-5 and coordinate differences
+3.00e-4/4.28e-4/3.36e-5. Respectively131/132/125 of256 steps change triangle
+connectivity (not counts of individual flipped edges). Timebins still match.
+Two separate original-internal-method controls perturb IC x/y by1 and8 ULP
+(max1.78e-15/1.42e-14); t=1 U differences amplify to3.29e-5/5.86e-5.
+This supports mesh/state sensitivity as an explanation but does not prove
+that every split discrepancy is roundoff. Kept all3 failed gates explicit.
+
+Final-area-weighted analytic Yee density L1 is.00106156270547 internal and
+.00106156270293 split; velocity-vector L1 is.00128675311903 and
+.00128676040730. This does not establish a new convergence order or long
+pointwise equivalence. Existing physical endpoint conservation limitations
+persist: unrepaired t=1 drift about3.79e-5 and repaired Arpaia about9.94e-9
+for both paths. The split does not solve ALE topology/endpoint conservation.
+Single DEBUG t=1 process times3.70/5.32 seconds are smoke timings only.
+
+Six static regressions on the v3 frozen source pass (same-rank exact;
+maximum cross-path1.29e-14), including the retained static reference.
+The only v3-to-v4 C change is RNG preservation inside the ALE split guard;
+the static preprocessed path is unchanged. make check_rd passes all3
+existing algebra scripts with the configured numerical Python.
+
+Preserved v1's DC-chain rollback failure, v2's invalid wrapping-table Bus
+error, v3/v4's long pointwise gate failures, and the first check_rd missing
+NumPy log. A static runner invocation used the wrong CLI argument order and
+was corrected before running. No assertions were loosened. A revised
+analysis writer records all comparisons before returning failure.
+
+Recommendation: keep this a reviewable experimental option. A14-box figure
+can describe it if block7 explicitly includes rd_ale_split_predictor and
+its endpoint-mesh preview; merely deleting the static qualification would
+still misdescribe default moving and hierarchy execution. No figure or
+thesis file changed, no commit made, existing235 staged log lines preserved.
+
+## 47. 2026-09-14: remove the preview; common RD begin/end hooks with one mesh per step
+
+**Author:** Codex (GPT-6). Zhenyu explicitly rejects the extra mesh build and
+clarifies that the aim is the flowchart's outer form without extra numerical
+work. Removed section46's preview implementation from the working source.
+The main loop now calls rd_step_begin(&Mesh) and rd_step_end(&Mesh). Static
+split/hierarchy still evaluate their predictor/corrector at those positions.
+Equal ALE begin only records the pending endpoint; after the ordinary single
+mesh rebuild, end executes the original internal predictor/corrector loop.
+Moving hierarchy retains its original two consecutive post-rebuild calls.
+This unifies step lifecycle hooks, not the numerical stage placement.
+
+Deleted the speculative clock/drift, full P/SphP/DC/RNG snapshot rollback,
+extra neighbour-tree/mesh build, per-node80-byte preview cache and repeated
+ALE geometry preparation. Restored rd_ale_prepare_step exactly to the
+pre-preview implementation. The first ALE hook now has only constant-time
+endpoint checks, no node sweep or MPI collective. Existing equal binary
+restart marker and TimeMax rescaling remain; a completed restart builds its
+opening mesh before starting a new step. Historical SPLIT flag/Config names
+are retained with explicit begin/end semantics in their comments.
+
+Report: [RD_MOVING_SINGLE_MESH_HOOKS_20260914.md](RD_MOVING_SINGLE_MESH_HOOKS_20260914.md).
+Frozen archive: `../local_runs/moving_single_mesh_hooks_20260914_v1`, base
+5f3db112. Source patch SHA256
+53c74844ed3107a97b7fac665f6ffdde2a5dacdfe0bc1b2f0d5f934666722ea7;
+source tar SHA256cb6dcaefac2d019c3f9c660809c74aba178bc325b0036e6507089a2e5410b212.
+Named Config: `examples/yee_2d/Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh`.
+The final C/Template/defines source matches the frozen archive.
+
+All25 moving cases/28 launches and14 comparison gates pass. Same-method
+hooks/internal comparisons, pending stop/resume and completed/pending
+extensions have exactly zero final differences in U, coordinates and area,
+with identical timebins. Includes N, LDA/F1 Gauss3, zero-motion, Campoli and
+topology repair/exact-patch controls through t=1. The previously failing
+three long pointwise comparisons are now exact without changing tolerances.
+All512 stage checksum lines in each of the three long hooks cases match
+the corresponding previous-v4 original internal reference. The new internal
+controls likewise match those archived original states exactly.
+
+Setup remains2304-node glass48, periodic10², gamma1.4, Yee beta5/boost1,
+CFL.2, actualdt1/256, one rank, both thread limits1. All stored rho/p are
+positive; uniform maximum U variation6.22e-15. Exact-patch diagnostics detect
+125 changed-connectivity steps out of256 in both long repair controls.
+Physical endpoint conservation is unchanged; this refactor does not repair
+the existing ALE topology/area limitations or establish a new accuracy order.
+
+Every one of1216 begin/end intervals has exactly one mesh construction,
+one ALE geometry preparation and two residual sweeps. Total campaign2272
+physical steps. A256-step run logs258 builds:2 initialization builds plus
+256 endpoint builds, identical to the original. Complete-step continuation
+adds one opening mesh at restart, not one extra mesh per physical step.
+No old RD-ALE-SPLIT preview log remains. Dominant numerical work counts are
+unchanged; only function dispatch, endpoint checks and DEBUG lines are added.
+Single DEBUG LDA t=1 wall times4.285/4.317 seconds are smoke timings, not a
+claim of speedup or an exact measurement of call overhead.
+
+Seven static regressions pass: same-rank internal/split,1/4 ranks, equal-bin
+and mixed-bin hierarchy, uniform. Same-rank/archive differences are zero;
+largest cross-path difference1.29e-14. make check_rd passes all3 scripts.
+The first analysis combined restart logs in filesystem enumeration order;
+sorting by filename restores chronological begin/end pairing. Kept that
+analysis failure log; no numerical rerun or threshold relaxation was needed.
+
+Figure recommendation: retain the14 boxes but label the red interfaces
+Begin RD step / Complete RD step, with rd_step_begin / rd_step_end. The
+caption must say moving ALE's two numerical stages run after rebuilding.
+No figure/thesis edits were made; the user's modified draw.io hash is
+preserved. Marked the previous focused report as superseded, retaining all
+historical failed archives. No commit; existing235 staged log lines untouched.
+
+## 48. 2026-09-14: 给 Claude 的审核入口——代码结构与流程图位置
+
+**Author:** Codex (GPT-6). Zhenyu 要求在主日志中汇总，随后由他交给 Claude
+审核。本节是当前状态的导航；实现与完整验证见 §47 和
+[一次网格构造报告](/Users/zhenyuwu/arepo_rd/arepo/dev_log/RD_MOVING_SINGLE_MESH_HOOKS_20260914.md)。
+**§46 的双网格预构造方案已经撤下，不是当前实现。**
+
+### 48.1 用户要求及当前代码结构
+
+要求是让 RD 在 AREPO 主循环中具有统一的前后两个入口，方便流程图表述，
+同时不增加网格构造、几何准备或残差扫描。不要求为了方框位置重新设计 ALE 算法。
+
+主循环的两个入口已经统一为：
+
+- [run.c:260](/Users/zhenyuwu/arepo_rd/arepo/src/main/run.c:260)：`rd_step_begin(&Mesh)`。
+- 正常的时间推进、domain decomposition 和 moving mesh 重建仍在两者之间。
+- [run.c:366](/Users/zhenyuwu/arepo_rd/arepo/src/main/run.c:366)：`rd_step_end(&Mesh)`。
+
+分派逻辑集中在
+[residual_distribution_solver.c:3653](/Users/zhenyuwu/arepo_rd/arepo/src/hydro/residual_distribution_solver.c:3653)
+和 [同文件:3675](/Users/zhenyuwu/arepo_rd/arepo/src/hydro/residual_distribution_solver.c:3675)：
+
+| 路径 | 前入口实际工作 | 后入口实际工作 |
+|---|---|---|
+| static equal，启用 `RD_RK2_SPLIT_STAGES` | predictor | corrector |
+| static hierarchy | predictor | corrector |
+| moving equal，启用上述开关 | 只记录待完成的时间端点 | 在正常重建的新网格上连续执行原 predictor/corrector |
+| moving equal，未启用上述开关 | 不执行残差扫描 | 原内部两阶段计算 |
+| moving hierarchy | 不执行残差扫描 | 原来的两次阶段调用，顺序和位置不变 |
+
+这里统一的是**步开始／结束接口**，不是所有方法的数值阶段位置。
+FV 分支仍使用原来的 `compute_interface_fluxes(&Mesh)`。
+已删除预构造函数、额外网格和邻居树构造、整份 P/SphP/DC/RNG 回退及节点预构造缓存。
+ALE 几何准备回到一次调用，两阶段共用同一元素集合和几何。
+
+相关文件还包括 [声明](/Users/zhenyuwu/arepo_rd/arepo/src/main/cpp_functions.h)、
+[端点标记](/Users/zhenyuwu/arepo_rd/arepo/src/main/allvars.h:1058)、
+[标记初始化](/Users/zhenyuwu/arepo_rd/arepo/src/init/init.c:67)、
+[重启时间轴重标定](/Users/zhenyuwu/arepo_rd/arepo/src/io/restart.c:1334)，
+以及 [完整步末重启的处理](/Users/zhenyuwu/arepo_rd/arepo/src/main/run.c:185)。
+Config 的历史名称仍含 SPLIT，注释已说明 moving 的实际含义：
+[Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh](/Users/zhenyuwu/arepo_rd/arepo/examples/yee_2d/Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh)。
+
+### 48.2 流程图文件位置与当前标签状态
+
+**优先审核用户手调的、带函数名的工作区版本：**
+[Arepo_flowchart_main_loop_RD_functions_20260914.drawio](/Users/zhenyuwu/arepo_rd/arepo/dev_log/figures/Arepo_flowchart_main_loop_RD_functions_20260914.drawio)。
+本次核对 SHA256 为
+`645d20cf7045140d18e680f2c7904eac1acc5f91eadf18fdb55a3fe3fdd651d6`。
+它保留用户对两个 gravity 框的手动文字调整；不要运行 builder 覆盖这份文件。
+
+论文资源目录还有一份较早的函数名版本：
+[资源目录中的 draw.io](/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/Arepo_flowchart_main_loop_RD_functions_20260914.drawio)。
+其 SHA256 仍为
+`cf149b7e0a4713b41482609eb14c745e9aa3db86994462204d31406a071919c4`，
+**与用户手调版本不同，不是自动同步副本**。
+该资源目录解析到 `/Users/zhenyuwu/Desktop/PhD/Arepo_document`。
+
+同目录的 [原始流程图 PDF](/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/Arepo_flowchart.pdf)
+和 [只保留循环主体的 PDF](/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/Arepo_flowchart_main_loop_RD_20260914.pdf)
+都保留；PDF 是较早导出，并不自动反映 draw.io 或此次代码调整。
+
+**图本身尚未按 §47 更新。** 当前副标题和 scope 仍写 static RD，红框仍按
+旧 predictor/corrector 调用表述。拟保持14个方框及连线，只调整两处入口：
+
+- 沿实际流程顺序的第7框：`Begin RD step`，函数 `rd_step_begin(&Mesh)`。
+- 第12框：`Complete RD step`，函数 `rd_step_end(&Mesh)`。
+- 网格重建框仍在原位置，moving 每个正常大循环只重建一次。
+- 图注交代 static split 的 predictor/corrector 分列两入口，而 moving ALE
+  两个数值阶段均在重建后完成；不能直接把 static 字样删掉就算完成更新。
+
+1–14编号仍是建议，尚未写入图；编号顺序为左列1–5、中列6–10、右列11–14。
+本轮只补主日志，没有修改任何流程图、builder 或 thesis chapter。
+
+### 48.3 验证入口和建议审核重点
+
+冻结档案在
+`/Users/zhenyuwu/arepo_rd/local_runs/moving_single_mesh_hooks_20260914_v1/`：
+[结果汇总](/Users/zhenyuwu/arepo_rd/local_runs/moving_single_mesh_hooks_20260914_v1/summary.json)、
+[最终核对记录](/Users/zhenyuwu/arepo_rd/local_runs/moving_single_mesh_hooks_20260914_v1/final_verification.json)、
+[源码标识](/Users/zhenyuwu/arepo_rd/local_runs/moving_single_mesh_hooks_20260914_v1/source_provenance.json)。
+25个 moving 算例、14组逐节点比较全部通过，状态／坐标／面积差为0；
+包含 LDA 三个长时对照、N 短时对照、均匀流、零网格速度及重启/续算。
+1216个启用接口的区间逐一验证为1次 mesh、1次 ALE 几何准备、2次残差扫描。
+7个 static 回归与3组 `make check_rd` 代数检查通过。详细边界与计数见 §47。
+
+建议 Claude 重点检查：接口命名是否准确反映上表的阶段位置；是否还存在隐藏的
+重复构造或状态修改；pending/完整步 checkpoint 和 TimeMax 延长是否闭合；
+流程图两份文件及未更新标签是否被正确区分。数值测试并不新增 moving MPI/
+hierarchy 的科学验证，也没有修复既有 ALE 端点守恒问题。
+源码和新配置目前未提交；已有235行 staged 主日志内容原样保留，勿混入提交。
+
+## 49. 2026-09-14: review of the begin/end refactor and the revised main-loop figure; section 38 accepted
+
+**Author:** Claude Code (Opus 5), at Zhenyu's request. **Reviewed:** HEAD
+`5f3db11` plus the uncommitted working tree (`src/main/run.c`,
+`src/hydro/residual_distribution_solver.c`, `src/main/allvars.h`,
+`src/io/restart.c`, `src/init/init.c`, `Template-Config.sh`, `defines_extra`),
+`dev_log/figures/`, and sections 38--48. No C, Config, figure or thesis file
+was changed in this entry and no native run was made.
+
+### 49.1 Section 38 is accepted, including the geometry bug in my scalar model
+
+All of section 38's points were re-derived independently. The periodic mesh in
+my section-37.5 script wrapped connectivity indices but not coordinates, so
+every triangle crossing the seam was built from points on opposite sides of the
+box. Reproduced exactly:
+
+| n | total area (should be 1) | inverted triangles | norm mine / corrected |
+| ---: | ---: | ---: | --- |
+| 12 | 3.360967 | 44 | 1.301185 / 1.020864 |
+| 24 | 3.673606 | 92 | 1.374722 / 1.021939 |
+| 48 | 3.835069 | 188 | 1.416294 / 1.022443 |
+
+With the lift corrected the area sum is exactly 1 with no inverted elements,
+and **the mechanism survives**: the masked difference is 1.33024105e-2 to
+1.33024211e-2 across a 32-fold dt reduction, while the stale-rate variant falls
+1.134416e-4 to 3.522984e-6, matching section 38's figures. So section 37.5's
+conclusion stands, but its quoted operator norms were inflated by about 35% and
+its "grows under refinement" reading is much weaker than stated (1.0209 to
+1.0224).
+
+Two further corrections of mine, beyond what section 38 lists:
+
+- **Section 37.4 resurrected a withdrawn hypothesis.** I offered the
+  median-dual versus Voronoi mismatch as a live competing explanation, citing
+  the 2026-07-30 volume-1 entry. That attribution was explicitly withdrawn
+  later in the same volume (`### 6. Corrections to my own earlier entries`),
+  and the code does use `DualArea` throughout --
+  `update_primitive_variables.c:195` recovers density as `Mass / DualArea`. The
+  competing explanation I named does not exist. The recommendation in 37.4 is
+  unaffected: a sequence with dt tied to h still cannot establish a spatial
+  order on its own, and a fixed-h dt ladder at the finest resolution remains
+  the test. Only my stated reason for weakening the attribution was wrong.
+- **Section 37.3 cited the wrong Morton figure.** KH conservation is figure 6 /
+  section 5.2.1; the figure 7 / section 5.1.1 reference I used was copied from a
+  `context_localMac.md` note about the Sod audit. Section 38.5 is right.
+
+Section 38.6 is also right that "no cost measurements anywhere" was too blanket;
+existing Gauss CPU/wall timings and model work counts exist. The specific gap I
+meant -- a work-precision comparison for the current static hierarchy -- remains,
+and section 38 agrees.
+
+### 49.2 The begin/end refactor: the main loop now matches AREPO's structure
+
+`run.c` now holds exactly two RD call sites, in structural correspondence with
+the native pair:
+
+```
+260:  rd_step_begin(&Mesh);      262:  compute_interface_fluxes(&Mesh);
+366:  rd_step_end(&Mesh);        368:  compute_interface_fluxes(&Mesh);
+```
+
+This is the right refactor and it achieves what was asked. Previously each site
+required expanding `RD_HIERARCHICAL_TIMESTEPS`, `RD_ALE_HIERARCHICAL` and
+`RD_RK2_TOTAL_RESIDUAL` together to learn what was actually called; the
+dispatch now lives in the solver where the schemes are defined.
+
+Points that are done well and are easy to lose in a later edit:
+
+- `All.RD_EqualStepEnd` is a member of `All`, so AREPO's binary restart
+  serialises it with everything else, and `readjust_timebase()` rescales it
+  beside `Ti_Current`/`Previous_Ti_Current`. Integer-timebase rescaling on a
+  `TimeMax` extension is a standard place to lose a saved endpoint; it was not
+  lost here.
+- The `RestartFlag = 0` assignment before the loop is correct. It reuses
+  AREPO's own `if(RestartFlag != 1) { ... } else RestartFlag = 0;` structure:
+  `RD_EqualStepEnd == 0` means the archive sits on a completed step, so the
+  skip-to-second-hook semantics must not apply and a fresh step must open.
+  Duplicate output is already prevented by the existing
+  `if(All.Ti_lastoutput != All.Ti_Current)` guard, and nothing between the new
+  assignment and the loop's own test at `run.c:209` reads the flag.
+- The new stage assertion caught a real latent defect: `create_mesh()` places
+  nodes in a temporary all-active bin and rebuilds the linked lists, and the
+  previous restart path restored `P[].TimeBinHydro` without restoring those
+  lists, so a rescaled `TimeMax` could select a wrong next synchronisation.
+  That failure was silent before the assertion existed.
+- Renaming `RD_RK2_INTERNAL_LOOP` to `RD_RK2_EQUALSTEP` names the algebra
+  rather than an implementation detail, and is consistent with the fact that
+  the path may now execute one sweep per call.
+- The earlier moving experiment's mesh preview was withdrawn (section 47). That
+  was the right call: it had to save and restore the persistent DC adjacency
+  chain and the random-number stream, which is a large amount of hidden state
+  to keep correct across a refactor.
+
+Two recommendations.
+
+**1. Split the commit.** The working tree currently mixes a behaviour-preserving
+refactor (`rd_step_begin`/`rd_step_end`, the rename) with new functionality
+(`RD_RK2_SPLIT_STAGES`, the new `All` member, new restart semantics). The first
+is reviewable by the argument that nothing changed and is worth being bisectable
+on its own; the second needs its 24-run campaign as evidence. Two commits would
+separate those two kinds of claim.
+
+**2. The ALE entry's timestep check is weaker than the static one, for no
+reason.** `rd_step_begin` under `RD_ALE_EQUALSTEP` reads
+
+    int bin = P[0].TimeBinHydro; /* FORCE_EQUAL_TIMESTEPS assigns the same bin to all nodes. */
+
+and then validates only the range and `TimeBinSynchronized[bin]`, taking the
+all-equal property from a comment. The static path validates the same property
+properly, reducing both `min(bin)` and `min(-bin)` across ranks and requiring
+them to agree. The ALE branch does require `NTask == 1`, so the risk is low, but
+the quantity being guarded is an integer endpoint carried across two main-loop
+call sites, and a violation would surface far away as a corrector mismatch.
+Making the ALE check match the static one is a few lines.
+
+### 49.3 The revised main-loop figure
+
+The presentation decisions are right. Retaining the original coloured vector
+boxes, loop layout and connectors while cropping initialization means a reader
+who knows the AREPO paper figure maps onto it immediately. Merging the
+synchronized-bin side box into the next-sync-point box is correct --
+`find_next_sync_point()` does call `mark_active_timebins()` -- and removes a
+crossing connector. Removing the seven FV-only `/Stamp` annotations was better
+than leaving stale formulae. The scope note is in the figure itself, not only in
+the accompanying document. Native draw.io XML with separate layers, rather than
+a flattened export, is the right format for a figure that will be edited during
+writing.
+
+Three findings, in order of importance.
+
+**1. The function-name version no longer matches `run.c`.** Its two red blocks
+show
+
+    RD: compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR)
+    RD: compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR)
+
+while the main loop now calls `rd_step_begin(&Mesh)` and `rd_step_end(&Mesh)`,
+with `compute_residuals` one level below. The refactor and the figure were
+produced in the same session and the figure was not updated afterwards. Since
+checkability against the source is the entire purpose of this variant, this
+should be fixed. The better fix is two lines per block rather than a
+substitution: the hook call first, then the dispatched call indented beneath it.
+That is more informative than either name alone, because it shows the hook is a
+dispatch point whose target depends on configuration -- which is the content of
+the refactor.
+
+**2. "RD: predictor" on the first hook is false for the ALE split configuration
+that now exists.** Under `RD_ALE_EQUALSTEP`, `rd_step_begin` performs no sweep
+at all; it records the endpoint and both sweeps run at `rd_step_end` after the
+single mesh rebuild. The figure's scope note restricts the RD labels to the
+static path, so this is not an error in the figure as scoped. But
+`Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh` now exists, and Chapter 4's
+contribution is the moving path, so a figure whose RD labels describe only the
+static case will need a companion. Deciding now whether to produce an ALE
+variant -- begin records the endpoint with no sweep, end performs both sweeps on
+the one rebuilt mesh -- is cheaper than discovering the need mid-writing.
+
+**3. The active-list block carries a description that belongs to the next
+block.** It reads "Build active-node list; drift nodes to the current time" and
+lists only `make_list_of_active_particles()`. `drift_all_particles()` is at
+`run.c:322`, inside
+`if(All.HighestActiveTimeBin >= All.SmallestTimeBinWithDomainDecomposition)`,
+i.e. in the following block and conditional; the per-particle drift is otherwise
+lazy through `drift_particle()`, called from `create_mesh()` at
+`voronoi.c:152`. The drift phrase should move to the domain/mesh block.
+
+### 49.4 An unrelated find: `.gitignore` was eating the figure sources
+
+While committing this entry, `git add dev_log/figures/` was refused. Line 15 of
+`.gitignore` is `Arepo*`, under `#binaries` and intended for the root executable,
+but it is unanchored, so it matches a path component beginning with `Arepo`
+anywhere in the tree -- and `core.ignorecase` is true on this macOS checkout, so
+the match is case-insensitive as well. The revised flowchart sources and
+`AREPO_MAIN_LOOP_20260914.md` were therefore silently untracked.
+
+This had already cost something. `dev_log/colombo_re_spike/arepo_integration.md`
+is referenced from section 21 of this log and twice from the committed
+`colombo_re_spike/README.md`, but the same rule dropped it when `484512a` added
+that directory, leaving dangling references in committed history.
+
+Anchored to `/Arepo*` and `/Arepo.dSYM`, which still ignores the root binary --
+build outputs are already covered by the `build` rule -- and added an ignore for
+draw.io's `.$*.drawio.bkp` scratch files. `arepo_integration.md` and the figure
+sources are committed with this entry. Worth checking whether any other
+thesis-facing file has been lost the same way.
+
+### 49.5 Reproduction
+
+The geometry re-check of 49.1 is `f1_fixed_geom.py`, retained in the session
+scratchpad alongside the section-37 scripts. It builds the same scalar model
+with and without the periodic lift, prints the area sums, inverted-triangle
+counts and operator norms in the table above, and repeats the dt ladder for the
+masked and stale-rate variants. It is a NumPy model problem, not solver
+validation, and it supersedes the geometry of the section-37.5 script rather
+than adding evidence.

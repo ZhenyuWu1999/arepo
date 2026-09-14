@@ -7,13 +7,14 @@
 *~
 
 #OS
+.$*.drawio.bkp
 .gdb_history
 .DS_Store
 
 #binaries
 build
-Arepo*
-Arepo.dSYM
+/Arepo*
+/Arepo.dSYM
 .build*/
 *.o
 *.d
