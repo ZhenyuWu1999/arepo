@@ -1,0 +1,46 @@
+{
+  "description": "Exact Mac Yee glass48 tiled inputs, boosts1/10; Masses stores density. Transfer these files unchanged; do not substitute examples/yee_2d/create.py polar mesh.",
+  "source_archive": "yee_boost10_static_moving_20260924_v2/inputs",
+  "box": 10,
+  "gamma": 1.4,
+  "beta": 5,
+  "resolutions": [
+    48,
+    96,
+    192
+  ],
+  "files": {
+    "uniform_b1.hdf5": {
+      "sha256": "72218a327f4512c3b8c2b7f790997a38bf9746f49075a87baf36a63510b33b87",
+      "bytes": 178616
+    },
+    "uniform_b10.hdf5": {
+      "sha256": "35429fb95fde1d81a1e8f5c028da8a1eaa674cd6f6fdaa15952edb198cb0b121",
+      "bytes": 178616
+    },
+    "yee_n192_b1.hdf5": {
+      "sha256": "1beb1589c1bf2a7515408c4c7efdee1f960ecb76443819eaaa21e6f565eaf0a4",
+      "bytes": 2666936
+    },
+    "yee_n192_b10.hdf5": {
+      "sha256": "9a2ffe16d64671eb33879e58b2f378e97f584edecc2ede7146d458b8c9a031ce",
+      "bytes": 2666936
+    },
+    "yee_n48_b1.hdf5": {
+      "sha256": "8260fb302c86b95f7672e8901aa4e88abfbc3be95ec788bdd812f24740e5a72e",
+      "bytes": 178616
+    },
+    "yee_n48_b10.hdf5": {
+      "sha256": "6d974c2f6a97f72ce1f42f6f167a673dcc22962b831adadfbc9bb4c53dad3d8a",
+      "bytes": 178616
+    },
+    "yee_n96_b1.hdf5": {
+      "sha256": "a6cce3f4dc90b274080c59c485b038ab8738852f96e6ebe460ccb983cd82528b",
+      "bytes": 676280
+    },
+    "yee_n96_b10.hdf5": {
+      "sha256": "9210bd547a9ab1e2975294f1a7d62b2dd689c71c614d9b1ca5f6fdde38016905",
+      "bytes": 676280
+    }
+  }
+}

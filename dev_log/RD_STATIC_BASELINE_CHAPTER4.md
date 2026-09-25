@@ -1,5 +1,24 @@
 # Chapter 4 静网格 AREPO-RD 基准审查
 
+**当前默认恢复（2026-09-17，log3 §76）：** 按用户选择，标准 static LDA/F1
+恢复 mixed-stage：起点空间项 beta_n，终点空间项及 F1 时间项 beta_*。
+`RD_LDA_COMMON_OPENING_BETA` 显式开启共同 beta_n 对照；原
+`RD_LDA_MIXED_STAGE_BETA` 保留为兼容的默认选择。4个原生 rank4 回归全部32个
+快照逐位复现旧档案，make check_rd 通过。旧 mixed 收敛记录再次对应默认算法，
+本轮没有重新验证收敛阶。共同 beta_n 的秩亏空间延拓仅保留在显式对照路径。
+Thesis 恢复 mixed 公式和旧4-rank KH数据，并限定 common-beta Yee误差比较。
+见[恢复基准报告](RD_MIXED_BETA_BASELINE_RESTORED_20260917.md)。
+
+
+**历史默认试验（2026-09-17，log3 §73；已由 §76 取代）：** 标准 static LDA/F1 现在共同使用区间
+起点 beta_n，适用于 equal/internal、equal/split 和 hierarchy；旧 mixed 约定通过
+`RD_LDA_MIXED_STAGE_BETA` 显式恢复。Sod 回归发现旧矩阵秩亏时新空间残差可能不在
+其值域内，因此 common 路径增加了明确的空间缺失分量均分；F1 时间项仍保留 lumped
+回退。17 个最终原生算例及 make check_rd 通过。完整定义、初次失败、精度比较、
+新 KH 图和 source hash 见 [默认 common beta 报告](RD_COMMON_BETA_DEFAULT_20260917.md)。
+以下 2026-09-13 表格和收敛数值是此前 mixed 版本的历史基准，不能直接当成新默认的
+收敛验证。改 beta 没有证明时间二阶，也没有消除 frozen-star F1 的差异。
+
 日期：2026-09-13。开发分支：`develop_pureC_RD`。
 本次原生构建源代码：`943f7ae`。此前 Gauss/hierarchy/MPI 证据源代码：`255046f`。
 研究分支 `test/colombo-re-explicit-hierarchy` 保留在 `53cb65a`。

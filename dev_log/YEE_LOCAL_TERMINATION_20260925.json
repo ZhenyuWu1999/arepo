@@ -1,0 +1,92 @@
+[
+  {
+    "name": "yee_LDA_moving_b1_n192",
+    "archive": "yee_boost10_static_moving_20260925_recovery_v1",
+    "state": "user_stopped",
+    "last_step": 843,
+    "last_time": 0.205811,
+    "log_sha256": "8527df2e1007ed8654b47211ed0d03a35d20f246503da5262c58f5cea3d348dc",
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.297859+08:00"
+  },
+  {
+    "name": "yee_LDA_moving_b10_n192",
+    "archive": "yee_boost10_static_moving_20260925_recovery_v1",
+    "state": "user_stopped",
+    "last_step": 679,
+    "last_time": 0.165771,
+    "log_sha256": "7bad3f8baa49cbf99d08074f45e5ef9f7d3449b36787f2fec7849f8576749d38",
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.305445+08:00"
+  },
+  {
+    "name": "yee_LDA_static_b1_n192",
+    "archive": "yee_boost10_static_moving_20260925_recovery_v1",
+    "state": "user_stopped",
+    "last_step": 2893,
+    "last_time": 0.706299,
+    "log_sha256": "51eda834a8ff7d4a950e04c07d68bf962c9aacfde4131a664bffea25779f15e0",
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.318002+08:00"
+  },
+  {
+    "name": "yee_LDA_static_b10_n192",
+    "archive": "yee_boost10_static_moving_20260925_recovery_v1",
+    "state": "user_stopped",
+    "last_step": 2886,
+    "last_time": 0.70459,
+    "log_sha256": "30b4e6f696575a9af561b0dbf8aca8b5ce93b7813acff87208eb13dcee2ded49",
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.330320+08:00"
+  },
+  {
+    "name": "yee_LDA_moving_b1_n192",
+    "archive": "yee_boost10_comoving_20260925_v1",
+    "state": "user_stopped",
+    "last_step": 72,
+    "last_time": 0.0175781,
+    "log_sha256": "34c97ecd1eed1da24f6e4a50db57ccf17fd72353d1159c5c46daaad37b593bf0",
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.333844+08:00"
+  },
+  {
+    "name": "yee_LDA_moving_b10_n192",
+    "archive": "yee_boost10_comoving_20260925_v1",
+    "state": "user_stopped",
+    "last_step": 72,
+    "last_time": 0.0175781,
+    "log_sha256": "2535d30df6e69e2e9bad36608d2d01285be6a6f8a4c288aff4711a99a41626a4",
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.335669+08:00"
+  },
+  {
+    "name": "yee_LDA_moving_b1_n48",
+    "archive": "yee_boost10_comoving_20260925_v1",
+    "state": "not_started",
+    "last_step": null,
+    "last_time": null,
+    "log_sha256": null,
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.337053+08:00"
+  },
+  {
+    "name": "yee_LDA_moving_b1_n96",
+    "archive": "yee_boost10_comoving_20260925_v1",
+    "state": "not_started",
+    "last_step": null,
+    "last_time": null,
+    "log_sha256": null,
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.338385+08:00"
+  },
+  {
+    "name": "yee_LDA_moving_b10_n96",
+    "archive": "yee_boost10_comoving_20260925_v1",
+    "state": "not_started",
+    "last_step": null,
+    "last_time": null,
+    "log_sha256": null,
+    "reason": "User requested stop for migration to COSMA",
+    "recorded_at": "2026-09-25T14:14:53.339306+08:00"
+  }
+]

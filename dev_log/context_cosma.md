@@ -1,11 +1,26 @@
 # AREPO-RD COSMA context
 
-Updated: 2026-09-02
+Updated: 2026-09-25
 
 This file records the COSMA environment for compiling and running the public
 AREPO residual-distribution branch. It supplements context.md (the original
 Cuillin workflow) and context_localMac.md (small native Apple-Silicon tests).
 The scientific history remains in the numbered development logs.
+
+## Current handoff: boosted Yee LDA
+
+The local Mac tests were stopped at the user's request on2026-09-25. Follow
+[RD_COSMA_YEE_HANDOFF_20260925.md](RD_COSMA_YEE_HANDOFF_20260925.md) for exact inputs,
+portable preparation, compute-node builds, phased gates, run matrix and remaining
+analysis/A2 diagnostics. No COSMA jobs have been submitted for this new campaign.
+Moving comparisons now use element co-moving variables, while the thesis lab
+reference is unchanged. **Current equal-step moving RD requires one MPI rank**;
+parallelize independent cases and explicitly override run_case_cosma.sbatch's
+historical two-rank default with `--ntasks=1`. General moving MPI and hierarchical
+validation are not prerequisites to this one-rank campaign and must not be assumed
+from the old setup tests below. Rebuild the new committed source with pinned
+modules; never transfer the Mac executable. The remaining sections describe the
+Sep2 environment validation and historical setup, not current campaign completion.
 
 ## Scope and current status
 

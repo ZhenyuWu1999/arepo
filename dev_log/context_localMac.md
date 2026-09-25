@@ -3,7 +3,285 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-09-14
+Updated: 2026-09-25
+
+**STOPPED for COSMA migration (2026-09-25, log3 §113):** User explicitly
+terminated all local hydro tests. Both launchd jobs removed and all six solver
+workers verified absent. Earlier RUNNING entries below describe historical states.
+Partial outputs preserved with user_stopped/not_started records, no t1 error
+assigned. Detailed tasks and executable preparation steps:
+[COSMA Yee handoff](RD_COSMA_YEE_HANDOFF_20260925.md). Exact termination times/hashes:
+[YEE_LOCAL_TERMINATION_20260925.json](YEE_LOCAL_TERMINATION_20260925.json).
+Transfer bundle: `../local_runs/cosma_handoff_20260925/yee_inputs/` (eight original
+HDF5 inputs,7.4MB; hashes tracked). Portable preparer accepts destination input
+paths and creates18 primary or27 including-lab cases; no remote jobs submitted.
+Moving comparisons use co-moving; thesis reference stays lab, A2 factor4096
+unchanged. COSMA moving still one rank, parallelize independent cases. Four algebra
+tests and preparation/hash/config checks pass;152 production hashes unchanged.
+User requested code/log commit and GitHub push. Unrelated diagrams remain local.
+
+**User choice / co-moving campaign (2026-09-25, log3 §112):** Enable co-moving
+for current moving comparisons; thesis default remains lab and mechanism unresolved.
+`../local_runs/yee_boost10_comoving_20260925_v1/` uses moving co-moving at boost1/10
+and48/96/192, static lab controls reused from recovery. Existing lab runs continue
+separately. Reuses48boost10 co-moving diagnostic; new boost1 uniform, boost10 pilot
+and five science runs. Two extra workers (at most6 total), OMP/BLAS1. One-shot
+launchd label com.zhenyuwu.codex.yee-comoving-20260925-v1. Check launchd.out/err,
+progress.py, pipeline_status.json; final visual QA pending. No solver/default/
+thesis changes. A2 tolerance is4096 eps times pre-cancellation scale; failure is
+2.265×threshold, normalized2.06e-12. Possible bound underestimate vs rank/split
+errors remains unresolved; do not loosen tolerance based on this alone. Audit:
+[criterion and run choice](RD_YEE_A2_TOLERANCE_AUDIT_20260925.md).
+
+**RUNNING recovery (2026-09-25, log3 §111 follow-up):** At13:59CST the four192
+runs and old parent/watcher were absent; logs last advanced2026-09-24 23:36.
+Original session5902/94005 no longer live. Exact cause unknown; previous assurance
+of background continuity was incorrect. No192 restart checkpoints. Preserved all
+original outputs and reran ONLY four192 cases from ICs in
+`../local_runs/yee_boost10_static_moving_20260925_recovery_v1/`. Existing successes
+and48failure reused for analysis by symlink, no tolerance/source changes.
+Independent one-shot launchd job `com.zhenyuwu.codex.yee-boost10-recovery-20260925-v1`
+started and verified parentPID30904,PPID1 with advancing solver logs. Four workers,
+OMP/BLAS1. New pipeline analyzes all18 cases after completion despite48failure.
+Check progress.py, launchd.out/err, pipeline_status.json/error.txt; final QA pending.
+No new convergence results yet. Completed48co-moving diagnostic remains separate.
+
+**Previous interrupted attempt: Yee boost10 sensitivity (2026-09-24, log3 §111):** LDA/Gauss3 lab
+static/moving, boost1/10 at48/96/192², matched dt1/1024,1/2048,1/4096. Four
+uniform gates and two192 pilots pass; seven science complete,48movingboost10
+fails A2 raw residual conservation at t≈.237305 (4.88e-12 >2.16e-12), four192
+science runs continue. Native main session5902; independent analyzer94005.
+Main parent will assert after all jobs finish due to retained failure; independent
+watcher still produces final report/figures. See archive README/progress.py at
+`../local_runs/yee_boost10_static_moving_20260924_v2/`.96 density boost10/1:
+static10.9609,moving1.000441; boost10 moving/static=.157665. Preliminary96 plot
+visually checked. Separate48co-moving diagnostic passes to t1 with unchanged
+IC/dt/tolerance; only frame flag differs. Do not substitute it for failed lab point.
+No floor or unique causal attribution established. Fits use full three-point
+series only. No solver/default/thesis edits, no commits. Final analysis/visual QA
+and context/report update remain. Report: [boost sensitivity](RD_YEE_BOOST10_SENSITIVITY_20260924.md).
+
+
+**Yee density profile (2026-09-24, log3 §110):** Postprocessed existing384²
+LDA lab/Gauss3 static/moving snapshots, no new runs. Profiles almost coincide;
+moving density error is concentrated at r<2 (87.79% of its global L1), with a
+slightly elevated core. Outer shell errors are lower than static. This locates
+error, not its cause. Boost1 is comparable to vortex vmax .7958; mesh follows
+local flow/pressure predictor/regularization rather than rigid translation.
+Report: [density profiles](RD_YEE_DENSITY_PROFILES_20260924.md). Original nodes,
+analytic center(6,5), no regridding; global norms match§107. Four-point fit
+interpretation from§109 retained; no persistent order-reduction claim.
+
+
+**Thesis distribution cleanup (2026-09-24, log3 §108):** Explicit user authorization
+for a Chapter 3 pseudoinverse paragraph and a shorter Chapter 4.2 distribution
+subsubsection. Installed only those two TeX files. Exactness scoped to compatible
+Roe stagnation systems, not arbitrary contour targets. All equations/labels kept;
+Chapter4.3 and 4.2 outside distribution unchanged. Partial Chapter3/4.2 previews
+33/20 pages, no unresolved refs, edited-page visual QA passed. Full master.pdf
+not rebuilt/replaced. Archive `../local_runs/chapter3_4_distribution_20260924_v1/`.
+
+
+**Completed Yee384/static comparison (2026-09-24, log3 §107):** All12 new
+runs complete plus6 archived controls. Both background sessions have exited.
+Four resolutions48/96/192/384², boost1,t1,lab only, matched ICs and dt caps.
+384 moving/static rho/velocity L1 ratios: N .875/.565; LDA1.558/1.140.
+LDA moving velocity error crosses above static at384. Per user correction
+(log3 §109), primary convergence orders are whole-range four-point log-log
+fits: N static rho/v .972/.928, moving .900/.904; LDA static1.687/1.774,
+moving1.736/1.407. Adjacent slopes are diagnostics only; do not infer persistent
+LDA order reduction from the final interval. User deferred768² due to time.
+Discuss possible mechanisms without assigning causality or launching more runs.
+All native/provenance/positivity checks passed and figures visually reviewed.
+384 moving mass drift N−6.065e−7/LDA−2.870e−7, static machine precision.
+LDA moving F1 fallback count increases to31898 (0.00528% of corrector element
+updates), not a causal demonstration. No384 dt-half/frame ablation performed.
+Report: [Yee384 comparison](RD_YEE_STATIC_MOVING_384_20260924.md).
+Archive `../local_runs/yee_static_moving_384_20260924_v1/` contains final
+summary/verification/native diagnostics, plots and full provenance.
+No solver/default changes or further thesis edits in this numerical analysis.
+
+
+**Thesis lab-frame reference confirmed (2026-09-24, log3 §106):** User accepted
+lab as the thesis reference and authorized moving the entire co-moving section
+into red to-delete alternatives. Local Chapter4 now does this in both theory
+and implementation; main LDA/F1 uses unprimed lab quantities with mesh advection
+retained. All co-moving theory/equations preserved in red. Existing example
+Config still enables the optional frame and is described only in red; no code
+or default Config changed. Chapter4.1/4.2.1 unchanged. Full compile251 pages,
+zero unresolved/duplicate refs, Chapter4.2 preview21 pages; installed locally
+only, no commit/push/Overleaf sync. Archive:
+`../local_runs/chapter4_comoving_optional_20260924_v1/`.
+
+
+**Yee/Gresho frame figures (2026-09-24, log3 §105):** 16 new current-source
+moving Yee boost1 runs complete: N/Roe and LDA/Gauss3, lab/co-moving, glass
+48/96/192 squared to t1 plus96 dt-halving controls. Density h-orders lab:
+N .833/.902, LDA1.840/1.757; co-moving .833/.903 and1.840/1.760. LDA velocity
+orders fall1.753→1.384 (co1.752→1.393), so do not claim strict second order
+for all fields. Frame changes rho L1 by<.20%, velocity L1 by<.56%. Gresho
+boost10 figures reuse §103 data; prior N/lab uniform1e−12 gate failure remains.
+KH flip history supports topology as an important channel, but current drift
+also admits Arpaia endpoint error; general moving hierarchy additionally needs
+actual element lifetime coverage. Restricted N prototype already exists.
+Evidence supports lab as reference and co-moving as optional optimization,
+pending user's final review; no thesis/default/solver change. See
+[the report](RD_YEE_GRESHO_FRAME_FIGURES_20260924.md), archive
+`../local_runs/yee_frame_convergence_20260924_v1/`.
+
+**Lab-frame Sod/KH extension (2026-09-24, log3 §104):** User prefers co-moving
+as an optional optimization if lab results are acceptable. Matched N/Roe and
+LDA/Gauss3 lab runs now complete Sod t=.08 and smooth KH t10; four uniform gates
+pass. Only the frame flag differs from archived exact-source co-moving controls.
+Sod density L1 changes <.04%, velocity L1 <.2%. KH t10 transverse energy is lower
+by20.6% (N) /13.7% (LDA), so long trajectories are not equivalent. Both frames
+retain ~1.2–1.4% global mass drift. Evidence supports optional frame status in
+the current reference exposition, not complete moving-solver acceptance.
+No thesis/default/production-code change yet. See
+[the report](RD_SOD_KH_LAB_FRAME_20260924.md), archive
+`../local_runs/sod_kh_lab_frame_20260924_v1/`.
+
+**Current Gresho frame audit (2026-09-24, log3 §103):** N/Roe split and
+LDA/Gauss3 both complete boosts0/10 in lab and element co-moving frames to t=1
+(jitter48², gamma5/3, CFL.3). The old boost10 abort does not recur in these
+current configurations. Co-moving still lowers the first-stage paired matrix
+condition number by a median ~2.4e4 at boost10 on the stated nondegenerate subset.
+N's residual boost dependence remains in both frames. Uniform N/lab narrowly
+fails the existing absolute1e-12 gate (pressure1.182e-12), explicitly retained;
+other three uniform gates pass. No solver/thesis/default changes. See
+[the report](RD_GRESHO_FRAME_COMPARISON_20260924.md) and archive
+`../local_runs/gresho_frame_20260924_v1/`. This is diagnostic evidence, not a
+new baseline acceptance or proof of full-update conservation.
+
+**Thesis N/Roe and LDA/contour distinction (2026-09-24, log3 §102):**
+Chapter4.2 now presents N with the ALE Roe split plus its mesh correction,
+followed by LDA's Gauss3 contour choice motivated by preliminary KH tests.
+Distribution schemes retains ALE characteristic splits for both and explicitly
+states LDA residual-sum conservation under the invertibility assumption.
+The experimental N contour reconciliation is removed from this thesis exposition,
+not from solver code. Local thesis and the 4.2 preview are compiled and updated;
+no commit/push or Overleaf write. Archive:
+`../local_runs/chapter4_n_split_lda_contour_20260924_v1/`.
+
+**Experimental N/Gauss3 moving comparison (2026-09-24, log3 §101):**
+Equal-step ALE N+Gauss3 is now explicitly permitted and tested using the existing
+N equal-share residual reconciliation. This does not replace the LDA/F1 baseline.
+Current matched smooth-KH glass48² runs: N/Roe, N/Gauss3 and LDA/Gauss3 reach t=10;
+LDA/Roe fails with negative mass at t=1.0327148. The archived LDA/Roe binary also
+reproduces its original t=.800476 failure exactly. All four Sod runs and eight
+uniform gates pass. Completed current KH runs retain 1.19–1.38% final total-mass
+drift, so full-update conservation remains unresolved. See
+[the report](RD_N_GAUSS3_SPLIT_20260924.md) and
+`../local_runs/n_gauss3_split_20260924_v1/` for frozen source, isolated binaries,
+run logs, metrics and figures. No thesis edits or commits in this experiment.
+
+**Static beta default reconciled with thesis (2026-09-19, log3 §79):**
+standard static LDA/F1 again uses mixed stage beta_n/beta_* without a flag;
+common opening beta_n is opt-in through `RD_LDA_COMMON_OPENING_BETA`. The
+solver is byte-identical to the §76 frozen/replayed source and all four
+`make check_rd` scripts pass. Chapter4.1 now labels its archived mixed KH
+figure correctly as four-rank data and writes the edge contribution as an
+explicit line integral. No other hierarchy/N-scheme prose changed. Thesis
+compile checked; no commit/push.
+
+**Moving Chapter4 baseline organisation (2026-09-18, log3 §78):** at the
+user's explicit thesis-edit request, 4.2/4.3 now select the existing one-rank,
+equal-step Arpaia midpoint/divisor + P1-U nonlinear Gauss3 contour + element
+co-moving frame + mixed LDA/F1 reference. Both physical sweeps remain after
+the normal single rebuild on NEW connectivity; begin records the interval.
+No solver/Config/default change or new hydro run. Alternative formulations,
+true old/new split stages, Voronoi storage and moving-hierarchy closures are
+red end-of-section material marked `to delete`. Native Q/divisor lifecycle,
+topology and endpoint weight defects, time-order and CFL limits are explicit.
+4.1/other chapters/bib/figures are preserved. Full compile247 pages, resolved
+references; printed153--177 reviewed, including red caption and colour scope.
+Only local chapter4.tex installed, no commit/push; normal Overleaf sync pending.
+Archive: `../local_runs/chapter4_moving_baseline_20260918_v1/`.
+
+
+**Latest figure cleanup (log3 §77):** Chapter4 figure names now omit dates.
+Hierarchy schematic bottom explanatory lines removed; nodal colour/ring legend
+retained. All6 dated thesis figures renamed and4 LaTeX references updated;
+old dated research artifacts remain archived. Full compile245 pages, all5 figure
+pages checked. Archive: `../local_runs/chapter4_figures_clean_names_20260917_v1/`.
+No solver change, commit or push.
+
+**Current baseline restored (2026-09-17, log3 §76):** standard static LDA/F1
+again uses mixed stage beta_n/beta_* by default. Common opening beta_n is now
+explicitly opt-in via RD_LDA_COMMON_OPENING_BETA; RD_LDA_MIXED_STAGE_BETA is a
+legacy explicit selection of the default. Four native rank4 replay cases match
+all32 archived snapshots exactly, including the common-beta control. Algebra
+gates pass. Chapter4 restores mixed equations and old rank4 KH data, retaining
+compact Delta E/E0 [10^-16]; the common-beta_n/Paardekooper comparison is limited
+to measured Yee errors. Full compile245 pages; only Chapter4/new figure installed.
+See `RD_MIXED_BETA_BASELINE_RESTORED_20260917.md` and workspace
+`local_runs/restore_mixed_baseline_20260917_v1/`. No commit/push. §73 below is a
+superseded default trial; its singular spatial extension is retained opt-in.
+
+**KH signed-energy audit (2026-09-17, log3 §74):** six exact-binary KH reruns
+at ranks1/2/4 plus six read-only conserved-energy diagnostic runs complete.
+All prior44 rank1/4 snapshots reproduce exactly; all66 diagnostic snapshots
+match uninstrumented reruns. The ~1e-16 drift is already in stored Energy;
+primitive reconstruction/plot arithmetic contribute only a few1e-18.
+Equal-step t2 drift changes from negative at4ranks to positive at2ranks:
+its sign is not an intrinsic dissipative property. See
+`RD_KH_ENERGY_ROUNDOFF_AUDIT_20260917.md` and workspace
+`local_runs/kh_roundoff_audit_20260917_v1/`. No production code/thesis changes.
+
+**Historical common-beta default trial (2026-09-17, log3 §73; superseded by §76):** at the user's request,
+the standard static path now uses common interval-opening beta_n for both
+spatial halves and F1, including equal internal/split and hierarchy. The
+explicit RD_LDA_MIXED_STAGE_BETA flag reproduces the former mixed method.
+Native Sod gates exposed a singular old-matrix/new-target range mismatch;
+the common spatial distribution now shares the unresolved component equally,
+while the existing rank-deficient temporal lumped fallback remains. This is
+an explicit numerical extension, with unchanged rank/conservation tolerances.
+All17 final native cases and make check_rd pass; mixed controls exactly replay
+the archived states. Report: `RD_COMMON_BETA_DEFAULT_20260917.md`; archive:
+`../local_runs/common_beta_default_20260917_v1/` (`native` preserves the initial
+two Sod failures, `native_final` the successful final implementation).
+Chapter4 records the common default, singular exceptions and limited earlier
+Yee three-way observation; its KH graph is regenerated from the new default.
+Moving/N/B/four-pass rate-Heun policies are unchanged. No new convergence or
+general positivity claim; code/thesis remain uncommitted and unpushed.
+
+**RD stage equations (2026-09-17, log3 §69--70):** the user approved replacing
+the long RD implementation paragraph with English stage notation and explicit
+N/lumped and LDA/F1 corrector equations. Literature checked: Ricchiuto & Abgrall
+2010, Arpaia et al. 2015, Paardekooper 2017. The text distinguishes the current
+mixed spatial-stage convention from the common-beta form in Paardekooper Eq63.
+Follow-up source audit (log3 §71) identifies that common beta as beta_n in
+ASTRIX v1.0.0/v1.1.0, including F1; it is not direct support for our mixed
+beta_n/beta_* choice. See `PAARDEKOOPER_STAGE_BETA_AUDIT_20260917.md`.
+The old 2026-08-01 three-convention Yee experiment was recovered from log1;
+its similar errors were not a mass-term-only beta test and all three had
+roughly first-order temporal convergence. Source/experiment audit and current
+review pages 143--144 are in
+`../local_runs/chapter4_rd_stage_math_20260917_v1/` (SCIENCE_REVIEW.md and
+`output/pdf/chapter4_rd_stage_math_review.pdf`). Full compile passes,245 pages;
+only the RD paragraph changed. Thesis remains uncommitted and unpushed.
+
+**FV notation correction (2026-09-17, log3 §67--68):** Zhenyu approved the
+code-check findings. Chapter 4 now writes each FV hook as
+`Q += -dt/2 sum(A F)` and consistently distinguishes primitive W, conserved
+density U and integrated conserved Q. The primitive prediction W' and the
+completed-Q synchronization are explicit. Only the FV description changed;
+the comparison table, RD paragraph and later sections retain the §66 draft.
+Full compile passes (245 pages, resolved references); review pages 142--143:
+`../local_runs/chapter4_fv_notation_20260917_v1/output/pdf/chapter4_fv_update_review.pdf`.
+Local thesis remains uncommitted and unpushed. The §66 PDF predates this edit.
+
+**Latest thesis draft (2026-09-16, log3 §66):** local thesis/GitHub base
+`fdb3db5`; Chapter 4.1.1 comparison preserved, F1 red placeholder checked
+against the current code and completed. Hierarchy/MPI are now sections 4.2/4.3
+in the local draft, with the existing A--E schematic, native MPI figures and
+a new smooth-KH energy history from archived `943f7ae` glass2304 outputs.
+Review and code/science notes are in
+`../local_runs/chapter4_sections_draft_20260916_v1/`. Full thesis builds;
+edits are **uncommitted and unpushed**, awaiting the user's review. The original
+FV formula/notation issues identified at this stage were subsequently corrected
+with the user's approval in §68 above. No solver/baseline change or new hydro
+experiment in these thesis tasks.
 
 This file records the local Apple Silicon development environment for small
 two-dimensional AREPO residual-distribution tests. It supplements `context.md`;
@@ -47,9 +325,201 @@ agreement;1216 hook intervals each have one mesh, one geometry preparation
 and two sweeps. Named Config retains its historical SPLIT filename, with
 updated semantics: `examples/yee_2d/Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh`.
 Moving hierarchy's actual call order and the ALE conservation limitations
-remain. User-edited draw.io is preserved; its two red labels should be
-begin/end, not a claim of moving predictor execution before rebuilding.
-Source/Config/log changes are uncommitted, existing staged work is preserved.
+remain. The follow-up to Claude's review is log3 §50: an all-node equal-bin
+check at the ALE opening hook is enabled only by RD_DEBUG_ASSERTS, with three
+native regression cases identical to §47 and 20 compiled hook checks passing.
+Updated common-hook figure (white, function names, blocks 1–14):
+`figures/Arepo_flowchart_main_loop_RD_functions_reviewed_20260914.drawio`.
+Its static and equal-ALE dispatch are explicit; the user's earlier draw.io is
+preserved. Matching draw.io/PNG copies are in the thesis resource directory.
+Review archive: `../local_runs/rd_review_polish_20260914_v1`.
+Claude's §49/docs are committed at adc424b; source/Config and the §50 changes
+remain uncommitted. No staged changes were present during this follow-up.
+
+**New numerical exploration (2026-09-14, log3 §51):** Zhenyu asked whether
+moving ALE-RD can genuinely place its predictor before the mesh change and
+corrector after it with one new Delaunay build. An independent Campoli
+endpoint-mass model now uses OLD connectivity for the first residual and NEW
+connectivity/F1 mass for the second, plus a derived local cavity total-balance
+term. Ten scalar/Euler main cases with flips conserve to 1.89e-15 and preserve
+uniform states to 5.33e-15; still one build and two physical residual sweeps per
+step. This is not a native implementation or a direct change to Arpaia.
+The unrestricted correction has a documented positive-input/negative-output
+counterexample. Fixed-connectivity time order remains N≈2 / F1≈1; with flips
+the candidate does not demonstrate time order2. Smooth scalar h slopes are
+1.78/1.89 for LDA, with h/dt refined together. Report:
+`RD_TRUE_ALE_SPLIT_EXPLORATION_20260914.md`; scripts `tests/rd/explore_true_ale_split*.py`;
+archives `../local_runs/true_ale_split_*_20260914_v1`.
+No C, Config, existing flowchart or thesis changed. Current hooks retain the
+§47/§50 behavior above. Next research gates are admissible local correction,
+geometry validity, native state/cache/restart lifecycle and measured cost;
+MPI/hierarchy and complete second-order time integration remain unvalidated.
+
+**Arpaia clarification (log3 §52):** the true old/new stage structure also
+admits Arpaia's internal mass/divisor pair, but the §51 topology-only correction
+leaves an additional endpoint defect `sum d_i*(Utrial_i-Uold_i)`, where d is
+new-connectivity endpoint area minus the Arpaia divisor. A proposed nodal Q
+correction removes this term in addition to the cavity correction. Sixteen
+independent one-step scalar/Euler pairs verify the identity to1.76e-15 and
+corrected totals to2.22e-15; this is not original Arpaia unchanged and is not
+identical to corrected Campoli. No multi-step accuracy/positivity/native claim.
+Report: `RD_TRUE_ALE_SPLIT_ARPAIA_20260914.md`; archive:
+`../local_runs/true_ale_split_arpaia_20260914_v1`. C and default settings unchanged.
+
+**Current user direction / figure (log3 §§53–54):** defer further moving-mesh
+numerical research and return to the main-loop figure. Latest editable copy:
+`figures/Arepo_flowchart_main_loop_RD_FV_functions_20260915.drawio` and same-name
+PNG, also delivered to the thesis Arepo_document resource directory. Generic
+First/Second hydrodynamic stage headings replace begin/end wording, retaining
+RD/FV function names and omitting static/ALE dispatch details; all14 numbered
+boxes,15 edges, white background and manual gravity edits are preserved.
+Original files are untouched. This is a main-loop interface figure; no solver
+semantics changed. Latest record: `../local_runs/flowchart_rd_fv_stage_labels_20260915_v1`.
+
+**Thesis insertion / pending table (2026-09-15, log3 §55):** the user finalised
+`Arepo_flowchart_main_loop_RD_FV_functions.pdf` in the thesis Arepo_document
+resource directory and explicitly authorised Section 4.1 edits. Synced the
+thesis GitHub main (the documented Overleaf sync route) from0a27901 to162f9fc,
+preserving the original141-line local Gauss addition and the incoming chapter
+introduction without conflicts. The exact user PDF is now in
+`/Users/zhenyuwu/Desktop/MyThesis/Zhenyu-PhDThesis/zhenyu_thesis/chapter4/figures/`;
+the Section4.1 figure/reference compiles as Figure4.1 on printed page140.
+Full232-page XeLaTeX build and page138–141 visual checks pass; function labels
+are small at text width, with vector content retained. Archive and three-page
+review PDF: `../local_runs/thesis_flowchart_20260915_v1/`.
+The comparison draft `RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md` was
+revised in log3 §56 to an English property table: representation, conservation,
+upwinding, spatial accuracy (reconstruction vs P1+LDA), positivity/oscillation
+control (slope limiting vs N), and nonlinear accuracy–robustness balance
+(limiting vs B blending). Implementation rows were removed at the user's request.
+The user approved the table in log3 §57, adding a computational-elements row
+(Voronoi cells / Delaunay triangles). It is now Table4.1 on printed page139.
+Section4.1 is “Overview of AREPO-RD”, with 4.1.1 “Implementation of RD in
+AREPO” (introduction, table and original Figure4.1) and 4.1.2 “Increasing
+computational efficiency” (brief hierarchy and MPI overviews). The latter
+starts on page141; Section4.2 starts on page143. Full235-page compilation
+resolves all citations/labels. Current archive and five-page review:
+`../local_runs/thesis_section41_table_20260915_v1/`.
+No commit/push or solver/Config change; moving-mesh numerical research remains deferred.
+
+**Current thesis figure layout (2026-09-15, log3 §58):** Figure4.1 now uses
+`figures/Arepo_flowchart_main_loop_RD_FV_functions_landscape_20260915.drawio`
+and its native vector PDF. This new copy reflows the user's final embedded
+diagram into compact aligned columns, preserving all14 numbered boxes,
+15 edges, labels and previous deletions. Originals remain unchanged; matching
+draw.io/PDF copies are in the thesis Arepo_document resource directory, with
+the new PDF also in thesis `chapter4/figures/`. A `pdflscape` page in the thesis
+places Figure4.1 on printed page140 at roughly twice the previous label size
+(function names3.38→6.80pt; descriptions3.95→8.75pt). The unchanged explanatory
+paragraph follows the figure. Section4.1.2 still begins on141 and4.2 on143.
+Full235-page compilation and visual checks pass. Archive and six-page review:
+`../local_runs/thesis_flowchart_landscape_20260915_v1/`;
+`chapter4_1_landscape_review.pdf`. Local edits await the normal Overleaf sync.
+
+**Native MPI figure (2026-09-15, log3 §59):** the user is continuing Section4.1
+text on Overleaf; do not assume the local narrative is now the latest version.
+A separate four-rank illustration uses the real2304-node SWIFT glass and a
+short static full-mesh equal-step Gauss3 LDA/F1 run. Native capture exports
+all4608 physical triangles, primary-node ranks and actual MPI contribution
+buffers. SciPy periodic topology matches every triangle; all owner/index
+mappings and649 remote contributions per captured stage match exactly.
+Capture on/off states are identical;1/4-rank states differ by at most2.665e-15.
+The helper is injected only into an archived source copy; working solver and
+thesis are untouched. Report: `RD_MPI_GLASS_OWNERSHIP_20260915.md`.
+Figures: `figures/rd_mpi_glass_rank4_overview_20260915` and
+`figures/rd_mpi_glass_rank4_boundary_20260915` (PDF/SVG/PNG), also in the
+thesis Arepo_document resource subdirectory `RD_MPI_glass_rank4_20260915/`.
+Archive: `../local_runs/mpi_glass_ownership_20260915_v1/` with raw geometry,
+packet CSVs, audit results, source/build/run provenance and reproduction scripts.
+This illustrates minimum-ID ownership for the full local mesh, not majority
+voting or a measured MPI speedup. Active-only and moving-mesh scope is unchanged.
+
+**Comparison prose/table completion (2026-09-15, log3 §60):** the local thesis
+now includes Zhenyu's commits 6777107 (figure replacement) and b013be7
+(comparison draft); HEAD and the cached origin/main both point to b013be7.
+At Zhenyu's explicit request, completed only the comparison prose in 4.1.1
+and replaced the computational-elements row with fluid-state storage,
+control volume and flux/residual evaluation. The common storage row spans
+both solver columns: Delaunay vertex / Voronoi generator, `P[i]` and
+`SphP[i]`. The centroid distinction and mass-storage detail are explained.
+The nine-row table retains spatial reconstruction/LDA, slope limiting/N,
+conservation, upwinding and B blending. Existing Springel/Pakmor citations
+are used; no bibliography or Chapters 1--3 edit. The user's introduction
+and all material after the table are preserved, including the renamed
+`Arepo_flowchart_main_loop_RD_FV_functions_landscape.pdf` asset.
+Full XeLaTeX build: exit 0, 237 pages; table 141, figure 142, efficiency 143.
+Six review pages rendered and inspected. Source backups, hashes, exact patch
+and review PDF: `../local_runs/thesis_comparison_completion_20260915_v1/`.
+Report: `RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md`.
+Only chapter4.tex changed in the thesis; local edits await normal sync.
+No pull/commit/push, solver or Config change.
+
+**MPI figures inserted (2026-09-15, log3 §61):** at Zhenyu's request,
+created compact thesis copies of the two audited glass figures. The overview
+omits its main heading and bottom total-count line. The detail omits its
+heading, subtitle, complete right-hand (b) explanation panel and all footer
+prose, retaining the mesh, A/B triangle labels, node annotations and Rank 0--3
+legend. The original figures and native geometry are preserved. Reproduce
+with `tests/rd/plot_mpi_mesh.py ARCHIVE --thesis --output-dir NEW_DIR`.
+The new PDF/SVG/PNG names end `_thesis_20260915`, under `dev_log/figures/`
+and the thesis Arepo_document `RD_MPI_glass_rank4_20260915/` resource folder.
+Two PDFs are inserted in Chapter 4.1.2, with English captions and a short
+MPI ownership/routing explanation. Figure 4.2 is landscape on page 145;
+Figure 4.3 is portrait on page 146. All earlier thesis text is preserved,
+including §60's comparison completion. Full XeLaTeX build: exit 0, 239 pages;
+four-page review covers 143--146. Archive:
+`../local_runs/thesis_mpi_figures_20260915_v1/`.
+No native simulation rerun, solver or default Config change; no commit/push.
+
+**Current thesis GitHub state (2026-09-16, log3 §64):** fetched the user's
+Overleaf comparison revision 5a35005 and used it as the source of truth.
+Preserved its table verbatim and its shortened prose, adding original method
+and project references, the limited B-blending/slope-limiting analogy, and
+the P1-triangle versus median-dual-area distinction. Kept -ization spelling;
+Zhenyu prefers this British English variant, so do not convert it to -isation.
+Two requested project author fields in the shared bibliography were corrected;
+no Chapters 1--3 prose was edited. Included §61's two MPI PDFs and 50 lines
+of discussion/captions. Full XeLaTeX build: 238 pages, all references resolved;
+review of printed 138--145 and affected bibliography entries passed.
+Committed and pushed thesis main as e26d5ab429e5f31355d39cf7fd9ebfd9bb63e2d0;
+GitHub main independently verified. No tracked/staged thesis edits remain;
+old untracked build/editor files are preserved. Original local MPI changes
+remain backed up in stash 44b646cf and the archive below, already integrated.
+Archive: `../local_runs/thesis_sync_citations_20260916_v1/`, final review
+`output/pdf/chapter4_1_synced_review.pdf`. Overleaf itself was not operated.
+The standalone hierarchy schematic below has still not been inserted.
+
+**Current hierarchy schematic (2026-09-16, log3 §63):** revised §62's figure
+at Zhenyu's request. Nodes are now A--E; A/B/C=4dt (blue), D=2dt (teal),
+E=dt (orange). Every node retains its own timebin colour in every panel;
+an outer ring separately indicates timebin synchronization. Triangle steps
+are derived from the minimum of their three nodal steps. At t=dt, T3(CDE)
+distributes to unsynchronized C/D as well as E. Rings do not encode stage-live:
+the static whole-star criterion freezes B/C/D, including D when synchronized
+at t=2dt. Geometry and schedule are unchanged and checked against §62.
+Latest PDF/SVG/PNG: `figures/rd_hierarchical_timestep_schematic_20260916`;
+same builder path as below. Archive with caption, schedule and original script:
+`../local_runs/hierarchical_timestep_schematic_20260916_v1/`.
+Seven resources copied to Arepo_document/RD_hierarchical_timestep_20260916.
+PDF rendered and inspected. Old figures, thesis and solver remain unchanged;
+no thesis insertion, native rerun, commit or push.
+
+**Previous hierarchy schematic (2026-09-15, log3 §62):** Zhenyu requested
+an AREPO-Figure-17-style illustration with fewer elements. A new static
+schematic uses 5 vertices, 3 actual Delaunay triangles and four interval
+openings at 0, dt, 2dt and 3dt. Node periods J/K/L=4dt, M=2dt, N=dt imply
+triangle periods 4dt, 2dt and dt. Shading identifies triangles starting an
+interval; arrows distribute to all vertices, including hollow unsynchronized
+ones. Filled nodes encode timebin synchronization, not RK stage-live status.
+Positions and bins remain fixed; two RK stages and moving flips are omitted.
+PDF/SVG/PNG: `figures/rd_hierarchical_timestep_schematic_20260915`.
+Builder: `figures/build_rd_hierarchical_timestep_schematic.py`; checks confirm
+Delaunay connectivity and all due sets. The final PDF was rendered/inspected.
+Archive: `../local_runs/hierarchical_timestep_schematic_20260915_v1/`, with
+schedule JSON, caption, source/output hashes and notes. New resource copies
+are in Arepo_document/RD_hierarchical_timestep_20260915. The old moving-mesh
+timeline, thesis Chapter 4 and solver are untouched; this figure is a review
+draft and is not inserted into the thesis. No native run, commit or push.
 
 ## Scope and data policy
 

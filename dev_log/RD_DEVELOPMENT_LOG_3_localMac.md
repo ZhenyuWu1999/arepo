@@ -73,6 +73,16 @@ handoff for the intervening moving-mesh hierarchy work.
 | 47 | Remove the preview; common RD begin/end hooks with one mesh per step |
 | 48 | Claude review handoff: current RD begin/end structure, one-mesh evidence, and editable flowchart locations |
 | 49 | Review of the begin/end refactor and the revised main-loop figure; section 38 accepted |
+| 50 | Apply the review: debug equal-bin guard and a numbered common-hook flowchart; correct the active-node drift attribution |
+| 51 | Explore genuine old/new-mesh ALE stages: local conservative balance, independent Euler gates, and unresolved time order/positivity |
+| 52 | Arpaia extension of the true split: topology balance alone is insufficient; derive and probe the additional endpoint-weight correction |
+| 53 | Generic RD/FV function-name flowchart: remove static/ALE dispatch labels, retain numbered layout and preserve originals |
+| 54 | Rename the two generic flowchart headings to first/second hydrodynamic stage; preserve function names |
+| 55 | Sync thesis updates, insert the user-finalised PDF in Section 4.1, and prepare an RD/FV comparison table for review |
+| 56 | Revise the comparison into a concise English table of numerical properties and their FV/RD ingredients |
+| 57 | Insert the approved table with Voronoi/Delaunay elements and organise Section 4.1 into implementation and computational efficiency |
+| 58 | Enlarge Figure 4.1 with a compact editable layout and a landscape thesis page, preserving the user-finalised originals |
+| 59 | Export a native four-rank glass triangulation; verify ownership, periodic topology and MPI packets; illustrate real boundary examples |
 
 ---
 
@@ -4145,3 +4155,1913 @@ counts and operator norms in the table above, and repeats the dt ladder for the
 masked and stale-rate variants. It is a NumPy model problem, not solver
 validation, and it supersedes the geometry of the section-37.5 script rather
 than adding evidence.
+
+## 50. 2026-09-14：落实 Claude §49 的代码与流程图微调
+
+**作者：Codex；请求：Zhenyu 要求查看 Claude 的评论，并处理必要的代码与流程图微调。**
+本轮从 `develop_pureC_RD` / `adc424ba93f8cb98ff494dd8e98b41fafcd2e98b`
+开始；保留既有未提交改动，未切分或创建 commit。§49 的原文和作者记录保留。
+
+### 50.1 审核结论与一处更正
+
+同意 §49.2 对共同 `rd_step_begin/end` 入口、单次网格重建及 restart 处理的认可，
+也同意 §49.3 要求流程图同时显示入口函数与其内部调用。新版用一张图标明 static
+和 equal-step ALE 的差异：后者 begin 只记录终点，两次数值扫描都在 end 完成。
+没有重新移动 ALE predictor，也没有恢复被撤回的预构造方案。
+
+**§49.3 第3点对 drift 的归属不完整。**
+`src/time_integration/predict.c` 的 `make_list_of_active_particles()` 在构建
+hydro / gravity 活跃列表时，分别于当前第461、480行调用
+`drift_particle(i, All.Ti_Current)`，条件是对应 bin 同步且该节点尚未漂移到当前时间。
+因此第9框仍保留 drift，但限定为 synchronized nodes，并列出这个内部调用。
+第10框单独标出 domain update 时的 `drift_all_particles()`；这不同于第9框的操作。
+网格构造中的 lazy drift 也确实存在，但不是删除第9框 drift 描述的理由。
+
+§49.1 对 §38 的接受记录继续有效。本轮未重新解释 F1 hierarchy 的精度问题，
+也未将标量模型、守恒、空间阶或性能收益混为新的 native 验证结果。
+Claude 已提交的 `.gitignore` 根目录限定及图源补录保持原样。
+拆分行为保持重构和新增 split/restart 功能的 commit 建议留待提交时处理。
+
+### 50.2 ALE begin 的全节点 timebin 调试检查
+
+在 `src/hydro/residual_distribution_solver.c` 的 `rd_step_begin()` 中，
+保留单 rank、非空、纯 gas、非 comoving、闭合步和首节点有效同步 bin 的现有检查；
+新增 `RD_DEBUG_ASSERTS` 下的 `P[1..NumGas-1].TimeBinHydro` 一致性检查。
+若不一致，在写入 `All.RD_EqualStepEnd` 之前报告节点下标、实际 bin 和期望 bin。
+
+这是对 §49.2 第2条建议的有意限定：正式配置继续由
+`FORCE_EQUAL_TIMESTEPS` 的分配规则保证相等，**没有额外全节点扫描或 MPI reduction**；
+开启 `RD_DEBUG_ASSERTS` 的配置增加一次整数检查循环，以尽早发现违约。
+本轮 native Config 开启该调试标志。没有修改残差、F1、网格或时间积分公式。
+
+### 50.3 新图、编号和原件保护
+
+可继续手动编辑的新图：
+[工作区 draw.io](/Users/zhenyuwu/arepo_rd/arepo/dev_log/figures/Arepo_flowchart_main_loop_RD_functions_reviewed_20260914.drawio)，
+[白底 PNG 预览](/Users/zhenyuwu/arepo_rd/arepo/dev_log/figures/Arepo_flowchart_main_loop_RD_functions_reviewed_20260914.png)。
+同名 draw.io / PNG 已放到
+`/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/`
+（实际目录 `/Users/zhenyuwu/Desktop/PhD/Arepo_document`）。
+
+新版从用户手调的 `Arepo_flowchart_main_loop_RD_functions_20260914.drawio` 复制，
+保留两个 gravity 框的文字修改、14个框的几何位置和全部15条连线。
+新增1–14编号，编号是对应方框的子对象，拖动方框时一起移动。
+第7、12框分别列出 `rd_step_begin/end`，并在其下标明 static 的 predictor/corrector
+调用和 equal ALE 的记录终点／两阶段调用。第9、10框区分两种 drift；第10框注明
+moving 每步重建一次、static 按需重建。图注明确覆盖 static N/LDA split-equal 或
+hierarchy，以及带 split 标志的 equal ALE；未宣称已经验证 moving hierarchy。
+初始化和 restart setup 不在这张主循环图中。
+
+生成脚本
+[build_arepo_main_loop_reviewed_drawio.py](/Users/zhenyuwu/arepo_rd/arepo/dev_log/figures/build_arepo_main_loop_reviewed_drawio.py)
+校验输入 SHA、函数存在性、方框位置、连线和用户 gravity 文字，并拒绝覆盖已有输出。
+不要用旧 builder 覆盖用户图。使用本机 draw.io 31.4.5 按 light theme / page size
+导出，并实际查看最终 PNG：文字、分支、编号均在框内，背景为白色。
+首次沙箱内启动 draw.io 失败；沙箱外本地导出成功，这是工具环境问题。
+
+SHA256：
+
+- 原用户工作区图未变：`645d20cf7045140d18e680f2c7904eac1acc5f91eadf18fdb55a3fe3fdd651d6`。
+- 新 draw.io：`d4d124cac61c4e9e69660c2dd2a3cd5ad6565b98879f52cd9655de87f892038e`。
+- 新 PNG：`980195e5c67bf8e5846093edf961fcbe7b7095d94d9ca4627d57cf388d100157`。
+
+资源目录中的原 PDF、较早主体 PDF 和较早函数版 draw.io 均逐字节保留；
+复制前后记录见下述档案的 `figure_delivery.json`。旧 PDF 不代表新版标签。
+未修改 thesis 正文或原始流程图。
+
+### 50.4 验证范围与证据
+
+冻结档案：
+`/Users/zhenyuwu/arepo_rd/local_runs/rd_review_polish_20260914_v1/`。
+源码为上述 `adc424b` 加当时的全部相关工作树源码 diff，先冻结后编译：
+
+- `source.patch` SHA256：`97e1d11312b4f8c4931e48578c4b56f73b73f74265ff1e9d8ba542b7ed0dd082`。
+- `source.tar` SHA256：`b18aee79a1297fcddb6b8eb3348c808cdacf6e6fc993eec71d0ec3e779d9fb7c`。
+- 本轮 solver 文件 SHA256：`1ca5e428a0578752a18fc7af6b34e0341dbb3b6ce1d1d7d5a10d27dbe9e13636`；与最终工作区一致。
+- 单独的 `lda_split` 构建、Config、生成头、binary SHA、linkage、参数、IC SHA 和运行日志均保留。
+  `make -j4`；运行单 MPI rank，`OMP_NUM_THREADS=1`、`OPENBLAS_NUM_THREADS=1`。
+
+本轮只选择3个已有算例（没有重跑25例完整 campaign）：2304节点 glass48 Yee，
+周期盒长10，LDA/F1、Arpaia、Gauss3、equal ALE，时间步长1/256。
+比较参考是 §47 的 `moving_single_mesh_hooks_20260914_v1` 同名算例。
+
+| 算例 | 最终时间 | 物理步数 | 网格构造总数（其中 setup） | 保存快照数 | 一致的阶段校验记录数 |
+| --- | --- | --- | --- | --- | --- |
+| `yee_lda_split` | 0.125 | 32 | 34（2） | 3 | 64 |
+| `extend_lda`，完整步 checkpoint 后延长 TimeMax | 0.25 | 64 | 67（3） | 5 | 128 |
+| `pending_extend_lda`，pending checkpoint 后延长 TimeMax | 0.25 | 64 | 66（2） | 3 | 128 |
+
+5次进程启动全部成功。每一个 begin/end 区间均验证为1次 mesh、1次 ALE 几何准备、
+2次残差扫描。全部11份保存快照按 ParticleID 比较，守恒密度、坐标和 median-dual
+面积的最大差均为0，ID / timebin 完全一致；320条阶段 checksum 文本也完全一致。
+参考比较的可执行脚本和结果分别为 `compare_previous.py`、`previous_comparison.json`；
+主分析为 `summary.json`（明确记录 completed 3 / planned 25）。
+
+另外，`check_begin_guard.py` 从冻结源码直接提取真实 begin 函数，以最小 C 状态夹具
+编译 debug / non-debug 两种版本。20项检查通过：debug 11项、non-debug 9项。
+其中第二节点或最后节点 bin 不同均在记录终点之前被拒绝；还覆盖有效输入、非法 bin、
+不同步、空输入、非纯 gas、多 rank、comoving 和重复 begin。预处理输出确认 non-debug
+不包含新扫描。夹具不执行物理残差，不能代替以上 native 测试；它验证的是入口契约。
+详见 `guard_summary.json` 和 `guard_harness/`。
+`make check_rd PYTHON=/Users/zhenyuwu/miniconda3/envs/21cmfast/bin/python` 的3项既有代数检查通过。
+
+这些结果验证了新增调试检查的行为和已有解的保持。它们不构成速度测量或新的
+moving MPI / hierarchy 验证，也不修复既有 ALE 守恒误差：本轮短 Yee 的归一化总量
+最大漂移约 `2.30e-10`，两种延长情形约 `1.41e-6`，与参考一致。
+
+## 51. 2026-09-14：探索数值上真正分开的 moving ALE-RD 两阶段
+
+**作者：Codex；请求：Zhenyu 要求探索修改数值方法，让 predictor / corrector
+真正位于网格移动和重建前后，同时保持每物理步一次 Delaunay 构造。**
+工作树仍为 `develop_pureC_RD` / `adc424ba93f8cb98ff494dd8e98b41fafcd2e98b`
+加此前未提交改动；本轮没有修改 native C、Config、已有流程图或 thesis，未创建 commit。
+当前 ALE begin/end 的实际行为仍为 §47、§50 所述。
+
+完整符号、推导、反例、复现方法和 native 落地边界见
+[RD_TRUE_ALE_SPLIT_EXPLORATION_20260914.md](RD_TRUE_ALE_SPLIT_EXPLORATION_20260914.md)。
+这是一个新候选的独立数值探索，不是已启用的 AREPO 算法。
+
+### 51.1 候选与成立的结论
+
+equal-step begin 已知 dt 和节点速度，所以可以在不构造未来 Delaunay 网格的情况下，
+计算旧连接关系的向前几何和真正的 predictor。正常移动后只构造一次新网格；
+corrector 的第二次残差及 F1 时间质量项使用新连接关系及其拉回几何。
+
+朴素混用旧/新残差不守恒。本轮在项目已有的 **Campoli endpoint-mass 配对**上，
+推导了跨连接关系的精确总量缺口：每个完整 changed cavity 内，
+“新减旧的起点面积差 + 新减旧的终点面积差”的一半乘以起点节点密度，再求和。
+按新节点完整 median-dual 面积分配并扣除该局部向量，恰好消去缺口。
+无翻边时修正为零；均匀状态在完整区域内也给出零修正。
+这是局部几何代数项，不需要第三次物理残差扫描；但会增加缓存、两套几何计算和区域匹配，
+**没有 wall-time 零开销结论，也没有直接替换当前 Arpaia 形式**。
+新修正由本轮推导，并非 Campoli 文献已证明的跨拓扑算法。
+
+### 51.2 独立实验：守恒通过，但不能据此宣称完整二阶/正性
+
+主组为二维周期单位盒、256 个 jittered Cartesian 节点、512 三角形，
+固定线性节点路径，64 步到 t=.25，dt=1/256。10 个标量/Euler 的 N/lumped 和 LDA/F1
+uniform、density/entropy wave、Yee 型 vortex 测试全部完成。每例48个翻边步，
+累计170个删除三角形，最大区域7节点；65次构网含1次初始化，64次 predictor /64次 corrector。
+Euler 最大归一化总量漂移1.89e-15，均匀状态误差5.33e-15；逐步独立核对缺口公式，
+最大绝对差4.97e-15。已测 predictor/最终状态密度和压力均为正。
+
+这不是 native Euler 代码的完整移植：未覆盖实际 mesh-velocity 反馈、
+sigma≈u 的奇异 Roe 情况、完整 element-frame / Uhat / limiter、shock、MPI、hierarchy
+或 restart。小涡核的256节点例仅为非线性可行性测试，不是 thesis Yee 精度基准。
+
+时间精度检查保留了失败证据：144节点固定连接关系的极限 ODE 对照，N/lumped 时间阶≈2，
+LDA/F1≈1，重现既有 F1 限制；加入真实拓扑转换后，新候选对2048步参考的最后细化阶
+约1.12 /1.22，没有清楚的时间二阶。该参考有限，斜率不是严格渐近阶。
+新候选的64/256/1024节点光滑标量空间组，h和dt同时减半，LDA/F1 的 h 斜率1.780/1.891；
+不能以此替代 native glass Yee 或固定h时间分析。
+
+另有确定的正性反例：单位方形四节点的瞬时翻边，将正输入(.01,10,.01,10)
+按该无限制局部修正变成(-3.32,6.67,-3.32,6.67)，总量仍为3.34。
+因此这是**守恒但不普遍正性**的候选；需额外 admissible 限制或步长策略，不能直接投入激波。
+此前的 full-patch high map 的同类局限继续有效。
+
+### 51.3 产物和后续建议
+
+本轮新增5个实验脚本和1个绘图脚本，均在 `tests/rd/explore_true_ale_split*.py`
+及 `tests/rd/plot_true_ale_split_exploration.py`。
+档案在工作区 `local_runs/true_ale_split_{scalar,euler,order,balance,balance_checks}_20260914_v1/`，
+各自包含运行前冻结脚本、SHA256、原始结果；总体验证记录在
+`local_runs/true_ale_split_audit_20260914_v1/manifest.json`。
+旧连接 corrector + remap 的备选结果与新候选分别保留，不混作同一方法的证据。
+时间/空间对照图为 `dev_log/figures/rd_true_ale_split_order_20260914.png` / `.svg`。
+
+建议首先审查局部总量修正与正性限制，再考虑 opt-in、单rank、equal-step、Campoli 的
+native 试验；同时实测额外几何/区域匹配开销。完整轨迹几何有效性、按ID持有缓存、
+两hook间checkpoint的数值状态保存都是实际移植条件。
+若要求固定h完整时间二阶，F1 stage 速率一致性与翻边事件/状态转移还要分别处理。
+现有四扫描 rate-Heun 的 ALE 不守恒问题不能通过此处形式拆分消除。
+
+solver SHA256 仍为 `1ca5e428a0578752a18fc7af6b34e0341dbb3b6ce1d1d7d5a10d27dbe9e13636`。
+原用户函数图和 §50 reviewed 图哈希均未变；没有为未落地的候选改动流程图。
+
+## 52. 2026-09-14：真正两阶段方案是否也适用于 Arpaia
+
+**作者：Codex；请求：Zhenyu 追问 §51 的方案仅对 Campoli 成立，还是也对 Arpaia 成立。**
+结论：两入口分别计算旧/新连接关系上的阶段，对二者都可组织；但 §51 的
+仅翻边区域修正对 Arpaia 不充分。核对 `rd_ale_triangle_geometry_build()`、
+`rd_ale_prepare_step()` 和 `rd_ale_finish_step()` 后，推导额外 endpoint-weight 项。
+详见 [Arpaia 补充报告](RD_TRUE_ALE_SPLIT_ARPAIA_20260914.md)。
+
+令 d_i 为新连接关系的“终点 median-dual 面积减 Arpaia 更新分母”，
+即新连接关系起终面积均值减中点面积；Uhat 为未修正的 corrector 密度。
+跨连接关系的总量缺口恰为 §51 的 topology 项，加 `sum_i d_i*(Uhat_i-Uold_i)`。
+只扣 topology 项后，即使没有翻边也会剩余后一项。保持 Arpaia 内部配对时，
+可以在各节点终点 Q 写回中额外扣 `d_i*(Uhat_i-Uold_i)`；该项需使用修正前的 Uhat。
+两项相加给出一个新的守恒 Arpaia-based 变体，仍不增加网格构造或物理残差扫描。
+它一般不局限于翻边节点，且不等价于换成 Campoli。
+
+新增 `tests/rd/probe_true_ale_split_arpaia.py`：144节点周期 jitter mesh，dt=1/16，
+固定连接/实际Delaunay重建（删除26三角形）、N/LDA、标量/Euler、均匀/非均匀共16组，
+每组另有 Campoli 对照。缺口公式最大绝对误差1.76e-15；全部修正后2.22e-15；
+均匀密度向量误差3.11e-15。仅拓扑修正的无翻边 N Euler 对照仍有能量缺口-1.626e-6。
+修正后两配对仍有非零逐点差，不能宣称它们成为相同算法。
+档案为工作区 `local_runs/true_ale_split_arpaia_20260914_v1`，含运行前冻结脚本及SHA。
+
+这是16组独立单步恒等式核对（含参考共32个更新），不是新增native、多步稳定性或收敛证据。
+§51 的时间阶/正性问题继续存在；没有修改 C、Config、流程图、thesis 或旧报告/档案，
+没有创建commit。当前代码中的 Arpaia 仍未加入本文提出的修正。
+
+## 53. 2026-09-14：流程图改用通用 RD / FV 表述
+
+**作者：Codex；用户决定：moving-mesh 数值方法研究留待以后，当前回到流程图，
+去掉 static RD 限定，笼统表示 RD 或 FV。**
+
+从 §50 的编号函数版复制新文件
+`dev_log/figures/Arepo_flowchart_main_loop_RD_FV_functions_20260914.drawio`，
+另导出同名白底 PNG。标题、图注和第7/12框统一使用 RD or FV；两个 hydro 框分别为
+Begin step / End step，保留 `rd_step_begin/end(&Mesh)` 与
+`compute_interface_fluxes(&Mesh)`，删除 static / equal ALE 的内部 dispatch 细节。
+第10框改为按需 domain/tree update 与 mesh construction；不再列 static/moving 分支。
+这张图表达共同主循环入口，未把尚未落地的真正 ALE 两阶段方案画成现有实现。
+
+14个方框、1–14编号、全部15条连线、颜色、位置及用户手调 gravity 文字均保留。
+图中不再出现 static、moving、ALE 或 `RD_RK_STAGE_*` 标签。
+新 builder 为 `dev_log/figures/build_arepo_main_loop_rd_fv_drawio.py`，只改8个文字对象及
+页面名称，验证其余 XML 内容不变并拒绝覆盖输出。
+
+用本机 draw.io 导出2802×2562 RGB PNG，light theme / page size / scale2；
+实际查看全图，文字、函数名、编号、连线均正常，背景像素为白色。
+draw.io和PNG已以新文件名放入用户的
+`/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/`
+（实际 `/Users/zhenyuwu/Desktop/PhD/Arepo_document/`）。旧图与PDF逐字节保留。
+交付及哈希记录：工作区 `local_runs/flowchart_rd_fv_20260914_v1/delivery.json`。
+新 draw.io SHA256：`f9c29f50570aae1336867219d1e37865162ea2737ef69b46818880e33110ca33`。
+未修改 solver、Config 或 thesis 正文，也未继续 moving 数值实验；本轮不需要 hydro 回归。
+
+## 54. 2026-09-15：流程图采用 first / second hydrodynamic stage
+
+**作者：Codex；请求：Zhenyu 认为 begin/end step 的语言不理想，提出 first/second
+或 predictor/corrector。** 采用 First hydrodynamic stage / Second hydrodynamic stage，
+用 stage 表示同一时间步内的阶段，并保持通用 RD/FV 主循环含义；没有为所有 RD/FV
+路径指定 predictor/corrector 数值语义。实际函数名 `rd_step_begin/end` 保留。
+
+仅改第7、12框标题，保留 `(RD or FV)`、函数名、所有其他文字、14个编号方框、15条连线
+和白底布局。新文件为 `dev_log/figures/Arepo_flowchart_main_loop_RD_FV_functions_20260915.drawio`
+及同名PNG，已放到用户 thesis 的 Arepo_document 资源目录，9月14日及更早版本均保留。
+用 draw.io 原生导出2802×2562 PNG并查看，两个新标题均完整显示。
+编辑和交付记录在工作区 `local_runs/flowchart_rd_fv_stage_labels_20260915_v1`。
+无 solver、Config、数值实验或 thesis 正文改动。
+
+## 55. 2026-09-15：同步 thesis、插入 4.1 流程图、整理 RD/FV 对比表待审稿
+
+**作者：Codex；请求：Zhenyu 已删减流程图文字并指定最终 PDF，要求先同步 Overleaf
+更新到本地、处理可能的冲突，再插入 Chapter 4.1；随后整理 RD/FV 对比表，审核后才入正文。**
+
+### 55.1 同步与内容保留
+
+实际 thesis 仓库为 `/Users/zhenyuwu/Desktop/MyThesis/Zhenyu-PhDThesis`。
+该仓库的 `SKILL.md` 记录 Overleaf → GitHub → 本地的同步流程，当前只有 GitHub
+`origin`。执行 fetch 后，`main` 从 `0a279019aa6a3619c08a9118ef586ff09e698bd4`
+快进到 `162f9fcc56e38f74ef38da66f7b64e7a63d11b0c`（`start writing chapter 4`）。
+远端只新增章首介绍；原本未提交的 Gauss physical-flux 小节等共141行，在备份、
+临时 stash 和恢复后逐字核对保留。没有合并冲突，也没有改写用户的远端介绍。
+
+档案：工作区 `local_runs/thesis_flowchart_20260915_v1/`，含同步前全文与补丁、
+同步后正文、单独插图补丁、最终 thesis 补丁和 `manifest.json`。本次未 commit 或 push。
+
+### 55.2 插图与排版验证
+
+使用用户指定的原始 PDF：
+`/Users/zhenyuwu/Desktop/MyThesis/useful_resources/Arepo_document/Arepo_flowchart_main_loop_RD_FV_functions.pdf`。
+原样复制到 thesis 的
+`zhenyu_thesis/chapter4/figures/Arepo_flowchart_main_loop_RD_FV_functions.pdf`；
+两份 SHA256 均为 `ed179859cb1b985b6edba7345814798025c716c485ad396c66c2e509c3bf9d1d`。
+没有重新导出或修改 draw.io，用户删去的文字保持删除。
+
+`chapter4/chapter4.tex` 的 4.1 中加入正文引用和图注，说明第7/12框为 RD/FV 入口；
+stage 表示主循环入口，内部算法依配置而定。采用正文宽度并在4.2前清空浮动体，
+图号为 **Figure 4.1，论文第140页**；4.2从第141页开始。
+最终正文减去本次插图内容后，与同步后的原文完全一致，4.1之外没有内容改写。
+
+用 XeLaTeX/latexmk 完整编译232页 thesis，exit0，全部引用和文献引用已解析。
+第一次独立 outdir 构建遇到 BibTeX 路径问题；改用隔离的源文件副本和原图链接后成功，
+没有为构建修改论文的 bibliography、preamble 或旧生成文件。
+逐页查看138–141页：图、图注及4.2分界正常，无裁切；原图按正文宽度缩小后函数名较小，
+矢量内容放大可读，此实际排版特点已告知用户。
+现存4.2之后一处2.8231pt overfull 和全书其他既有版式警告不属于此次插图修改。
+
+完整编译结果在上述档案的 `compile_project/master.pdf`；
+便于审核的三页摘录为 `chapter4_1_flowchart_review.pdf`（论文138–140页）。
+
+### 55.3 RD/FV 表格草稿与范围
+
+新报告：[RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md](RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md)，
+包含符号定义、中文审核表、英文候选表及定稿限定；**未插入 thesis**。
+以8月1日 [旧报告](AREPO_FV_RD_comparison.md) 的表为基础，对照当前 FV/RD 源码和后续审查。
+表包括自由度/权重、局部对象、空间表示、迎风、空间守恒、时间入口、层级时间步、
+冻结状态、MPI责任和 moving geometry。
+
+修正旧表容易造成误解的表述：当前 FV 有两个半权重 flux calls；不把两阶段标题
+自动写成严格时间二阶。timebin 始终属于节点，三角形最细bin只是派生的计算频率；
+frozen 节点接收积分量增量，不因此自动成为stage-live。区分 Gauss `P1(U)` 和旧 Roe
+`P1(Z)`，以及空间守恒恒等式和完整 moving 更新守恒。当前 moving C 仍为 begin
+记录区间、end 在单次正常重建网格上做两个扫描；独立 old/new 两阶段候选没有移植。
+
+未修改 solver 或 Config，没有新增流体测试或继续 moving 数值研究。
+solver SHA256 仍为 `1ca5e428a0578752a18fc7af6b34e0341dbb3b6ce1d1d7d5a10d27dbe9e13636`。
+
+
+## 56. 2026-09-15：RD/FV 表改为英文数值性质对比
+
+**作者：Codex；用户修正：去掉局部对象、时间推进、hierarchy、MPI、moving mesh 和
+inactive nodes，按性质比较；二阶精度对应 FV spatial reconstruction 与 RD P1+LDA，
+positivity 对应 slope limiter 与 N scheme。**
+
+重写 [表格草稿](RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md)，保留六行：
+solution representation、conservation、upwinding、second-order spatial accuracy、
+positivity / oscillation control、accuracy–robustness balance。
+最后一行对比 nonlinear slope limiting 与 N–LDA blending（B scheme）。
+第一行可在正文已解释自由度后省略。所有表格内容及图注、脚注均用英文。
+
+核对 Chapter 3、8月1日旧表，以及 Springel (2010) §3.1、Morton et al. (2023) §2.2.3。
+精度行明确为光滑流的空间二阶；positivity 脚注说明稳定化机制与 Euler 密度/压力的
+无条件正性不同，N 的标量正性需满足 CFL。没有把 face-normal Riemann solve 直接
+等同于整个 FV 方法按维度分裂，也不把每一种 B blending 写成已保证二阶且正性。
+这些是论文表述核对，没有新的数值试验结论。
+
+前一版全文保存在工作区
+`local_runs/rd_fv_property_table_20260915_v1/previous_comparison_draft.md`，
+新旧文件哈希与当前源代码标识在同目录记录。没有修改 thesis、流程图、solver 或 Config；
+新表仍待用户审核，不插入4.1，不commit/push。
+
+
+## 57. 2026-09-15：对比表入4.1，并按 implementation / efficiency 组织
+
+**作者：Codex；用户批准：在英文性质表中增加 Voronoi cells / Delaunay triangulation
+作为计算单元的对比，然后放入4.1；建议4.1.1为 Implementation of RD in AREPO，
+4.1.2为 Increasing computational efficiency，下分 hierarchical timestep 与 MPI。**
+
+本地 thesis 的4.1改为 **Overview of AREPO-RD**，保留原4.1标签；新增：
+
+- **4.1.1 Implementation of RD in AREPO**：AREPO几何介绍、RD接入说明、英文对比表与原流程图。
+- **4.1.2 Increasing computational efficiency**：Hierarchical timesteps 与 MPI parallelisation
+  两个子标题，写入简短原理概述。强调bin属于节点、三角形取最细频率，以及残差责任唯一性。
+
+表格为 **Table 4.1，论文第139页**，七行；新增行写为
+`Computational elements | Voronoi cells | Delaunay triangles`。
+正文另说明前者为控制体，后者为残差组装单元，RD自由度仍在顶点。
+精度行、positivity脚注和B方案的性质对比按§56审核意见保留；表格使用正文宽度、
+11pt级字号与booktabs。原流程图仍为 **Figure 4.1，第140页**，PDF逐字节未变。
+
+4.1.2从第141页开始，4.2从第143页开始。效率部分仅为概述，没有新增加速比、MPI扩展
+结果或流体测试。当前F1的hierarchy/equal区别作简短提示，并引用既有4.3.3的moving
+几何讨论。原章首用户介绍及4.2之后全部正文保持不变；只对4.1的一句几何介绍作等义
+精简以消除单词孤行，并保持MPI性能讨论段落在同一页。
+
+完整XeLaTeX/latexmk编译235页，exit0，引用及文献引用全部解析、无重复label。
+初次编译发现新增4.1.1标签与既有4.3标签重名；已将新标签改为
+`section:AREPO_RD_implementation_overview`，既有4.3引用不变。
+4.1无overfull/underfull；4.2之后原有2.8231pt超宽警告未改。
+
+本轮档案在工作区 `local_runs/thesis_section41_table_20260915_v1/`，包括旧正文和对比表、
+本次插入片段、隔离构建、最终正文差异及哈希；五页审核PDF为 `chapter4_1_review.pdf`
+（论文138–142页）。表格记录文件
+[RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md](RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md)
+已更新为“approved and inserted”。没有再次pull、commit或push，尚未同步回Overleaf。
+未修改solver、Config、Chapters1–3或其他论文源文件；无需流体回归。
+
+
+## 58. 2026-09-15：流程图重排为横向整页，字号约放大两倍
+
+**作者：Codex；请求：Zhenyu 希望流程图更大，允许在 draw.io 中调整方框位置，或在
+thesis 中横向放置。** 从用户最终 PDF 内嵌的原生 draw.io XML 建立新副本，保留全部
+14个编号方框、函数名和15条连接关系，以及用户已删除的说明文字。所有旧 PDF/draw.io
+保持原样；原始 PDF SHA256 仍为 `ed179859cb1b985b6edba7345814798025c716c485ad396c66c2e509c3bf9d1d`。
+
+新布局保持三列阅读顺序，将各列行位置对齐、压缩空白及方框高度，并把14→1的返回线
+移至方框上方。白底与分类配色保留，多数方框文字改深色以提高对比度；重新安排换行，
+说明文字18px、函数名14px。原生 draw.io 导出为可缩放的矢量 PDF，同时保留可编辑图。
+
+新文件：`dev_log/figures/Arepo_flowchart_main_loop_RD_FV_functions_landscape_20260915.drawio`
+及同名 PDF，两份均已复制到 thesis 的 `useful_resources/Arepo_document/`。
+thesis `chapter4/figures/` 中另放同名 PDF，正文引用此新文件。重排脚本为
+`dev_log/figures/build_arepo_main_loop_landscape_drawio.py`，输入用户 PDF 提取的 XML；
+它检查全部标签、编号、连接端点和归属关系，并拒绝覆盖现有输出。
+
+论文使用 `pdflscape` 的 landscape 环境，PDF 阅读器会直接显示横向页。
+`master.tex` 只增加该宏包；Chapter4 只改插图尺寸/环境并将原说明段移到图后，
+避免一个只有说明段的额外竖向页。正文、表格、图注内容均未改写。
+**Figure4.1 仍在第140页；4.1.2仍从第141页开始，4.2仍从第143页开始，全书235页。**
+按编译后 PDF 的实际字体统计，函数名从约3.38pt增至6.80pt，普通说明从3.95pt增至8.75pt。
+
+完整 XeLaTeX/latexmk 编译 exit0，引用全部解析，无新增重复label或超高浮动体。
+逐页查看138–143页，方框、长函数名、箭头与图注无裁切或重叠；后续4.2保留原版式及
+既有警告。新旧正文去除本次排版变化并复位说明段后相同，4.2及以后逐字节未变。
+
+本轮档案：工作区 `local_runs/thesis_flowchart_landscape_20260915_v1/`，包括原文备份、
+PDF提取的用户图、布局迭代、隔离编译、最终六页 `chapter4_1_landscape_review.pdf`、
+局部补丁和文件哈希。第一轮横向排版多出说明段单页，第二轮已消除；最终235页。
+更改仅在本地，未pull/commit/push；未改solver、Config或Chapters1–3。
+
+
+## 59. 2026-09-15：4-rank真实glass三角形分工图与原生MPI核对
+
+**作者：Codex；请求：Zhenyu将在Overleaf继续写4.1，要求用真实glass IC和4个MPI
+ranks导出triangulation并按计算责任着色；若Python重建需核对实际节点归属，并可举
+跨rank边界例子。** 报告：[RD_MPI_GLASS_OWNERSHIP_20260915.md](RD_MPI_GLASS_OWNERSHIP_20260915.md)。
+
+使用已归档SWIFT glass48的全部2304个节点（源SHA256为157e1a47…d88f），
+Yee流体状态、box10、gamma1.4、静态完整局部网格、Gauss3 LDA/F1及split equal-step。
+两个时间步0.001953125到0.00390625，4-rank导出、同binary关闭导出对照、1-rank导出
+三次native运行均完成。两个线程环境变量均设为1。
+
+在隔离冻结的源码副本中添加只读输出，直接抓取P的primary节点、RD选中的DT/DP
+三角形、实际残差循环的顶点贡献、FluxRD发送缓存和MPI接收缓存。工作solver及默认
+Config未改；原solver SHA256仍为1ca5e428…13636。原生图形不依赖后处理重建。
+
+核对结果：4608个唯一物理三角形、6912条周期边，面积和99.99999999999994。
+SciPy的3×3周期Delaunay重建与native逐一相同（键含ID和相对周期像偏移），1/4rank
+native拓扑也相同；顶点ID、primary rank、远端目标本地索引和坐标全部一致。
+两个捕获stage分别实际执行4608次三角形计算；各649条远端顶点贡献，预测路由、实际
+发送和接收记录的四分量值逐条精确匹配。开关导出的端点状态逐位相同，1/4rank最大
+状态差2.665e-15。完整周期坐标匹配确认真实源glass，未用jitter或抽稀代替。
+
+每rank576个primary节点；rank0/1/2/3分别负责1210/1144/1155/1099个三角形。
+当前full-mesh规则取所有顶点的最小(ID,task)，且只由最小ID节点的primary实例claim；
+不是按多数顶点投票。图中A的顶点为1142(rank1)、1146(rank2)、1147(rank2)，
+由rank1计算并给rank2发两条贡献；相邻B为1142(rank1)、1146(rank2)、1150(rank3)，
+也由rank1计算，远端贡献分别发给rank2和rank3。均取自实际网格和通信记录。
+
+英文图为`dev_log/figures/rd_mpi_glass_rank4_overview_20260915`和
+`rd_mpi_glass_rank4_boundary_20260915`（PDF/SVG/PNG）。总览并排区分节点owner与
+三角形owner，边界图标出ID和rank。逐张渲染最终PDF检查；初版总览标题/图例重叠已
+修正，旧预览仅留档。资源副本、报告、native节点/三角形CSV及audit.json放在thesis
+`useful_resources/Arepo_document/RD_MPI_glass_rank4_20260915/`，没有改4.1正文。
+
+完整档案：工作区`local_runs/mpi_glass_ownership_20260915_v1/`；四个复现文件在
+`tests/rd/capture_mpi_mesh.py`、`mpi_mesh_capture.h`、`analyse_mpi_mesh.py`、
+`plot_mpi_mesh.py`。实际binary SHA256为37e1bb25…53c86；配置、生成header、冻结源、
+链接库、参数和运行日志均保存。没有MPI速度测量；不外推至active-only重建、moving
+mesh/migration或大规模MPI。未pull/commit/push；用户的Overleaf文本由用户继续完善。
+
+
+## 60. 2026-09-15：补齐4.1比较正文，拆分状态存储、控制体和残差计算对象
+
+**作者：Codex；请求：Zhenyu已写好4.1 comparison部分草稿，要求补充完整，并将
+computational element拆分为fluid-state storage、control volume和flux/residual
+computational element，允许优化英文表达。** 当前论文HEAD为b013be7（用户的
+comparison草稿），前一提交6777107替换流程图；cached origin/main同为b013be7。
+本轮没有pull；直接以含用户所述占位段落的当前本地草稿为编辑依据。
+
+仅替换4.1.1从“In fact, many concepts...”开始到comparison表结束的文本。
+补齐共享节点存储、FV cell average与RD nodal state、median dual的P1行和集中权重、
+face flux与triangle residual、局部守恒、多维迎风、reconstruction/LDA及limiter/N
+的作用和B blending段落。符号沿用Chapter3，并在使用前定义T、phi^T、phi_i^T和S_i。
+“perfect B scheme”改为在不同流动中平衡精度与稳健性仍需完善；不新增无条件Euler
+正性或当前完整算法时间二阶的宣称。引用现有Springel2010、Pakmor2016、Morton2023
+和Deconinck2017条目，在线核对前两篇论文的重构/梯度相关段落，未修改bib。
+
+表格由7行改为9行，Fluid-state storage将FV/RD两列合并：同一mesh-generating
+point即Delaunay **vertex** / Voronoi **generator**，使用P[i]和SphP[i]。明确generator
+通常不等于Voronoi centroid；质量在P[i].Mass，动量、能量和primitive在SphP[i]。
+Control volume为Voronoi cell / median dual cell；Flux / residual evaluation为
+Voronoi face flux exchange / Delaunay triangle residual distributed to vertices。
+其余solution representation、conservation、upwinding、spatial accuracy、positivity
+及B scheme比较保留。代码核对DualArea=sum(|T|/3)和Q/area恢复nodal state。
+
+原稿、完整tracked-file hash清单及旧comparison报告先备份到工作区
+`local_runs/thesis_comparison_completion_20260915_v1/`。在隔离source mirror中完成
+XeLaTeX/latexmk全书编译，exit0、237页；所有引用解析，无comparison新增overfull。
+Table4.1在141页，原横向Figure4.1在142页，4.1.2从143页开始。最终六页review覆盖
+138–143，全部渲染目检，表格完整单页、字号可读、无裁切或重叠。
+
+通过源文件hash guard后写入本地chapter4/chapter4.tex；其SHA256为
+22017625810fdebc54ff598e193be81e55c7c191779a05e556eeb5dd1f6c8819。
+124个tracked thesis文件中只改此文件；它在comparison之前及表格之后的内容逐字节
+保持原样，用户AREPO introduction中的项目列表占位符仍留给用户继续写作。
+没有改流程图、master、Chapters1–3、solver或Config；未pull/commit/push。
+工作solver SHA256仍为1ca5e428…13636。本地变更等待用户正常同步至Overleaf。
+
+报告更新：[RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md](RD_FV_CHAPTER4_1_COMPARISON_DRAFT_20260915.md)。
+最终review：档案内`output/pdf/chapter4_comparison_review.pdf`；完整build、原文备份、
+proposed_chapter4.tex、thesis_change.patch、前后hash清单及PNG QA均保存。
+
+
+## 61. 2026-09-15：MPI glass图精简并插入4.1.2
+
+**作者：Codex；请求：Zhenyu要求去掉总览的主标题和最底部2304 nodes统计行；
+detail去掉标题、副标题、整个(b)和底部文字，只保留rank0–3颜色legend，然后将
+两图放入4.1.2。** 核对原图后，(b)是右侧Responsibility and routing说明栏，
+不是网格中的大写B三角形；已向用户说明这一解释。两个真实A/B三角形与节点ID/rank
+标注保留，右侧说明及所有footer文字删除，规则移至正文/图注。
+
+绘图脚本tests/rd/plot_mpi_mesh.py新增--thesis和--output-dir选项，原默认输出保留。
+新图名rd_mpi_glass_rank4_overview_thesis_20260915及boundary同格式，PDF/SVG/PNG
+放在dev_log/figures与thesis资源目录RD_MPI_glass_rank4_20260915。两张PDF另复制到
+chapter4/figures。修改只涉及标题、文字栏、画布及间距；原配色、坐标、原生triangles、
+节点归属和通信数据不变，原图另存保留。本轮没有新跑MPI，也没有改solver或Config。
+
+当前论文仍以b013be7为HEAD，保留§60的未提交comparison修改；本轮先备份该当前稿，
+只新增MPI说明和两张图/图注。总览用横向页：Figure4.2，第145页；detail用竖向页：
+Figure4.3，第146页。正文解释full-local-mesh配置的最小ParticleID owner、primary
+实例去重，以及A向rank2、B向rank2/3发送贡献的实际例子。没有新增速度测量宣称。
+此前全部thesis文字逐字节保留；去掉两块新增内容可以精确恢复本轮输入。
+
+隔离XeLaTeX/latexmk全书编译exit0、239页；引用解析，无新增overfull或超高float。
+最终两张独立PDF及143–146四页thesis review均渲染目检，图注、节点标注和legend
+无裁切重叠。PDF文本检查确认指定标题、(b)栏和底部说明已删，四个rank及四个ID仍在。
+写回前核对全部124个tracked thesis文件未被其他操作修改；写回后仅chapter4.tex变化，
+另新增两张PDF。Chapter4最终SHA256为3130b55de1d05c3efe7a29392aa78d55ea60b8fd8c1135e49ee48b4f527c20bd。
+11个受保护原图、native数据及solver文件hash保持不变，14份新asset复制hash全部相符。
+
+档案：工作区local_runs/thesis_mpi_figures_20260915_v1，包含原文/脚本备份、两块新增
+TeX、source mirror、精确patch、前后manifest、生成图和PNG QA。最终审阅文件为
+output/pdf/chapter4_1_2_mpi_review.pdf。报告追加于RD_MPI_GLASS_OWNERSHIP_20260915.md。
+本地thesis和资源已写入；未pull/commit/push，等待用户正常同步到Overleaf。
+
+
+## 62. 2026-09-15：以5节点、3三角形重画AREPO式hierarchical timestep示意图
+
+**作者：Codex；请求：Zhenyu希望把以前的hierarchical timestep示意图改成类似
+AREPO的形式，以Delaunay triangulation替代Voronoi cell，并减少element数量。**
+核对Springel2010 Figure17：其结构是连续时间的clock+mesh小图。参考本地published
+PDF第30页（印刷p.820；arXiv物理第33页），也读取了论文7.2。旧图为资源目录及
+chapter4/figures中的delaunay-rd-moving-mesh-timeline.png，含moving翻边及时间轴；
+旧log1/PhaseB报告10.1另有JKL/KML的4:1 frozen-stage文字时间轴。旧图和文本均保留。
+
+新图采用白底、2×2四个时刻0、dt、2dt、3dt；只有5节点和3个相邻三角形。
+J/K/L节点dt_i=4dt，M=2dt，N=dt。由三顶点最小bin得到T1(JKL)=4dt、T2(KLM)=2dt、
+T3(LMN)=dt。各面板开启的triangle intervals为{1,2,3}、{3}、{2,3}、{3}；4dt共同
+同步并重复。时间轴和节点同色表示nodal timestep；实心/空心表示timebin同步与否；
+着色三角形表示当前开启子步；箭头表示给三个顶点分配贡献，包含未同步的粗步节点。
+
+**没有把timebin同步画成RK-stage-live。** 当前source的star判据对这个孤立示意网格
+只使J和N stage-live；K/L/M受到更细incident triangle影响。特别是面板(c)的M虽然
+是timebin同步实心节点，但不能据此推断它执行独立predictor。图注/README明确这一区别，
+两个hydro stages没有逐一画出，图中也不表示具体贡献的时间权重、大小或流动方向。
+本图仅展示固定位置、固定bin的静网格调度，不扩展到moving flip或bin迁移。
+
+绘图脚本dev_log/figures/build_rd_hierarchical_timestep_schematic.py使用明确五点坐标；
+SciPy Delaunay集合恰好等于所画三角形，程序检查min-node timebin、所有due集合、
+4dt重复和各顶点收取贡献的路径。一个4dt周期内共7个triangle intervals，而全部用
+最小步是12个；这是示意算例计数，不是native速度结果。没有运行新的hydro实验。
+
+最终PDF/SVG/PNG为dev_log/figures/rd_hierarchical_timestep_schematic_20260915，
+PDF已渲染目检，箭头、节点标签、时间轴及legend无裁切或重叠；首版预览留档。英文
+caption先定义dt_i、dt_T与最小dt，引用已有Springel_Pur_2010。工作区档案为
+local_runs/hierarchical_timestep_schematic_20260915_v1，含caption.tex、README、
+schematic_schedule.json、最终output/pdf、绘图结果和保护文件hash。
+
+7份新资源（PDF/SVG/PNG、schedule JSON、caption、README、builder）放入thesis
+useful_resources/Arepo_document/RD_hierarchical_timestep_20260915。用户请求的是
+示意图修改，因此未替换原moving图或插入Chapter4；新图供本轮审阅。原图两份、当前
+chapter4.tex及solver的hash保持不变。未改Config、未commit/push。
+
+
+## 63. 2026-09-16：hierarchy示意图改用A–E，节点颜色始终表示自身timebin
+
+**作者：Codex；请求：Zhenyu要求从ABCD开始标字母，强调timebin先赋给节点，
+triangle只取三顶点的最小值，并让每个节点始终使用对应timebin的颜色，以显示
+frozen节点也能被动接收update。** 在§62图的独立新版中将J/K/L/M/N改为A/B/C/D/E。
+A/B/C为蓝色4dt、D为青绿色2dt、E为橙色dt；不再用空心表示未同步节点。
+颜色始终保留，timebin同步另用外圈标记，clock对应事件也采用相同外圈。
+底部明确写出derived triangle timestep：dt_T=min_{i in T}dt_i。
+
+三个三角形仍为T1(ABC)=4dt、T2(BCD)=2dt、T3(CDE)=dt，几何和调度未变。
+例如t=dt面板仅E带同步外圈，C/D仍保持蓝/青绿色，而T3的三个箭头分别指向C/D/E，
+显示粗步节点仍接受分配贡献。外圈只说明自身timebin是否同步，不代表RK stage-live。
+当前孤立三角网格的whole-star判据给出A/E stage-live、B/C/D frozen；D在t=2dt
+有外圈但仍为stage-frozen。英文caption和README明确此区别，不把被动收取贡献解释
+为更新自身predictor；图仍省略两个RK stages和具体ledger deposit时刻。
+
+新文件：dev_log/figures/rd_hierarchical_timestep_schematic_20260916.{pdf,svg,png}。
+更新同目录builder，旧builder备份在工作区档案
+local_runs/hierarchical_timestep_schematic_20260916_v1/original_builder.py。
+档案另含最终PDF、PDF渲染预览、caption、README、schedule和hash清单；7份资源
+另存至useful_resources/Arepo_document/RD_hierarchical_timestep_20260916。
+
+程序重新核对Delaunay连接、nodal minimum、各时刻due集合、共同同步和贡献接收节点，
+并与§62数据确认几何及调度相同。最终单页PDF渲染目检通过，A–E、持续节点颜色、
+同步外圈、箭头和图例无裁切重叠。14个受保护文件hash不变，包括旧版图和资源、原
+moving图、chapter4.tex与solver。本轮只改图及说明，未插入论文、未运行hydro实验，
+未改Config、未commit/push。
+
+
+## 64. 2026-09-16：同步GitHub的4.1.1新稿、核对原始引用并推送MPI图
+
+**作者：Codex；请求：Zhenyu已从Overleaf推送新稿，要求comparison正文以GitHub为准，
+少量补充Auriga/THESAN及AREPO limiter等原始论文引用，解释B scheme与nonlinear
+slope limiting的类比，保留英式英语的-ization拼写，再推送本地4.1.2图片。**
+实际本地HEAD为66d08ae，未提交内容仅为§61的50行MPI说明/图注和两张PDF。
+先备份，再fetch得到5a35005；远端改动在comparison区域，本地MPI patch可干净应用，
+没有重叠文本冲突。以远端全文为底稿，保留其表格位置、9行内容及精简文字；没有恢复
+§60的长篇旧稿。表格逐字节不变，4.2及以后正文也逐字节不变。
+
+在项目介绍加入Pillepich2018、Grand2017、Kannan2022；技术段加入已有van1984relation
+和Toro2009，保留Pakmor2016。按Springel2010 §3.1、Eq45–47补充Barth & Jespersen1989，
+核对本地原论文封面及NASA记录，正确姓氏为Jespersen，AREPO原文写作Jesperson。
+另增Dobeš & Deconinck2008作为N/LDA blending的原始文献，保留review和Morton引用。
+明确类比只涉及调节耗散以兼顾精度和振荡控制：limiter改变重构梯度，B改变分配残差；
+不推出update等价或同样的正性保证。删除已核对的红字问题。小幅修正P1基函数定义在
+Delaunay triangles、median dual提供nodal control area，避免把两者混同；将绝对的
+“unique feature”改成element-level multidimensional upwinding的distinguishing feature。
+没有把用户的discretization、summarized、stabilizing等改成s拼写。
+
+共享bibliography虽存放于chapter1目录，但本轮只核正所请求两条项目引用的author字段：
+Kannan名字为Rahul，THESAN完整7人无需others；Auriga的Campbell为David J. R.，
+无Guedes。Chapters1–3正文未改；两个新方法条目写入chapter4bib.bib。
+§61两张native MPI PDF及全部50行本地说明合入4.1.2，图文件hash与原图一致。
+§63的独立hierarchy示意图此前尚未插入4.1.2，本轮也未擅自增加该插图。
+
+隔离XeLaTeX/latexmk最终全书编译exit0、238页，无未解析引用。Table4.1在印刷139页，
+comparison在139–140页；flowchart141页，MPI两图144–145页。最终138–145八页review
+全部渲染目检，相关bibliography四页也目检。压缩新增解释以消除flowchart前单独一行
+占页的情况。最初输出目录缺少include aux子目录，另一次只转换不完整XDV；均保留
+并不作为验证，最终使用预建所有include目录的新build_final完整编译。
+
+确认本地文件未被并发修改后，保留原MPI变更stash 44b646cf，再fast-forward到5a35005，
+写入已验证稿。仅5个目标文件提交为e26d5ab429e5f31355d39cf7fd9ebfd9bb63e2d0，
+已push origin/main，并以ls-remote独立确认远端同一hash。无force push；既有未跟踪
+编辑器/build文件保持原样，无tracked或staged变更遗留。GitHub直连超时，通过用户
+已经启用的系统代理127.0.0.1:7897和单次git -c http.proxy解决，未改全局配置。
+
+档案：local_runs/thesis_sync_citations_20260916_v1，含前后源码、patch、编译与QA、
+README引用核对记录、delivery.json和原本地stash标识。审阅PDF为
+output/pdf/chapter4_1_synced_review.pdf。只完成GitHub同步，未操作Overleaf网页；
+用户可以按正常流程从GitHub拉入Overleaf。AREPO solver/Config及数值数据均未改。
+
+## 65. 2026-09-16：comparison表的limiting、振荡控制与Euler物理正性辨析
+
+**作者：Codex；请求：Zhenyu询问nonlinear slope limiting与AREPO limiter的区别、
+accuracy--robustness行是否重复、星号脚注是否必要，以及标量正性证明与Euler的关系。**
+本轮为文献与源码核对，没有修改thesis、solver或Config，没有新增数值实验。
+
+Springel2010 §3.1 Eq45--47中limited gradient=alpha_i*gradient，alpha由局部解的
+极值和外推差确定，因此AREPO的limiting本身就是nonlinear；这不是另一种额外方法，
+也不表示空间多项式高于一次。原论文明确该limiter并不严格TVD，允许小幅post-shock
+oscillations。建议保留三行时把最后一行FV写成Slope-limited linear reconstruction，
+RD写成Nonlinear blending of N and LDA residuals，明确它是精度与振荡控制的组合。
+建议将Positivity / oscillation control改为Oscillation control near discontinuities，
+相应去掉泛化的星号脚注；这些仅为建议，尚未写入论文。
+
+区分scalar maximum principle、系统系数/特征意义的positivity与Euler物理正性。
+Chapter3的标量凸组合证明不自动证明Euler更新后rho>0、p>0；E在本论文是总能量密度，
+p=(gamma-1)*(E-rho*|v|^2/2)，动量本身可为负。不同守恒分量分别满足界限也不足以
+保证内能为正。系统matrix N文献存在特征/CFL和稳定性分析，不能反过来断言一切
+N-scheme理论都仅限scalar；但未据此建立当前F1/RK2/hierarchy完整更新的物理正性。
+N/LDA的普通B blending也不能仅凭混合形式推出该结论。
+
+FV并非只有标量正性证明：Einfeldt et al.1991研究完整Euler的Godunov与HLLE（后者
+要求适当波速），高阶推广还需匹配的重构、通量、CFL及时间推进。Zhang/Xia/Shu的
+三角网格论文明确区分标量maximum principle与Euler正密度/压力，并给出相关高阶构造。
+本地finite_volume_solver.c:1323 face_add_extrapolations会拒绝导致负rho/p的外推；
+:1649 face_limit_fluxes限制donor质量流出并同比缩放通量。因此实际AREPO稳健性不能
+全部归因于slope limiter。RD的rd_rk2_prepare_corrector在非物理predictor时终止，
+该检查不是positivity-preserving limiter。既有baseline中已保存rho/p为正的结果是
+有限测试证据，不是定理；Sod的负vx欠冲也不能解释成负压力。
+
+核对来源：
+- https://arxiv.org/html/0901.4107v3 （§3.1、§8.2）
+- https://doi.org/10.1016/0021-9991(91)90211-3
+- https://www.math.purdue.edu/~zhan1966/research/paper/triangle.pdf
+- https://www.math.u-bordeaux.fr/~rabgrall/mes_papiers/caf_2006_35.pdf （§2.6）
+- https://www.math.u-bordeaux.fr/~mricchiu/dc-mario.pdf （matrix N/B及CFL讨论）
+
+## 66. 2026-09-16：保留4.1.1定稿、补全F1代码说明，添加4.2/4.3审阅草稿
+
+**作者：Codex；请求：Zhenyu要求维持4.1.1现稿，只改必要语法、核对并补全红字和
+函数名下划线；在4.2加入hierarchy图及守恒/KH说明，在4.3写MPI草稿，科学问题另报。**
+开始时本地thesis已为fdb3db590da4d98d07c27d70288ab5064ae70bdc；只读ls-remote确认
+GitHub相同，没有pull/push。本轮仅对本地thesis写入四个文件，保留用户审核状态。
+
+4.1.1 comparison表及其科学说明逐字节未变。只修正三个小语法问题和红字段落附近的
+calculation/distribution表达；rd_step_begin()/rd_step_end()改为verbatim等宽格式。
+红字替换为当前源码的实际行为：static predictor使用Chapter3 lumped update，corrector
+使用预测态重算K/分配算子，F1通过第三个RHS求解应用；旧/新空间残差保留各自stage，
+rank-deficient inflow matrix的时间项回退lumped。删去未经限定的“两个时刻beta差不多”
+和省略号，明确static split-stage配置条件，没有把equal ALE也说成同一阶段安排。
+
+**两项原文科学问题单独报告、未擅自改写：**(1)FV正文把Pakmor Eq14的formal Heun
+predictor当作Block7真实Q写入；代码每次flux乘0.5，Pakmor实际采用Eq19--21的primitive
+Taylor predictor，论文明确称其RK/MUSCL-Hancock hybrid。(2)该段U称primitive，但
+Chapter3 U为conserved density；新RD段重新定义U，原FV符号暂保留供用户决定。
+详细核对、源码锚点和建议在档案SCIENCE_REVIEW.md。
+
+按请求将hierarchy和MPI提升为4.2/4.3两个section，后续ALE/DF仅自动编号顺延，源文
+逐字节不变。4.2加入§63的A--E节点色图，说明nodal bins、triangle minimum、完整star
+判据、frozen state与被动接收conserved increments的区别。守恒解释包含共享边时间
+覆盖与F1-minus-lumped零和，明确检查所有相关区间闭合后的共同同步时刻；没有声称
+单个triangle residual为零，或每次中间ledger deposit都保持全局物理总量不变。
+另保留F1 hierarchy并非equal-at-finest的单纯调度优化、两阶段不推出时间二阶的限制。
+
+引用核对：Morton2023 §4/Fig6是DRIFT；JUMP在Morton博士论文§4.2.2--4.2.3。
+新增Morton_Thesis_2021条目于chapter4bib，year2021据Edinburgh repository正式日期
+2021-07-31（PDF封面2020）；author按institutional metadata，doi10.7488/era/1086。
+未改Chapter1--3源文或其bib。
+
+新KH守恒图使用既有943f7ae原生存档，不是新模拟：static smooth KH、真实glass2304、
+unit box、gamma1.4、rho=1+band、vx=-.5+band、vy=.1sin(4pi*x)、p2.5，tanh width.025，
+LDA/F1、Gauss3、CFL.3。4 ranks equal实际dt1/1024，hierarchy1/1024和1/512；11个
+snapshot到code time2，hierarchy所有非初始输出均有bins18/19且时间是1/512整数倍。
+用double HDF5的Masses/InternalEnergy/Velocities重构每节点总能量，以补偿求和累加
+相对初态的逐节点差值。没有使用六位打印的energy.txt，也没有误用Voronoi Volume。
+4-rank max|deltaE/E0|：equal7.44e-17，hierarchy9.39e-17；1-rank对照1.23e-16/6.23e-17。
+这些是round-off量级的输出重构诊断，不能用于精度排序。先汇总舍入后的总E再相减
+可得略不同的浮点结果，均保留CSV；这解释与§41直接numpy求和的末位差异。
+图和正文写of order1e-16，不声称精确零、不比较Morton不同resolution/bins的数值大小，
+不由这组DEBUG单次walltime推speedup。
+
+4.3补全node/triangle ownership、primary/periodic copy、active-only条件变体、状态
+交换与FluxRD增量回传、完整star的MPI归并，以及2304nodes/4608triangles的已核对
+分工和边界A/B例子。两张已批准native MPI PDF及原caption均保留。
+
+隔离全书XeLaTeX/latexmk编译exit0、244页、无未解析引用，新增4.1--4.3区域无overfull。
+印刷138--151的14页审阅稿逐页视觉核对；最后文字修改后重渲染，未变页面像素hash
+一致，变化的143/147--149页重新目检，函数名下划线、图和caption均完整。
+安装前核对全部126个tracked文件hash和HEAD未被并发修改；只安装chapter4.tex、
+chapter4bib.bib及两张新PDF，所有其它tracked文件hash不变。未commit/push、未改
+AREPO solver/Config、未运行新hydro测试。一次编辑脚本相对路径错误后以绝对路径
+重跑并完整重编译；最终compile_final.json为接受结果。
+
+档案：`../local_runs/chapter4_sections_draft_20260916_v1/`，含原稿/hash、隔离源码、
+edit/install脚本、SCIENCE_REVIEW.md、逐snapshot数据/hash/provenance、KH绘图脚本、
+编译/QA及delivery.json。交付审阅PDF：`output/pdf/chapter4_1_to_4_3_review.pdf`；
+独立图：`output/pdf/rd_kh_energy_conservation_20260916.pdf`。本地thesis新增图名同档案；
+现有workflow需要用户审核后再同步GitHub/Overleaf。
+
+## 67. 2026-09-17：复核 FV 第一入口的 Q 写入和 Chapter 3 的 U 定义
+
+**作者：Codex；请求：Zhenyu追问Block 7是否确实由Q接收第一阶段更新，
+第二入口是否外推W'后计算通量，以及Chapter 3哪里将U定义为conserved。**
+本轮只读核查源码、thesis和Pakmor2016 §3，未改solver或thesis，未commit/push。
+
+用户对Q实际接收第一阶段贡献的记忆正确。§66的“formal Heun predictor不等于
+Block 7实际更新”应明确限定为权重和预测态构造方式，不能解释成Q没有更新。
+`src/main/run.c:262,368`两次调用同一FV函数；
+`src/hydro/finite_volume_solver.c:1092`取完整face timestep，`:454`乘0.5，
+`:500--503,565`直接累加Mass/Momentum/Energy。因此无源项、equal timestep时，
+第一入口写入 Q_after7 = Q_n - dt/2 sum(A_n F_n)，不是formal Heun的
+Q' = Q_n - dt sum(A_n F_n)。Q_after7只是部分累加结果，不应解释为物理半时刻状态。
+第二入口添加新端点通量的另一半贡献，原文最终端点平均公式可保留。
+
+`:834--846,863,914`读取保存的primitive字段/梯度，外推间隔为
+All.Time - TimeLastPrimUpdate；`:1172`局部变量虽名dt_half，实际取dtExtrapolation。
+`:288--295`先作时间/空间外推再组装Riemann states。equal timestep同步节点在第一
+入口的时间外推为零，第二入口为完整dt，构造W'；它不是由Q_after7反算所得。
+`run.c:371`在第二通量调用后才update_primitive_variables，后者`:94`刷新时间戳。
+hierarchy时两次入口均可能需要对邻居从其最近primitive更新时间外推，不能普遍称
+第一入口绝无外推。Pakmor2016 Eq19--21及其后说明与此一致。
+来源：https://academic.oup.com/mnras/article/455/1/1134/986779
+
+Chapter 3当前源码`:313--314`明确写“The conserved state”以及
+U=(rho,rho vx,rho vy,E)^T；`:45`说明E是total energy density，`:482--484`
+再次明确conserved variables U。该处在“RD for Euler Equations”小节。
+git blame显示这两行分别来自2026-07-15的67e4c9e7和2026-07-14的5a924553，
+并非§66补写内容。应区分primitive W=(rho,vx,vy,p)、conserved density U与
+积分守恒量Q；“未乘control volume”并不意味着primitive。本次保持原文待用户决定。
+
+## 68. 2026-09-17：按用户确认修改 FV 累加公式并统一 W/U/Q
+
+**作者：Codex；请求：Zhenyu同意§67核查结果，要求将两个入口写成Q +=形式，
+并统一primitive W、conserved density U、integrated conserved Q。**
+仅修改本地thesis的chapter4.tex中FV流程说明：Block 7和12分别写
+Q += -dt/2 sum(A F)，保持向外通量为正；明确Q先为Q_n，两次累加后为Q_n+1。
+定义W=(rho,vx,vy,p)、U=(rho,rho vx,rho vy,E)、FV的Q=integral_V U，
+并定义面积/边长和数值通量。补充W'的Euler时间外推与空间重构，明确它不是从
+部分累加的Q反算得到；Block 13才同步primitive state。公式限定equal timestep、
+无源项，时间推进说明改为Heun-type flux average with a primitive-variable predictor。
+
+本次修改区域之外的chapter4前后文逐字节不变；comparison table、RD/F1段、4.2/4.3
+及后续正文均保留。写回前后对126个tracked文件核对hash，除chapter4.tex外均未变。
+未改solver、Chapter1--3或bib，未commit/push。新chapter4 SHA256为
+f9593ab9b5f69f36f3f8929276d7d5107e94a53a3055ce978ec071bba8eab638。
+
+隔离全书XeLaTeX/latexmk最终编译exit0、245页、零未解析引用；审阅印刷142--143页，
+两个+=式、状态定义、引用及RD段衔接目检通过。首次编译因include的输出子目录缺失
+失败；补齐目录后latexmk曾只转换旧的未完成XDV，检查发现引用缺失而拒收。
+随后强制latexmk -g完整编译并重新提取/渲染，最终QA对应这个完整结果。
+档案：`../local_runs/chapter4_fv_notation_20260917_v1/`，含before/hash、source、
+patch、prepare/install脚本、编译记录和qa/delivery.json；审阅PDF为
+`output/pdf/chapter4_fv_update_review.pdf`。§66审阅稿为修改前版本，此档案接续它。
+
+## 69. 2026-09-17：解释 N/LDA 在两个 RK 阶段的分配与时间质量
+
+**作者：Codex；请求：Zhenyu询问beta_N和beta_LDA如何处理不同阶段，认为当前文字
+不够直观。本轮核查并建议文字，未改thesis或solver。**
+当前标准static `RD_RK2_TOTAL_RESIDUAL`（排除四遍rate-consistent实验）中，
+两个空间分配均从本stage状态重新计算。`rd_rk2_prepare_corrector():3576`从predictor
+Q恢复W*、存RD_dU=U*-U_n；`:3934--3935`随后交换W*/RD_dU。
+`:4068`明确不作FV式Taylor外推。每个stage重建Roe平均、K+/K-、Sminus和inflow solve。
+固定网格只固定几何，Euler状态改变仍会改变这些矩阵。
+
+LDA的空间项等效为beta_n phi(U_n)和beta_* phi(U*)，并非一个冻结beta同时作用
+两阶段残差，也不是平均beta后重新分配旧残差。`:4981--5001`用
+Sminus x=phi、phi_i=-K_i+ x直接实现，不存beta或显式逆。
+N没有对应的显式beta_N数组；`:4969--4973,5019--5046`求当前stage inflow state，
+直接形成K_i+ (Uhat_i-Uhat_in)。因此N也在U_n/U*分别重算空间分配，但不宜仿照
+LDA将Euler N全部写作一个固定矩阵beta_N乘element residual。
+
+corrector时间项是另一层选择。令dU_j=U_j*-U_j^n：LDA/F1使用
+(|T|/3) beta_i* sum_j(dU_j/dt)，只用predictor-state beta，不取beta_n或两者平均；
+`:4624--4653`构造第三RHS，`:5280--5317`使用第二stage的同一K/Sminus factorization。
+rank<4时只有该F1时间项回退lumped。N在`:5499--5503`直接使用
+(|T|/3)dU_i/dt；不存在为N时间项选择beta_n还是beta_*的问题。
+旧空间分配的影响通过predictor increment保留：`:3555--3574,3638--3643`
+的局部+dU/2与`:5524--5526`的T_time+0.5 phi_i(U*)组合等效于Chapter3
+带旧/新空间半和的total-residual公式，不需要存每个旧beta。
+
+用*表示预测的末端状态，应避免把beta_*写成基于最终U_(n+1)的beta_(n+1)。
+hierarchy的closing-stage仍重建矩阵，但`:4202--4218`只给stage-live节点加dU，
+frozen节点保持原状态；因此beta_*可依赖同一三角形的预测态/冻结态组合。
+建议正文按“旧状态空间分配→预测态重算空间分配→N lumped/LDA F1时间项”说明，
+将linear solve和rank fallback等工程细节移到后面，而不称beta本身被时间积分。
+
+## 70. 2026-09-17：用英文阶段公式替换 RD 长段，并核对文献和旧 beta 对照
+
+**作者：Codex；请求：Zhenyu要求减少文字，用§69的数学解释改写4.1.1，查找旧的
+beta时刻比较，并尽量用RD论文支撑。**
+仅改chapter4.tex的RD流程说明段。新增阶段符号、predictor/corrector、N/lumped总
+残差及LDA/F1三项展开，明确旧空间项beta_n、新空间项和F1时间项beta_*；用
+underbrace标明各项。保留W/U/Q约定，将linear solve和rank fallback缩至脚注。
+前面的FV、comparison table以及从4.2起的全部源文均逐字节保留；未改Ch1--3/bib。
+三个文献条目原已在全书bib中，无须复制条目。
+
+文献核对：Ricchiuto & Abgrall 2010 §3--4支持一致质量矩阵和explicit RK-RD框架；
+Arpaia/Ricchiuto/Abgrall2015印刷508页Eq28给F1，510页§3.4.1明确N不显式构造
+同类分配系数并采用lumped形式，513页Eq49--53给RK/global lumping。对这三页作
+整页渲染目检。Paardekooper2017 §3.4 Eq60--65直接并列N/lumped和LDA/F1。
+后者Eq63用一个共同beta乘空间残差之和，因此正文明确当前代码的分阶段写法，
+没有声称它与文献共同beta形式逐项相同。未找到“改变beta取值时刻必然无明显
+影响”的直接文献结论；框架引用不能替代这个比较的实验证据。
+
+找回log1的2026-08-01 three-way stage-beta experiment（从4923行开始），及
+`LDA_F1_Heun_vs_standard_LDA_RK2.md` §12.2。旧版固定Yee，nominal n64、
+deterministic jitter、boost1、t1、MPI1、dt1/256--1/2048，比较mixed、coherent
+beta_n、coherent beta_*。dt1/256的density L1依次6.486073e-4、6.477352e-4、
+6.478240e-4，误差标量相对mixed变化约-0.134%/-0.121%；velocity误差变化约
+-0.016%/-0.017%。相邻时间步解的DualArea加权Richardson时间阶均0.993--0.997。
+这支持“那组Yee结果对三种约定不敏感”的回忆，但不是解场完全相等，也没有恢复
+二阶时间阶。尤其三组同时改了空间项分配，并非只改F1时间项beta的独立对照。
+本轮只找回已存日志及其provenance，未重新取COSMA snapshots或运行新模拟；旧测试
+细节写入核查报告，没有未经审核加进4.1.1正文或推广为当前Gauss/hierarchy结果。
+
+隔离完整编译245页、exit0、零未解析引用；印刷143--144页两个阶段及分项公式、
+文献、脚注排版检查通过。写回前后核对126个tracked文件，只有chapter4.tex变化。
+当前chapter4 SHA256：153382c966338a48b2c2cdfd703a043cf7985f27b477ec7f719cc48f56789c6f。
+未改solver、未commit/push。档案：`../local_runs/chapter4_rd_stage_math_20260917_v1/`，
+含源码/before/hash/patch、文献页和文本、SCIENCE_REVIEW.md、历史误差比较JSON、
+compile_final.json、qa.json、delivery.json。审阅PDF：
+`output/pdf/chapter4_rd_stage_math_review.pdf`。
+
+## 71. 2026-09-17：Paardekooper 的 LDA beta 使用旧状态，不能作为 mixed-stage beta 的直接依据
+
+**作者：Codex；请求：Zhenyu澄清要找的是beta分阶段本身的文献支持，并问
+Paardekooper使用哪个时刻。** 只读核查论文及作者公开ASTRIX源码，未改thesis或solver。
+
+明确结论：ASTRIX v1.1.0（2017-05-18，b8dc85a569d8aa87166af2d8f7903dbaa5b2dae1）
+在timeloop.cpp:245--252先用预测态构造新空间总残差和N贡献，然后:254--264明确调用
+CalculateParameterVector(1)，切回保存的旧状态，再调用CalcTotalResLDA。
+param.cu:118--137确认flag1取vertexStateOld；totalresLDA.cu确认该旧状态决定K和
+LDA分配，作用于包括时间项在内的整个total residual。v1.0.0（2017-02-10）也有此切换。
+
+因此论文Eq63/65中没有时间下标的beta，在这些同时期公开实现中是beta_n：旧空间项、
+新空间项、F1时间项全用beta_n。新空间残差本身仍由U*计算。不能从“第二阶段重算
+residual”推出“第二阶段LDA beta也重算于U*”。当前AREPO-RD的旧空间beta_n、
+新空间beta_*、F1 beta_*是不同约定。N则不同：Eq62及源码确实分别计算U_n/U*的
+N空间分配，时间项lumped，不能将此支持直接移用于LDA/F1。
+
+§70列出的文献支持RK-RD/F1框架，但本轮仍未找到对当前mixed LDA约定的直接论述；
+这是已查文献的边界，不是断言所有RD文献都没有分阶段beta。旧Yee三组对照中的
+coherent-old对应这里识别出的beta时刻，但不意味着其它算法细节与ASTRIX相同。
+
+完整源码链、固定commit链接及两种corrector公式记录在
+`PAARDEKOOPER_STAGE_BETA_AUDIT_20260917.md`。公开源码及hash档案：
+`../local_runs/paardekooper_stage_beta_audit_20260917_v1/`。未编译或运行ASTRIX；未做
+新hydro测试，未commit/push。chapter4源文件SHA256仍为§70的153382c9...。
+
+## 72. 2026-09-17：早期 RK2-RD 的 common beta 与是否统一旧状态的判断
+
+**作者：Codex；请求：Zhenyu问早期RK2-RD是否都使用相同beta、是否省略取值细节，
+以及当前方法是否应统一beta_n。** 本轮只作文献核对、数学比较和建议，未改solver/thesis。
+
+应区分：corrector时间项和两个空间项共用一个beta，与predictor/corrector全程都取
+步初beta_n。Ricchiuto & Abgrall2010 Eq13/36/42/53及Arpaia2015 Eq28/49--53明确
+共同分配结构，但LDA beta没有明确非线性state的时间下标；线性定常advection推导中
+固定网格的LDA beta本来不随解变化。Warzynski/Hubbard/Ricchiuto2015 Eq8及§5也
+是common unindexed beta，其主方法要解global consistent-mass系统，不能混同当前GL。
+
+更广的RK-RD并非必须冻结beta：Ricchiuto2015 JCP280:306--344，
+doi10.1016/j.jcp.2014.09.027，§4.3 Eq43--47明确在predictor用空间LF残差、corrector
+用总LF残差分别投影/限制并构造LLF分配系数。这是nonlinear LLF的stage-dependent
+系数，不是当前Euler LDA的mixed beta_n/beta_*，不能移作后者的直接依据。
+
+数学上定义PhiT=(|T|/3)sum(deltaU/dt)+.5(phi_n+phi_*)，当前mixed残差恰为
+beta_* PhiT + .5(beta_n-beta_*)phi_n。多出的三角形内重分配项在每stage sum(beta)=I
+时总和为零；因此改变分配而不自动破坏守恒。共同beta保留了直接分配整个total
+residual的结构，但该恒等式不是精度、稳定性或beta_n优越性的证明。
+
+Codex建议：在最终确定static LDA/F1论文基准时，倾向coherent beta_n候选，与公开
+ASTRIX约定一致并减少无已证收益的自由度；不是必须马上修的bug，也不直接替换默认。
+先用当前Gauss3/glass equal配置作小范围对照，不能用旧Roe/jittered Yee结果替代。
+旧实验density L1标量差约0.13%，三组固定h时间阶都约1，所以改beta不能宣称修复时间阶。
+hierarchy的n必须按元素所对应区间起点定义；moving的几何/拓扑另论。新phi仍取U*，
+只有分配/F1取旧beta，不能把整个第二遍状态冻结，也无需数值上增加网格构造或残差遍数。
+
+完整出处和推导追加到`PAARDEKOOPER_STAGE_BETA_AUDIT_20260917.md`的Follow-up。
+未运行新hydro测试、未commit/push。
+
+
+## 73. 2026-09-17：将 static LDA/F1 默认改为共同 beta_n，并更新 Chapter 4
+
+**作者：Codex；请求：Zhenyu明确同意将默认改成共同beta，并在thesis说明早期beta_n、
+beta_*比较暂未发现明显差别。** 标准static LDA/F1的equal内部两遍、equal split hooks
+和hierarchy默认共同使用区间起点beta_n。新增显式对照flag `RD_LDA_MIXED_STAGE_BETA`
+恢复原mixed；N/B、moving ALE、四遍rate-Heun和root Config未改。
+
+实现将计算新空间残差的stage Roe平均与构造K+/K-的opening平均分开。equal从U*减去
+已交换的dU恢复U_n；hierarchy在加stage-live predictor之前保留区间opening状态。
+不新增mesh build、残差sweep、factorization或MPI payload，仅增加局部平均计算。
+共同beta不意味着把phi(U*)也冻结。完整说明：`RD_COMMON_BETA_DEFAULT_20260917.md`。
+
+初版仅冻结beta，15个case完成，但Sod equal/hier均在首个corrector触发A2，原始失败
+保存在native/。根因是旧静止Euler入流矩阵rank3，新phi*可不在旧Sminus的range内；
+直接广义逆会丢掉range外分量。equal首个报告defect2.6479e-6，tol2.2607e-15。
+最终common空间路径明确采用beta_i=-K_i+ Sdag+(I-S Sdag)/3，保留range内分配，
+将缺失部分均分三点。先独立核对raw分配之和等于Sx，再核对完整phi，未放宽A2/SVD
+阈值。该延拓是数值选择，不是唯一极限或positivity证明；时间项仍用既有rank<4
+lumped回退。论文脚注明确此处不再是完整的full-rank F1公式。没有把该延拓归于文献。
+
+最终冻结源base adc424b加已存工作diff，source.tar SHA256
+2ca8059f1e5de15b2d02889bbbff26e9ef31c1dc0e4bd350372268ac27bf4c06。
+7配置独立native arm64构建，17/17原生算例通过：glass2304 Yee t1、KH t2等步/自然
+层级及MPI1/4、uniform、16384-node Sod t.08、split中途checkpoint/restart、旧mixed
+输出重放。MPI最大状态差3.2641e-14；equal internal/split和restart/control完全相等；
+equal-bin hierarchy差2.8866e-14；所有snapshot普通求和最大归一化守恒误差1.4806e-14。
+3个mixed对照与旧archive的按ID排序final U完全相等。Sod虽保持正的已存rho/p，仍有
+undershoot，不宣称一般positivity。make check_rd全部通过；新增编译生产K构造及
+range延拓helper的测试覆盖300个非平凡stage对和rank3静止态/100个compatible target。
+初次MPI sandbox bind失败单独存failed_setup/，与上述两个数值失败严格区分。
+
+当前Gauss3、glass2304、boost1、t1 Yee的DualArea加权rho L1：共同beta_n
+6.1417994083e-4，mixed6.1530423075e-4，相对差约-0.183%；velocity L1约-0.0020%。
+这不是解场相等，也不是time-order验证。共同beta_*本轮未重跑；论文中三方案“very
+similar measured solution errors”明确指Earlier Yee tests，即§70恢复的2026-08-01
+Roe/jittered对照，不冒充当前Gauss三方案实验。保留约time1及frozen-star F1限制。
+
+thesis只改chapter4.tex中RD公式/简短解释、hierarchy interval-opening说明与KH引用；
+增加common-beta KH图并保留旧mixed图。4-rank新KH max|deltaE/E0|为equal2.8023e-16、
+hier2.9144e-16，均11个同步快照至t2，natural bins18/19。没有时间效率或两方案精度
+排名结论。全书编译246页、零未解析引用；印刷143--149七页逐页渲染审核，公式引导句
+与公式保持同页，脚注与图例清楚。写回前后核对126个tracked thesis文件，仅chapter4
+变化；Ch1--3、FV/comparison、MPI、bib均保留。新chapter4 SHA256
+b2d59518ff5e2bb5310d491b7727c35bb75288c934d1c679f3bb60f574bad38d。
+
+档案：workspace `local_runs/common_beta_default_20260917_v1/`，包括before、初版native、
+最终native_final、validation、common_beta_only.patch、参数/Config/header/binary/hash、
+两轮beta_summary、KH CSV/audit、thesis_source、compile/qa/delivery记录。
+审阅PDF：`output/pdf/chapter4_common_beta_review.pdf`；新KH standalone PDF同目录。
+更新本地context与static baseline顶部，旧收敛结果明确标为历史mixed基准。
+本轮未commit/push，未更改任何他人既有工作。
+
+
+## 74. 2026-09-17：重跑 KH，核对 equal/hierarchy 能量曲线相反趋势
+
+**作者：Codex；请求：Zhenyu要求重新做KH，问为何新版equal dE/E向下而hierarchy向上。**
+用§73最终相同binary/IC/参数重新跑equal/hier、MPI1/2/4共6个case；原rank1/4的44个
+快照全部字段按ID排序后逐位复现。另在隔离源的io.c添加仅snapshot时的逐rank十六进制
+SphP.Energy/Mass/Momentum/W只读输出，共6个诊断case；66个快照与无诊断rerun逐位相同。
+全部12case完成，未改生产solver或thesis，未改任何阈值，KH没有F1 rank fallback。
+
+结论需要比“输出舍入”更准确：趋势确实存在于原始conserved energy中，而不是主要由
+后处理重构造成。以100位Decimal累加原始double能量，t2的dE/E如下：
+MPI1 equal=-7.17794e-17，hier=+3.85570e-16；
+MPI2 equal=+4.40940e-17，hier=+2.41538e-16；
+MPI4 equal=-2.24184e-16，hier=+2.90967e-16。
+改变rank数会使equal终点符号反转，因此不能把负号当成equal方法固有的总能量耗散。
+所有变化只是全局E0≈6.42249的几个binary64 ULP；一ULP/E0=1.38292e-16。
+这支持演化中浮点误差累积的解释，但没有逐项定位哪个残差/变量转换/ledger加法贡献最大，
+也不宣称hierarchy在所有输入/长时间总会增能。浮点偏置可有相关性，不一定上下随机跳动。
+
+将stored Q、100位算术重构primitive能量、原float64重构三层分离。4rank t2的primitive
+转换误差为equal -1.39762e-18、hier -7.01609e-19；后处理算术误差+2.27545e-18、
++1.17429e-18，远小于evolution中的≈3e-16。原图使用逐node能量差的fsum，复跑一致；
+若改用Python普通顺序sum再减总量，equal会被求和误差改成+1.1063e-15，因此不能用
+挑选求和算法/曲线方向来“改善”图。建议论文日后优先直接统计stored extensive energy。
+
+真实配置仍为static glass2304、Gauss3/common beta_n、gamma1.4、CFL.3、equal dt1/1024、
+hierarchy dt1/1024与1/512、t0--2、11个共同同步输出。新的6面板图按MPI1/2/4分别展示
+snapshot重构与stored energy，并保持相同纵轴；PDF渲染目检通过。
+报告：`RD_KH_ENERGY_ROUNDOFF_AUDIT_20260917.md`。
+档案：workspace `local_runs/kh_roundoff_audit_20260917_v1/`，含原binary/provenance、
+6个rerun、diagnostic/source及patch/2构建/6运行、hex dumps、分析脚本和CSV/JSON、QA。
+新图：`output/pdf/kh_energy_roundoff_audit.pdf`。source母档案SHA256仍为
+2ca8059f1e5de15b2d02889bbbff26e9ef31c1dc0e4bd350372268ac27bf4c06。
+未commit/push，未修改已放入thesis的图。
+
+
+## 75. 2026-09-17：删除 RD 公式下方大括号
+
+**作者：Codex；请求：Zhenyu要求公式下面不要大括号。** 仅去掉chapter4中N/lumped和
+LDA/F1两条公式的3个underbrace及其说明标签，数学项、符号、公式编号与正文保留。
+全书编译245页，零未解析引用；印刷143--144页渲染核对通过。核对126个tracked文件，
+仅chapter4.tex变化。档案：workspace `local_runs/chapter4_no_underbraces_20260917_v1/`，
+含before、diff、编译/QA/delivery和`output/pdf/rd_formula_review.pdf`。未改solver、图、
+Ch1--3，未commit/push。
+
+
+## 76. 2026-09-17：恢复 mixed-stage 基准，common beta_n 保留为对照
+
+**作者：Codex；请求：Zhenyu希望以旧设置为基准，并在thesis说明像Paardekooper
+那样保持共同beta_n也未显著改变已测结果。** 标准static LDA/F1不带flag时恢复
+beta_n起点空间项、beta_*终点空间项/F1时间项。新增显式
+RD_LDA_COMMON_OPENING_BETA比较开关，旧RD_LDA_MIXED_STAGE_BETA兼容保留；两者
+互斥。common秩亏空间延拓保留在opt-in分支，未触及N/B/moving/rate-Heun或root Config。
+
+冻结源独立构建internal/hier/common；4-rank KH equal/hier至t2各11快照，Yee
+mixed/common至t1各5快照，共32份状态按ID逐位复现此前对应档案。positive/conservation
+门槛不变，make check_rd四脚本通过。源tar SHA256
+af2bd74ea3830839ad2f55fc53b111f82750a4c2af55dc8e44ae60bd2d71ffe3
+。回归复现不代表重新证明时间阶或一般positivity。
+
+Chapter4恢复mixed公式，common beta_n段落保留Paardekooper引用，明确只说已测
+advected Yee误差变化不明显；共同beta_*明确为earlier tests。公式下不加大括号。
+恢复旧rank4 mixed KH数据，y轴Delta E/E0 [10^-16]；曲线方向不作为物理精度排名。
+此前准备的rank2 common图未安装，档案保留。全书245页、零未解析引用，印刷143--148
+逐页渲染审核。安装前后核对126个tracked文件，只改chapter4.tex并新增KH图，其它
+章节、bib、FV/comparison、MPI保留；chapter4 SHA256
+70284abc1147c58cc5f67aef47e4bf71774e904b0b4e2464ce6672018cb7d60f。
+
+报告：`RD_MIXED_BETA_BASELINE_RESTORED_20260917.md`。档案：workspace
+`local_runs/restore_mixed_baseline_20260917_v1/`，含before、patch、source/config/header/
+binary provenance、native_summary、figure_data、thesis compile/QA/delivery。审阅PDF：
+`output/pdf/chapter4_mixed_baseline_review.pdf`。更新context与baseline顶部标明§73被取代。
+未commit/push，保留所有既有未提交工作。
+
+
+## 77. 2026-09-17：hierarchy 示意图去掉底部说明，thesis 图片去掉日期
+
+**作者：Codex；请求：Zhenyu指定删去hierarchy图底部两行说明，并将图片名去掉091x日期。**
+修改科学矢量图生成器，删除Shaded triangle/Distributed contribution说明及Derived
+triangle timestep公式行；保留节点timebin颜色与Ring synchronized图例，tight bbox
+去掉底部多余区域。输出无日期stem，原日期版本在开发档案中保留以维持证据链。
+Thesis全部带202609xx日期的6个图片重命名去掉日期（含未使用的旧KH/common对照图），
+Chapter4四处引用同步修改；flowchart本来无日期。其它图内容和正文保持。
+
+隔离全书编译245页、零未解析引用，5张图所在页164/169/171/174/175逐页渲染审核。
+安装前核对所有tracked文件及figure目录hash；其它章节/bib与未修改图片内容保持。
+Chapter4 SHA256：1febba10238cd28c2eb2bfcd4053e6446b796533538c1454caa3e015d3f38f49
+档案：workspace `local_runs/chapter4_figures_clean_names_20260917_v1/`，包含before hashes、
+generator before、rename_map、compile/QA/delivery与审阅PDF。没有solver改动、native重跑、
+commit或push。
+
+
+## 78. 2026-09-18：整理 Chapter 4.2/4.3，选定 moving baseline 并将替代方案标红 to delete
+
+**作者：Codex；请求：Zhenyu明确要求整理moving mesh RD theory和implementation，
+以Arpaia + contour integral + comoving frame为baseline，其它方案移至两节末尾，
+红字注明“to delete”。** 输入thesis HEAD为cb8d26d，tracked tree clean；最新本地
+结构已将hierarchy/MPI收回static 4.1，所以moving部分确实编号4.2/4.3。
+本轮没有fetch/pull/commit/push，保留所有既有untracked资源及AREPO未提交工作。
+
+选定的**thesis reference implementation**是2D median-dual nodal P1-U、nonconservative
+intensive contour、nonlinear physical flux Gauss3、Arpaia midpoint temporal area/modified
+divisor、element frame b_T=mean generator velocity、mixed-stage LDA/F1。对应现有
+`examples/yee_2d/Config_RD_ALE_LDA_GAUSS3_EQUAL_SPLIT.sh`；未改变solver/default Config。
+该原生路径限于单rank、global equal hydro timestep、pure gas、noncosmological flow。
+rd_step_begin只登记endpoint；正常重建一次new Delaunay后，rd_step_end连续执行两个
+physical residual sweep，同new connectivity/midpoint geometry。不是old-mesh predictor。
+空间rank/range守恒断言及rank<4 temporal lumped fallback照实描述；RD CFL diagnostic
+只报告，不写成已强制采用的timestep选择。
+
+4.2以所选Gauss3 nonlinear contour和element-frame表达代替“working alternative”的
+不确定表述，保留continuous ALE、DGCL及Arpaia两阶段推导，明确beta时刻属于本项目
+约定；静态退化指相同mass/update结构及已选Gauss residual，不能自动等同旧Chapter3
+Roe physical residual。保留uniform/positivity/time-order/endpoint conservation的区别，
+不宣称当前GL/F1固定h时间二阶。4.3按真实Q^n/m_old→D_i U_old→RK→m_new U_new
+重写storage流程，避免把旧draft中的endpoint rebase当成native temporary ledger。
+
+加入同new-connectivity两扫描的endpoint总量分解：
+`sum(Qnew-Qold)=sum((mhat_old-mactual_old)Uold)+sum((mnew-D)(Unew-Uold))`。
+这是在periodic shared history、有效三角剖分、守恒分配及正确temporal column sums下
+的代数推导，不是新native gate。第一项topology basis rebase，第二项Arpaia divisor到
+actual endpoint Q的权重转换；无flip时第二项仍可能非零。uniform跨flip保持不能代替
+非均匀态endpoint守恒。此前old/new-stage cavity correction公式不是这个baseline的
+两扫描公式。完整推导、文献边界和source查验放在档案SCIENCE_REVIEW.md。
+旧Sod/Yee Gauss实验涉及各自topology-repair配置，不能把所有结果转借给本轮不启用
+repair的exact reference。论文正文已明确这一provenance边界。
+
+两节末尾分别以红色group和“Alternative ... (to delete)”保留其它选项：nodal-flux
+trapezoid、legacy Roe split、Gauss5、lab/arbitrary frame、N/B/其它mass或time operator、
+Campoli；direct U/pending numerator、Voronoi evolution、真正old/new stage split、
+fictitious deformation/remap及moving hierarchy open intervals。moving hierarchy旧图
+留在红色候选段，caption和label也为红字；group后4.3/4.4恢复黑字。未修改图片本身。
+
+隔离full XeLaTeX编译exit0、247页，引用全部解析，无duplicate label。
+印刷153--177页渲染审核，baseline公式、两节红字及transition检查通过；PDF content
+colour检查确认red alternatives和caption，没有颜色泄漏。原全书其它章节/4.1的既有
+排版警告保留；新moving段只有不可见的0.10518pt paragraph overfull，无裁切。
+安装前核对HEAD/全部tracked文件和Chapter4 PDF资源hash；只写chapter4.tex。
+4.1及4.4后源文逐字节保持，Ch1--3/bib/figures保持。新chapter4 SHA256：
+`0336d95e0d3d0faadbba2af7d2eb1e147a53f2b77a5036d15b3087833f80065f`。Documentation-only，未build/run hydro，无新增数值验证。
+
+档案：`../local_runs/chapter4_moving_baseline_20260918_v1/`，含before/hash/source mirror、
+exact chapter4 patch、science review、compile、rendered pages、colour/QA与delivery。
+审阅PDF：`output/pdf/chapter4_moving_mesh_review.pdf`。
+本地thesis需按用户正常GitHub/Overleaf流程同步；未commit/push。
+
+
+## 79. 2026-09-19：以 thesis 为准恢复 mixed-stage 默认并修正 4.1 元数据
+
+**作者：Codex；请求：Zhenyu指定以Chapter 4.1的mixed-stage公式为准，修改代码默认；
+KH图改回真实4 MPI ranks，并修复逐边通量积分。** 标准static LDA/F1再次恢复为
+无flag时mixed-stage：起点空间项使用beta_n，终点空间项及F1时间项使用beta_*。
+`RD_LDA_COMMON_OPENING_BETA`显式选择共同opening beta_n；
+`RD_LDA_MIXED_STAGE_BETA`保留为兼容的显式默认选择，两者互斥且只允许标准static
+LDA/F1。当前solver与§76冻结并原生回归过的source逐字节一致；Template注释原已表达
+这一选择。`make PYTHON=/Users/zhenyuwu/miniconda3/envs/21cmfast/bin/python check_rd`
+四项全部通过。
+
+Thesis只做用户指定的三处修改：KH caption及正文由2 ranks改为4 ranks，与现用PDF的
+rank4 mixed数据一致；边界通量末项改为
+`sum_{e subset partial T} int_e F(U_h) dot n_{T,e} dl`。未扩写hierarchy守恒条件，
+未改N-scheme positive表述或其它4.1文字。完整thesis以XeLaTeX编译通过，246页，
+零未解析引用。
+本轮未commit/push，保留所有既有工作。
+
+
+## 80. 2026-09-20：合并 Chapter 4.2.1/4.2.2 并改用 fixed-coordinate partial derivative
+
+**作者：Codex；请求：Zhenyu要求合并moving triangulation与ALE Euler equation两小节，
+并去掉容易混淆的 $\mathrm D_{\boldsymbol\sigma}/\mathrm Dt$ 记号。** Chapter 4.2原
+4.2.1和4.2.2现合并为“Moving triangulation and ALE equations”；两个既有section
+label均保留并指向新的4.2.1，后续小节自动前移。开头统一定义参考映射
+$\mathbf x(\mathbf X,t)$、$J$、移动三角剖分和节点轨迹，并新增fixed-reference与
+fixed-space导数关系
+$\left.\partial_t f\right|_{\mathbf X}=\left.\partial_t f\right|_{\mathbf x}
++\boldsymbol\sigma\cdot\nabla_{\mathbf x}f$，其中连续网格速度明确写为
+$\boldsymbol\sigma=\left.\partial\mathbf x/\partial t\right|_{\mathbf X}$，
+而$\boldsymbol\sigma_h$保留给$P^1$离散插值。基函数输运式和intensive ALE Euler
+equation均直接使用带$\mathbf X/\mathbf x$下标的$\partial$，不再使用
+$\mathrm D_{\boldsymbol\sigma}/\mathrm Dt$。
+
+在临时完整源树中以XeLaTeX编译通过，共245页；无未解析引用、citation或重复label。
+目录确认合并小节为4.2.1、后续contour residual为4.2.2；印刷页152--154的PDF文字
+提取核对了导数关系、GCL及conservative/intensive ALE公式。本轮未改solver、其它
+章节、bibliography或图片，未commit/push。
+
+## 81. 2026-09-21：合并 ALE balance 与 Arpaia contour residual 推导
+
+**作者：Codex；请求：Zhenyu批准将讨论后的4.2.1/4.2.2结构写入本地thesis，暂不提交GitHub。**
+保留用户最新4.16及之前的推导；以随网格运动的control volume C(t)及固定preimage
+为起点，用参考域积分、换元和散度定理的连等式推出4.17。正文只定义Arpaia
+intensive spatial residual tilde phi，再引入移动仿射三角形、P1解与网格速度插值，
+推导element-mean mesh velocity对应的contour form。明确4.17右端在相同离散场下
+等于负tilde phi加geometric integral，避免混淆完整保守边界通量与Arpaia空间项。
+原phi_ALE定义及差值关系移入节末红色“to delete”候选段；正文uniform-state说明
+相应调整。Gauss quadrature内容后移到现有RK2之后，未改RK2/co-moving公式。
+4.3、其它章节、bibliography和图片保持不变。
+
+隔离完整源树XeLaTeX编译成功，246页，无未解析引用/citation或重复label。
+PDF页174--177、184--186完成渲染审核，调整两处分页使引导句和公式保持在一起。
+安装前比对所有tracked文件hash以防覆盖并发修改；只安装chapter4.tex与master.pdf。
+本地预览：`/Users/zhenyuwu/Desktop/MyThesis/Zhenyu-PhDThesis/zhenyu_thesis/master.pdf`。
+档案：`../local_runs/chapter4_ale_contour_20260921_v1/`，含原文/hash、完整编译源树、
+changes.patch、qa.json、页面渲染及delivery.json。Documentation-only，未运行hydro，
+未commit/push。
+
+
+## 82. 2026-09-21：补充 Hubbard conservative ALE 对照与 contour 选择动机
+
+**作者：Codex；请求：Zhenyu建议简述其它residual选择，并解释为何选contour表达。**
+在4.17与Arpaia residual定义之间补充Hubbard等(2020)采用对应conservative ALE的
+space-time构造；不把完整space-time residual等同于此处瞬时空间边界通量。
+核对出版商摘要 DOI 10.1016/j.camwa.2019.09.019 的conservative ALE表述。
+在contour推导后列出旧sum K_phys Uhat减integral sigma_h dot grad U_h的split表达，
+解释其混合Roe-linearised Uhat与P1 conservative U，而contour在两项中使用同一U_h。
+明确非线性Euler的两种physical-flux构造一般不同，不能无条件当作代数恒等改写。
+本轮仅新增两处说明和一处分页面包装；后续co-moving/RK2、4.3及其它章节均保持。
+
+完整XeLaTeX编译通过，246页，无未解析引用或重复label；PDF176--178页渲染核对通过。
+安装前逐一核对tracked文件hash，只更新本地chapter4.tex与master.pdf，未commit/push。
+档案：`../local_runs/chapter4_residual_motivation_20260921_v1/`（diff、REVIEW.md、
+编译、QA、渲染及delivery.json）。Documentation-only，无新增hydro运行。
+
+
+## 83. 2026-09-21：先讲 RK2，压缩 DGCL 并后置计算细节
+
+**作者：Codex；请求：Zhenyu批准先调整4.2论述顺序，随后逐步审核推导。**
+4.2.1 ALE/residual之后直接接4.2.2 Arpaia midpoint RK2；comoving coordinates
+与Gauss quadrature改为4.2.3和4.2.4，scope为4.2.5。技术内容仍在4.2后部，4.3不变。
+删除独立DGCL长小节及重复的median-area和uniform-state公式；RK2开头保留线性
+vertex trajectory与二维midpoint area identity，作为modified mass的必要定义。
+DGCL压缩为两stage更新之后的四句说明，保留uniform-state与一般守恒性的区别。
+核心modified mass、predictor、corrector、second residual、F1公式逐字保持；LDA
+展开式使用通用tilde phi，Gauss3选择留至后文。为首次使用K补充其ALE速度shift，
+frame保持条件改为向后引用。现有time-order与divisor限制仍保留。
+
+完整XeLaTeX编译成功，246页，零未解析引用/重复label；PDF178--181、184页渲染
+审核，RK2位于印刷156--158页。安装前检查所有tracked文件hash，更新本地
+chapter4.tex及master.pdf；此前ALE推导、comoving/求积内容、红色候选段、4.3及
+其它章节保持。Documentation-only，无solver修改/运行，未commit/push。
+档案：`../local_runs/chapter4_rk2_order_20260921_v1/`，含before/hash、diff、
+REVIEW.md、编译源树、QA、页面渲染和delivery.json。
+
+
+## 84. 2026-09-22：明确坐标、Euler K-matrix 与当前三角剖分上的梯度
+
+**作者：Codex；请求：Zhenyu批准按讨论小改4.13、K matrix和gradient/basis表述，并只预览4.2。**
+4.13引导句直接引用Chapter3的坐标、守恒变量与Euler flux定义，移除physical coordinates
+称呼。梯度定义改为“the spatial gradient on the current triangulation, evaluated at
+fixed time”，保留小写x下标。明确current basis与fixed reference basis的pullback关系，
+并写出n_i(t)=2|T(t)| grad_x psi_i(x,t)，注明inward normal按对边长度缩放，恒等式在
+每个固定时刻成立。K_phys引用Chapter3的共同Roe状态Euler矩阵，速度是在U相同参考系
+下尚未扣除网格速度的Roe平均流体速度；phys仅标记Euler通量部分。
+
+所有既有编号公式逐字不变；4.1、4.3及其它章节保持。完整XeLaTeX编译成功，246页，
+零未解析引用/重复label。截取4.2印刷151--167页，共17页，首页面裁切去除4.1内容。
+仅打开 `../output/pdf/chapter4_2_preview.pdf` 供用户预览，编号保持全书编号。
+预览1--6及末页渲染检查通过。安装前校验tracked文件hash，保存chapter4.tex/master.pdf。
+档案：`../local_runs/chapter4_coordinate_wording_20260922_v1/`，含diff、before/hash、
+编译、QA、excerpt脚本及渲染。无solver改动或hydro运行，未commit/push。
+
+
+## 85. 2026-09-22：统一 K/ALE 记号、公式引用与4.2前两小节结构
+
+**作者：Codex；请求：Zhenyu要求取消K_phys，说明Arpaia的ALE shift及Uhat/U无法直接合并，
+并调整Equation引用格式、两节标题和median-dual段落位置。** 无上标K沿用Chapter3的
+Roe Euler矩阵；k_ALE标量公式引用Arpaia2015 Equation59，同时给出K_ALE=K减网格速度
+投影乘I/2。说明矩阵shift本身成立，但sum K_ALE Uhat把网格输运作用在Uhat_h上，
+不能无修正替代作用在U_h上的旧split residual。4.2后续矩阵及4.3唯一一个K的LDA求解
+公式同步标ALE，避免把未shift和已shift矩阵混用。
+
+标题改为“ALE form of Euler equations”和“RK2 RD on moving mesh”。4.24--4.25的
+median mass与静态semidiscrete update移到RK2节开头，公式未改成新的显式时间格式。
+4.2正文引用改为Equation加数字、不加括号；display公式右侧标准编号括号保留。
+RK2核心时间/质量公式保持，标签集合完整，未改变算法或solver。
+
+完整XeLaTeX编译通过，246页，无未解析引用/重复label；只打开4.2预览，共18页，
+首页/末页裁切以排除4.1/4.3。预览5--8及末页已渲染审核。安装前检查tracked文件hash，
+保存本地chapter4.tex/master.pdf，更新 `../output/pdf/chapter4_2_preview.pdf`。
+档案：`../local_runs/chapter4_k_notation_20260922_v1/`。无hydro运行，未commit/push。
+
+
+## 86. 2026-09-22：审核 Chapter 3 到 Arpaia RK2 的推导衔接（讨论，未改 thesis）
+
+**作者：Codex；请求：Zhenyu指出4.2.2直接列出方案而缺少推导，希望从Chapter3延伸，
+并以|S_i(t)|替代面积别名m_i(t)，m只用于时间质量矩阵。** 核对Chapter3的RK defect、
+时间质量分配及global-lumped corrector；核对Arpaia2015最终期刊版4.4.2、4.5与Appendix，
+特别是73--84和91。关键衔接是Galerkin移动域时间项减geometric source，与采用
+stage-shifted时间增量的稳定化项分开离散；第一阶段稳定化时间增量为0，第二阶段为
+U*减Un。midpoint product重写之后，source与几何增量配对，得到
+(1+dt div sigma/2)乘Galerkin状态增量，再global lumping得到modified area。
+这不是只把静态phi替换为ALE phi，也不是DGCL单独唯一确定的算法。
+
+审核中的重要限定：直线vertex motion的二维面积差midpoint identity精确，但几何
+midpoint面积一般不等于端点面积平均。Arpaia Equation74写成等号；按当前thesis的
+几何midpoint定义，直接按reference P1积分展开会剩下(area_endpoint_average -
+area_midpoint)乘状态增量的项。固定光滑mesh motion时面积差O(dt^2)、状态增量O(dt)，
+故该乘积重写需说明O(dt^3)近似，而不能作为任意二维变形下的精确恒等式。
+此处是本轮代数审核发现的限定，尚未写入thesis，不将其当作新数值验证。
+用户记号偏好已记录；后续正文应区分真实|S_i^{n+1/2}|与修正|bar S_i^{n+1/2}|。
+本轮仅讨论和read-only文献核对，未改thesis/solver，未commit/push。
+
+
+## 87. 2026-09-22：只读审核4.2.1，重写4.2.2的RK2推导
+
+**作者：Codex；请求：Zhenyu要求不改其润色的4.2.1，按已讨论推导重写4.2.2。**
+4.2.1与4.2.2以外全部源码逐字保持。只读发现：P1 conservative contour residual
+与Chapter3 Roe sum K Uhat的直接等号一般不成立；scalar flux derivative不普遍等于
+fluid velocity；Hubbard完整space-time residual不宜直接等同瞬时boundary flux；
+geometric source应说进入modified area coefficient而非实际median-dual几何面积。
+已向用户报告，未代改4.2.1。
+
+4.2.2先定义直线vertex paths、Tmid、实际|S_i(t)|与midpoint积分<>；从移动域
+Galerkin balance与Chapter3 residual-correction延伸。显式写出Arpaia78a/78b的source
+与stabilization分离，第一阶段零stage-shifted增量、第二阶段U*减Un；展示时间项与
+source抵消为Un1减U*，经row-sum lumping得到modified area。保留<>，不定义q或
+面积别名m(t)，m仅时间质量矩阵。引用期刊Equation50/55/63--65/73--78/81/84/91。
+保留stage-dependent LDA/F1选择、DGCL简述与时间收敛限制。按§86限定，将Equation74
+的几何midpoint乘积改写标为光滑情形下O(dt^3)积分近似，区别于精确二维面积差恒等式。
+
+完整XeLaTeX编译通过，249页，零未解析引用/重复标签；只预览4.2共20页。
+新增推导印刷156--161页已渲染审核，无新增overfull公式。预览生成曾在编译输出PDF
+尚未写完时提前读取，出现EOF错误；编译完成后重跑通过，交付校验使用最终PDF hash。
+安装前核对所有tracked文件hash，保存chapter4.tex/master.pdf；未commit/push。
+档案：`../local_runs/chapter4_rk2_derivation_20260922_v1/`，含before/hash、diff、REVIEW、
+编译源树、QA、渲染、delivery。预览：`../output/pdf/chapter4_2_preview.pdf`。
+Documentation-only，无solver修改/运行。
+
+
+## 88. 2026-09-22：补充contour/Roe相同的条件，简化scalar速度表述
+
+**作者：Codex；请求：Zhenyu建议补充contour flux与Roe构造何时相同，并保留Hubbard简述。**
+仅修改4.2.1 K-matrix对照附近：Equation4.24改为split approximation与近似号；说明
+Euler-flux部分使用相同Chapter3 Roe-parameter interpolant时精确相同，而当前P1-U
+contour与Roe构造在小状态变化的线性阶相同，光滑且足够细网格给出该小变化条件。
+这是对Chapter3 quadratic-in-Z构造与Taylor展开的判断，不宣称光滑时有限网格精确相等。
+将a说明为characteristic advection velocity，并简短括注passive scalar transport时
+就是fluid velocity。核对Clawpack Riemann book Advection官方章节。Hubbard与4.2.2
+及其余源码逐字保持，无扩展讨论。
+
+完整XeLaTeX编译通过，249页，零未解析引用/重复label；仅4.2预览20页，改动附近
+印刷155--157页渲染审核。安装前核对tracked文件hash；保存chapter4.tex/master.pdf。
+档案：`../local_runs/chapter4_flux_equivalence_20260922_v1/`。无solver改动/运行，
+未commit/push。预览仍为`../output/pdf/chapter4_2_preview.pdf`。
+
+
+## 89. 2026-09-22：按用户习惯精简4.2.2文字与统一美式拼写
+
+**作者：Codex；请求：Zhenyu要求4.2.2用美式拼写、少用分号，并直接引入RK2/midpoint。**
+仅调整4.2.2 prose：开头压缩为两句“We construct the RK2 time integration for moving
+mesh RD in this section. Following Arpaia et al., we first define the midpoint
+geometry.” 统一stabilization、normalized等美式拼写，移除本小节所有分号，精简重复
+铺垫与连接句。保留Chapter3衔接、文献式号、midpoint近似限定及其它数学含义。
+所有display公式与label逐一比较保持原样，4.2.1及4.2.2外源码逐字保持。
+
+完整XeLaTeX编译通过，249页，零未解析引用/重复label，无新增overfull公式。
+4.2预览20页，4.2.2印刷156--161页渲染审核通过。安装前核对tracked文件hash。
+本地chapter4.tex/master.pdf及`../output/pdf/chapter4_2_preview.pdf`已更新。
+档案：`../local_runs/chapter4_rk2_wording_20260922_v1/`。未commit/push，无solver改动/运行。
+
+
+## 90. 2026-09-23：讨论midpoint geometry的顶点面积恒等式（未改thesis）
+
+**作者：Codex；请求：Zhenyu要求结合Arpaia Equation62--65，用顶点展开面积及面积差。**
+核对最终期刊版p516原PDF。逆时针、无翻转三角形面积为shoelace determinant的一半，
+等于(1/4)sum x_i dot n_i，其中n_i为对边长度缩放的inward normal。
+面积差精确为(1/2)sum n_i^mid dot (x_i^{n+1}-x_i^n)。Equation62的几何向量k_i
+在当前thesis法向记号下对应n_i/2，不是Equation59的scalar upwind coefficient。
+取Equation63的displacement velocity并用P1 sigma_h，得到Equation64的
+Delta area=dt int_Tmid div sigma_h。对直线vertex trajectories，面积随时间二次，
+其时间导数一次，因此Equation65的时间midpoint积分精确。midpoint vertex geometry
+不等同于端点面积的算术平均。仅讨论并记录，未修改thesis或solver。
+
+
+## 91. 2026-09-23：讨论Galerkin/stabilization拆分的原因（未改thesis）
+
+**作者：Codex；请求：Zhenyu询问Arpaia为何区分Galerkin与stabilization。**
+核对期刊3.2/3.5/4.4/4.5、Equation27/49--51/68--70/78a--b及Appendix91。
+用scalar notation解释test weight w_i=psi_i+gamma_i：Galerkin给基础弱形式，gamma提供
+upwind/residual-distribution修正。拆分在静态explicit RK-RD中已经存在，原因是Galerkin
+使用当前stage未知增量，stabilization使用已知stage-shifted增量（第一stage零，第二
+U*减Un），随后lumping实现显式更新。移动网格增加DGCL配平需求：Galerkin moving
+integral derivative与负geometric source成对，stabilization采用intensive ALE residual，
+避免对常状态留下未配平几何项。连续GCL下不同表达可等价，离散stage-shift后不能
+任意互换。两部分是相加形成最终离散方程，不是分别强制满足的两组独立方程。
+未修改thesis或solver。
+
+
+## 92. 2026-09-23：保留用户新前文，调整stage标题与时间残差分配解释
+
+**作者：Codex；请求：Zhenyu已同步修改至First stage，要求普通标题换行、少用Galerkin/
+stabilization术语，并按Equation4.32 RHS行次解释，先本地编译。** 以当前Desktop源文
+为基准，只改First stage至LDA段之前的stage prose。之前用户修改及之后全部源码逐字
+保持，所有display公式与label均逐一比较保持原样。
+
+First stage (predictor): / Second stage (corrector): 改为普通字体独立行。用4.32 RHS
+第一/二/三行对应时间/空间/geometric source，明确Chapter3的时间RD分配给出第二
+阶段的matrix action减P1 weighted action。保留所选离散方案的性质，不宣称单靠DGCL
+推出。4.37抵消改用行与项的位置说明。保留Arpaia49--51/91及81/84的式号对应。
+
+完整XeLaTeX编译通过，249页，无未解析引用/重复label，无新增overfull公式。
+预览4.2共20页，印刷158--160页渲染检查标题/公式通过。安装前校验tracked文件hash，
+更新本地chapter4.tex/master.pdf与`../output/pdf/chapter4_2_preview.pdf`。
+档案：`../local_runs/chapter4_stage_exposition_20260923_v1/`，含before/hash、diff、
+REVIEW、编译、QA和delivery。无solver改动或hydro运行，未commit/push/写Overleaf。
+
+
+## 93. 2026-09-23：统一T含顶点i记号并补充row-sum lumping推导
+
+**作者：Codex；请求：Zhenyu要求把T in D_i改为T ni i，避免与dual area混淆，稍详写mass lumping。**
+替换chapter4中全部7处T in D_i（均在4.2）。4.34之前补充单元时间项展开、P1质量矩阵
+行和利用partition of unity等于|Tmid|/3的两条不编号公式，解释将行和放入对角线后只
+乘节点i增量。明确lumping是离散近似，几何系数在每个三角形内恒定并乘其row sum。
+其余文字和已有公式内容保持，标签及原编号保持，4.34仍在印刷159页。
+
+完整XeLaTeX编译通过，249页，零未解析引用/重复label，无新增overfull公式。
+4.2预览21页，印刷159--160页已渲染检查。安装前核对tracked文件hash，保存本地
+chapter4.tex/master.pdf及`../output/pdf/chapter4_2_preview.pdf`。
+档案：`../local_runs/chapter4_mass_lumping_20260923_v1/`。无solver改动/运行，
+未commit/push/写Overleaf。
+
+
+## 94. 2026-09-23：给出实际dual-area定义并删除独立DGCL说明段
+
+**作者：Codex；请求：Zhenyu要求Note that...说明modified coefficient与实际面积的区别，
+并删除过长DGCL部分。** 4.34后改为Note that modified |bar S_mid| is generally different
+from actual median-dual area |S_mid|=sum_{T ni i}|Tmid|/3。删除独立Discrete geometric
+conservation标题、未被引用的section label及uniform-state证明段。前面推导必需的
+几何恒等式与所有display公式保持，静态极限、divisor与时间阶限制不是本轮删除对象。
+
+完整XeLaTeX编译通过，249页，零未解析引用/重复标签。4.2预览21页，印刷159、161页
+渲染审核通过。安装前核对tracked文件hash，更新本地chapter4.tex/master.pdf及
+`../output/pdf/chapter4_2_preview.pdf`。档案：`../local_runs/chapter4_dgcl_trim_20260923_v1/`。
+无solver改动或hydro运行，未commit/push/写Overleaf。
+
+
+## 95. 2026-09-23：解释4.36的来源及4.32的ALE/Lagrangian关系（讨论）
+
+**作者：Codex；请求：Zhenyu询问为何加入4.36，以及4.32是否可称类似Lagrangian守恒律。**
+核对当前Chapter3时间残差定义与Arpaia54--55。解释4.36不是零恒等式，也不是4.32或
+DGCL强制给出的项：先将Un1-Un拆成(Un1-U*)+(U*-Un)，结合几何项后得到modified
+coefficient乘corrector增量及剩余P1 weighted predictor增量。用Chapter3所选RD temporal
+matrix action替换后一个贡献，差额恰为4.36，故是离散分配选择。4.32可重组为随mesh
+运动的weighted conservative ALE balance；仅sigma等于fluid velocity时为真正material/
+Lagrangian描述，任意mesh velocity时宜称weighted ALE conservation form following
+moving mesh，可解释其Lagrangian-like视角。未改thesis或solver。
+
+
+## 96. 2026-09-23：second stage先合并时间/几何项，再解释mass-matrix替换
+
+**作者：Codex；请求：Zhenyu接受先合并moving-domain time和geometric source，再用文字
+说明把predictor增量的weighted integral替换为时间mass-matrix action。** 仅重写second
+stage推导段。新4.36展示时间项与source合并，新4.37将Un1-Un拆成corrector增量加
+predictor增量。文字说明第二项采用Chapter3的temporal RD distribution，保留Arpaia
+49--51/91的出处，再引出不变的4.38 residual、4.39 balance和4.40 lumped update。
+删除旧4.36“先加correction”和旧4.37长装配式，替换两个局部label且无外部引用。
+其余源码和最终scheme保持不变，不引入Galerkin/stabilization记号。
+
+完整XeLaTeX编译通过，249页，零未解析引用/重复标签，无新增overfull公式。
+4.2预览21页，印刷159--161页渲染检查通过，重点推导在160页。安装前核对tracked
+文件hash，更新本地chapter4.tex/master.pdf及`../output/pdf/chapter4_2_preview.pdf`。
+档案：`../local_runs/chapter4_corrector_order_20260923_v1/`。无solver改动/运行，
+未commit/push/写Overleaf。
+
+
+## 97. 2026-09-23：明确mass replacement两端，补充LDA/N与K_ALE用途
+
+**作者：Codex；请求：Zhenyu要求给出replace两边数学式，同时说明LDA和N，并核查K_ALE是否
+与4.2.1冲突。** 仅改4.2.2两段：展开weighted predictor increment为P1 mass积分作用，
+用longmapsto明确替换为RD temporal matrix action，强调这是离散选择而非代数等式。
+补充K_ALE在此构造相对波速的characteristic splitting，不将contour total认作sum K_ALE Uhat。
+4.2.1逐字保持。LDA直接以beta分配选定total，full-rank时sum beta=I。N raw残差则闭合
+到shifted Roe total；如选contour total，必须补偿差额。列出等分修正这一选择，并限定
+传统scalar N monotonicity不可自动沿用。核对当前solver.c的RD_ALE_CONTOUR_RESIDUAL
+N/B correction（约5209行），与已有等分实现一致；不声称Gauss3/N已验证。另列N/lumped
+和LDA/F1 temporal matrices及second-stage residual，selected baseline仍LDA/F1。
+
+全文XeLaTeX编译通过250页，零未解析引用/重复label，无新增overfull公式。保留已有
+编号与labels，4.2预览22页。新增段落印刷160--162页渲染核对通过。安装前检查全部
+tracked文件hash，更新本地chapter4.tex/master.pdf和`../output/pdf/chapter4_2_preview.pdf`。
+档案：`../local_runs/chapter4_n_lda_distribution_20260923_v1/`，含before/hash、diff、编译、
+QA截图及delivery。无solver改动或hydro运行，未commit/push/写Overleaf。
+
+
+## 98. 2026-09-24：省略空间梯度下标，前移精简Gauss3，并解释weighted moving balance
+
+**作者：Codex；请求：Zhenyu要求开头统一说明空间梯度，后续省略x下标，将原4.2.4精简为
+4.2.1末尾subsubsection；并在原4.32后加weighted conservation/Lagrangian条件说明。**
+以当日Desktop最新源文为基准，统一nabla而保留时间偏导的fixed x/X标记。定义句明确
+spatial gradient on current triangulation，with respect to x at fixed time。Gauss3保留
+P1 edge interpolation、contour quadrature与nodes/weights、mesh term精确和nonlinear flux
+近似的区别，删去重复LDA分配与后文重复的性质说明。后续quadrature引用改指公式，原有
+Gauss公式labels保持。新增用户两句在moving weighted balance后，原4.32现为4.34。
+4.1以及Scope之后全部源码逐字保持，其他章节/solver未改。
+
+XeLaTeX全文250页编译通过，无未解析引用/重复label，无新增overfull box。仅4.2预览
+21页；印刷152、156、158页渲染核对定义、积分和新增句子。安装前检查全部tracked hashes，
+写回chapter4.tex/master.pdf和`../output/pdf/chapter4_2_preview.pdf`。档案：
+`../local_runs/chapter4_gradient_quadrature_20260924_v1/`。无hydro运行或commit/push/Overleaf操作。
+
+
+## 99. 2026-09-24：复核旧Roe split对照与co-moving实现（讨论，未改thesis）
+
+**作者：Codex；请求：Zhenyu询问过去是否测试保留Roe split，以及是否难以结合co-moving。**
+复核§31报告、legacy_split_20260912的summary/verification/config和当前solver的frame split
+correction。该批为e33aea3历史冻结源码、LDA/GL-F1/Arpaia配对，对照IC已核验匹配：smooth
+KH glass48²的lab/frame都在t=.800476同ID923负质量；Gauss3/5复用档到t10。Sod有效Nx64、
+t=.08，split lab/frame均969步完成，平台速度std .023080/.022979，Gauss3 .022730；sharp
+split两种frame均首步A2失败。uniform两种frame最大变化5.55e-16。
+解释co-moving已经实现：将整个split correction C=-int sigma grad(U-Uhat)按C'=GC变换，
+不能因特征算子mean sigma'=0就丢弃它。这是保持原lab离散算子的内部坐标变换，不意味着
+该混合残差自动具备对外部boost的离散Galilean协变性；Gauss选择有smooth KH证据支持，
+不是Roe积分本身不精确的结论。没有重跑实验或修改solver/thesis。
+
+阅读旧RD_ALE_FORM_SELECTION.md时发现§3.2把缺陷解释为Roe Z在Galilean boost下非线性，
+该说法不正确，不应继续引用：常数boost下Z'=H_b Z是线性变换，且U(Z'_h)=G U(Z_h)。这里
+的问题是Euler flux采用U(Z_h)，mesh transport采用P1-U的混合重构；其额外boost项由两种
+插值之差产生。旧实验数字与错误的机制解释需要分开使用，当前答复不重复后者。
+
+
+## 100. 2026-09-24：核对LDA/N如何守恒分配contour及当前Gauss支持范围
+
+**作者：Codex；请求：Zhenyu确认LDA独立用K_ALE作分配是否保持contour总和，以及N的当前代码。**
+直接读当前develop_pureC_RD工作树solver（有既存未提交改动），未改solver或thesis、未运行实验。
+LDA实现解Sminus X=Phi，再phi_i=-Kplus_i X，满秩/兼容解下保持target total；秩亏时广义逆
+仅给range投影，不能无条件声称sum beta=I。moving标准路径用A2检查，静态common-beta
+opt-in才有额外range补全；F1时间项另有rank-deficient diagonal lumping。
+N在RD_ALE_CONTOUR_RESIDUAL下已有逐分量(Phi-sum rawN)/3等分修正（约5209--5246行），
+随后A2检查。标准N不自动闭合到独立target，修正N可以，正性/单调性不因此获证。
+RD_ALE_CONTOUR_GAUSS guard（75--82行）明确要求LDA，故现有N/B contour支持不能冒充
+N+P1-U Gauss3/5支持；目前N contour是旧nodal-flux contour。单元空间residual-sum性质
+与移动网格完整时间/几何/拓扑更新后的全局守恒分别表述。根Config.sh未存在，不猜当前二进制
+配置；moving Gauss3示例配置确为LDA+F1+element frame。
+
+
+## 101. 2026-09-24：N + Gauss3 原生试验与 N/LDA 的 Roe split 负质量复现
+
+**作者：Codex；请求：Zhenyu要求试跑N+Gauss3的Sod和长期KH，并分别检查N/LDA的KH负质量。**
+仅放开equal-step ALE N+Gauss3编译guard，复用已有N差额等分修正，不加positivity limiter、
+不放宽A2，也不改变默认baseline。新增显式N示例配置与独立campaign/analysis脚本。
+冻结adc424ba工作树（含用户既有改动），826 tracked文件校验，8配置独立build/binary，
+所有原生运行单rank且OMP/BLAS各1线程，最多4任务。源码包SHA256为
+b2a915f657bfc46ae6cce1cc315ea3776fafb74e8cd3e8d08b6d7a43302dd9c6。
+
+8个uniform gate全部通过（最大变化1.9984e-15），make check_rd四项通过。
+四组Sod全部完成t=.08（periodic128²，单管有效Nx约64，归一化时间.16，CFL.08）。
+N/Roe与N/Gauss3密度L1为.0235933/.0233814，平台速度std为.0139150/.0146614，
+不能称Gauss在N上普遍更准确。smooth KH glass48²、CFL.3、dt cap.02下，N/Roe、
+N/Gauss3、LDA/Gauss3均完成t10。当前LDA/Roe于t1.0327148、ID374出现质量-8.234e-6，
+前一步为1.36862e-5；predictor仍正、A2未失败、完整两阶段后最终状态检查失败。
+另用历史e33aea3原二进制精确重放旧LDA/Roe，复现t.800476、ID923、质量-1.06377e-5，
+五个保存快照的各字段逐项相同。历史与当前topology路径不同，不能混成同源码对照。
+
+当前完成KH的终点质量漂移为1.19–1.38%，故空间分配闭合不代表完整moving update严格守恒。
+该漂移根因未在本轮定位；Gauss改善本组LDA/KH生存性，不证明普遍正性、长期准确性，
+也不能宣称N必须用Gauss。未开放N/Gauss5、static N/Gauss或moving hierarchy。
+17次原生尝试共15正常完成、2次保留的负质量失败。报告含同色标KH演化、Sod解析对照、
+质量/能量诊断及所有配置/二进制/日志溯源：
+[专题报告](RD_N_GAUSS3_SPLIT_20260924.md)，档案
+`../local_runs/n_gauss3_split_20260924_v1/`。未改thesis，未commit/push。
+
+
+## 102. 2026-09-24：论文区分 N/Roe split 与 LDA/contour，并明确 ALE 特征分配守恒
+
+**作者：Codex；请求：Zhenyu授权直接修改thesis，并澄清N用K_ALE时保留mesh correction。**
+以本地最新chapter4.tex为基准，删除“不可以使用K_ALE”的过重表述。Numerical integration
+先定义K_ALE，再写Roe split的两行等式，显式保留-int sigma grad(U-Uhat)。简述初步LDA/KH
+负质量和contour完成对照，注明测试仍进行中，不放图或把正性当作定理。随后引入LDA的
+P1-U contour与Gauss3。Distribution schemes以K_ALE正负分裂构造两scheme，明确LDA即使
+使用contour总残差，仍用ALE特征速度/方向分配；在Sminus可逆假设下sum beta=I，故单元
+residual总和守恒。N删去contour差额修正，改为原Roe split mesh correction的三顶点等分。
+补充co-moving时该完整修正向量仍须变换并保留，修正后续仅LDA使用Gauss的交叉引用。
+
+全文XeLaTeX250页通过，零未解析引用/重复标签，无新增公式溢出。4.2预览21页，印刷
+155--157、162--163、166页渲染检查。保留既有labels，4.1和Scope之后（包括4.3）逐字不变。
+安装前核对所有tracked thesis hashes以防覆盖并发编辑，写回chapter4.tex/master.pdf。
+预览：`../output/pdf/chapter4_2_preview.pdf`；档案含before/diff/compile/QA：
+`../local_runs/chapter4_n_split_lda_contour_20260924_v1/`。未改solver，未commit/push/写Overleaf。
+
+
+## 103. 2026-09-24：当前 N/Roe 与 LDA/Gauss3 的 Gresho lab/co-moving 对照
+
+**作者：Codex；请求：Zhenyu希望在当前scheme/residual选择下复测boost10，判断co-moving是否仍必要。**
+采用旧generator的jitter48²、seed20260811、gamma5/3、unit box、boost0/10、CFL.3、cap.01，
+冻结当前adc424ba工作树，分别构建N/Roe split与LDA/Gauss3的lab/frame四版本。当前common
+begin/end/new-connectivity几何，不冒充历史Linux二进制精确重放，N保留完整mesh correction。
+8个short t.02与8个long t1全部完成，long均4096步，没有A2/负质量终止；旧boost10首步失败
+未在当前两方案复现。t1方位速度area-L1：N约.01971/.01976（b0/b10），LDA约.00792314，
+lab/frame宏观剖面误差基本相同。全部长期质量漂移4.56e-5--6.20e-5，非严格全局守恒验证。
+
+短时按ID匹配并去boost的velocity mean-absolute：N lab/frame均1.4981e-5；LDA lab8.0094e-13、
+frame9.6632e-15。N的boost依赖不因计算坐标改变而消失。长期N约.002644，LDA约6e-10，
+长期几何/拓扑与舍入扩散不能简单归结为单次线性求解误差。
+现有condition-diagnostic另2次原生短跑，隔离副本仅加首步矩阵打印又2次短跑，保存快照
+均与无诊断对照逐项一致。首stage4608元素，排除shift-cond>=1e8的2099个，余2509元素
+boost10的cond2中位lab5.72e8/shift2.11e4，配对降低倍数中位2.40e4；全元素max-abs entry
+中位9.38/.0538。真实近秩亏仍存在，co-moving改善坐标尺度但不消除rank deficiency。
+
+4个boost10 uniform都正常完成，但N/lab压力变化1.1822e-12未通过原1e-12绝对门槛，
+其frame为1.3856e-13，LDA lab/frame1.6076e-13/1.3145e-13。science launcher因此正确阻止
+首次启动，日志保留；随后明确作为用户所请求的诊断对照运行，没有放宽gate/求解器断言。
+总计6二进制24原生运行完成，但uniform门禁仅3/4通过。使用单rank，OMP/BLAS各1线程，
+主对照4并发，与额外串行诊断重叠时最多5个rank。生产solver/thesis/默认Config未改。
+
+结论：保留frame作为矩阵条件改善手段有依据，但本组当前boost10运行不以它为必要条件。
+报告与图： [专题报告](RD_GRESHO_FRAME_COMPARISON_20260924.md)；完整归档
+`../local_runs/gresho_frame_20260924_v1/`，含source/binary/IC/params/hashes、失败的门禁日志、
+统计、剖面图和独立matrix_probe。新增campaign/analysis脚本，未commit/push。
+
+
+## 104. 2026-09-24：关闭 co-moving 的 N/Roe 与 LDA/Gauss3 Sod / smooth KH 对照
+
+**作者：Codex；请求：Zhenyu倾向将co-moving降为代码可选优化，先验证lab-frame的Sod和smooth KH。**
+复用§101精确冻结source.tar，核验当前相关source hashes仍相同。4个新配置只移除
+RD_ELEMENT_COMOVING_FRAME，其余scheme、IC、参数、CFL、mesh、Arpaia面积/双sweep不变，
+对应co-moving控制复用已验证二进制及输出（未冒称重跑）。新4构建、4uniform和4science，
+单rank、OMP/BLAS各1线程、最多4并发。uniform最大变化1.1102e-15，全通过原1e-12门槛。
+
+新Sod N/Roe与LDA/Gauss3均完成t.08（periodic glass128²，单管有效Nx64，gamma1.4，CFL.08）。
+lab/co-moving density L1分别N .023602714/.023593296，LDA .016941941/.016938943；相对变化
+约.040%/.018%，velocity L1变化均低于.2%。LDA速度undershoot仍约-.738，与co-moving相近。
+
+smoothKH glass48²、tanh宽度.025、gamma1.4、CFL.3、cap.02，N/lab与LDA/lab均完成t10，
+没有负质量或A2失败。t10 lab N rho范围1.06459--2.27642、pmin2.33786，LDA rho范围
+.842624--2.09448、pmin2.07284。lab N/LDA相对总质量漂移1.2339%/1.2231%，对应co-moving
+1.3819%/1.1884%。终点横向动能lab N/LDA .0572951/.0807987，对照.0721590/.0935961，
+分别低20.6%/13.7%。早期场接近，长期轨迹/涡细节明显分离，不能将其称作精确等价或
+直接判定哪一个更准确。没有独立隔离舍入、rank、时间步、topology对差异放大的贡献。
+
+结论：这组结果支持暂不将co-moving作为论文参考方案的必选技术环节，保留代码选项；
+Sod和运行稳定性支持较强，KH长期精度支持有限，完整moving更新的全局守恒仍未验证。
+此次不改thesis、生产solver或默认Config，未commit/push。保持Gresho中改善矩阵条件的
+证据，不将旧LDA/Roe/lab boost10失败套用于当前LDA/Gauss3。
+
+报告：[lab-frame Sod/KH对照](RD_SOD_KH_LAB_FRAME_20260924.md)。档案含输入/配置/来源
+核验、原始日志、配对JSON、Sod解析剖面、KH演化和diagnostics：
+`../local_runs/sod_kh_lab_frame_20260924_v1/`。新增独立campaign/analysis脚本，源码和配置
+校验通过，绘图检查完成。相同时间快照按ID比较，未跨不同输出时间插值或外推。
+
+
+## 105. 2026-09-24：Gresho boost10 图与当前 moving Yee 的 lab/co-moving 收敛对照
+
+**作者：Codex；请求：Zhenyu希望用Gresho/Yee判断是否将thesis默认frame改为lab，
+并核对KH质量漂移与edge flip、moving hierarchy的关系。此轮只做测试/图/记录。**
+
+复用并核验§104/前序档案的4个gamma1.4不可变二进制、同一冻结源码及4个uniform门禁，
+新跑16例Yee：N/Roe+mesh correction与LDA/P1-U Gauss3，分别lab/comoving，glass
+48²/96²/192²，box10，gamma1.4，beta5，boost=(1,0)，t1，CFL.2，dt caps
+1/256、1/512、1/1024；96²额外减半。最大4个并发单rank，OMP/BLAS均1线程。
+实际步数全部符合cap，16/16完成，保存rho/p为正，无负质量/A2终止。只开关frame，
+不加topology repair，不改变Arpaia/new-connectivity双sweep或N/LDA时间质量选项。
+
+最终median-dual area=m/rho加权、在实际最终坐标上比较解析解：
+
+| Scheme/frame | rho orders 48→96 / 96→192 | velocity orders |
+|---|---|---|
+| N lab | .8328 / .9023 | .8377 / .9176 |
+| N comoving | .8329 / .9029 | .8377 / .9178 |
+| LDA lab | 1.8395 / 1.7570 | 1.7526 / 1.3845 |
+| LDA comoving | 1.8397 / 1.7596 | 1.7517 / 1.3934 |
+
+所有配对解析误差变化：rho最大.194%，velocity最大.551%。96²减半dt的rho变化
+不超过.194%、velocity不超过.608%。这是h/dt共同加密的观测阶，不是固定h时间阶；
+尤其不能称所有变量均严格二阶。Yee总质量漂移随分辨率减小，但非roundoff守恒。
+
+Gresho复用§103的boost10、t1、jitter48²数据，画去boost后的节点方位速度图及剖面。
+lab/comoving vphi L1：N .0197645029/.0197644772，LDA .00792314439/.00792314433。
+两frame宏观误差基本重合，N/LDA差异更大。§103中N/lab boost10 uniform pressure
+1.1822e−12超过原绝对1e−12门槛的记录保留，不能把science完成写成所有门禁通过。
+本轮Yee为boost1，不是boost10。Gresho与Yee的152个相关src/build文件hash完全相同。
+
+KH归因核对：log2 §71的旧topology repair将相对质量漂移2.523e−3降至6.923e−6，
+说明当时topology是主要来源；§73.5修正了剩余误差的简单归因。当前§78端点恒等式
+含basis change与Arpaia divisor→actual endpoint两项，后者无flip时也可能非零。
+未对当前1.2–1.4% KH漂移新做逐步分解。Moving hierarchy还存在§11的实际element
+lifetime/timebin覆盖问题；受限N-only原型已存在，§35独立Euler prototype支持可行性，
+但一般native topology/hierarchy及LDA/F1/MPI/restart仍未验证。
+
+建议支持lab作为thesis reference、comoving作为可选conditioning优化；用户待审核后
+确认。未改thesis、生产solver、默认Config，未commit/push。报告：
+[当前Yee/Gresho frame图与收敛](RD_YEE_GRESHO_FRAME_FIGURES_20260924.md)。
+档案：`../local_runs/yee_frame_convergence_20260924_v1/`，含16例输入/快照/日志、
+源码/二进制provenance、分析JSON和PNG/PDF。新增run/analyze_yee_frame_convergence.py。
+
+
+## 106. 2026-09-24：thesis采用lab-frame reference，comoving整段移入红字备选
+
+**作者：Codex；请求：Zhenyu同意§105结论，要求把整个comoving部分标红并移至后面的
+红字部分。明确授权修改本地thesis。**
+
+4.2原Element-local co-moving conservative coordinates整段及全部公式/原label保留，
+移入Alternative formulations (to delete)红色group。正文Scope改为laboratory frame，
+RK2正文不再前引可选frame。4.3改用未变换的LDA residual与F1 RHS，明确保留mean
+mesh-advection，直接积累lab ledger；原G变换/带prime公式/固定frame要求移入4.3红色
+Alternative implementations。现有example Config实际仍启用frame，因此把该文件路径
+和RD_ELEMENT_COMOVING_FRAME说明一起移到红字，正文只列lab reference的选项。
+没有修改生产Config、solver或测试结果，也未把新实验图插入论文。
+
+本地当前源为准，4.1和4.2.1逐字保留。全书XeLaTeX编译251页，零未定义引用/引用文献、
+零重复label。保留所有旧label；新增两个红字primed implementation label。4.2单独
+预览21页；完整PDF第186/187/192/196/199页渲染QA，程序验证红字颜色及全部原frame
+理论公式保留。安装前128个tracked thesis文件hash核验，安装后其余文件保持不变。
+仅交付chapter4.tex和master.pdf，旧文件备份在档案；未commit/push，未同步Overleaf。
+
+档案：`../local_runs/chapter4_comoving_optional_20260924_v1/`，含原始hash/source、
+changes.patch、编译记录、qa.json、页面PNG和chapter4_2_preview.pdf。
+用户已确认论文的lab-frame reference；comoving仍是代码里的可选conditioning优化。
+
+
+## 107. 2026-09-24：Yee384扩展与匹配static/moving对照（已完成）
+
+**作者：Codex；请求：Zhenyu要求为Yee+boost收敛曲线增加更高resolution，并与static
+mesh比较。沿用已确认lab frame、boost1、t1；此次不编辑thesis。**
+
+档案 `../local_runs/yee_static_moving_384_20260924_v1/`，同§105冻结源，2个新static
+二进制，复用已核验moving N/Roe与LDA/Gauss3二进制及6个48/96/192 science结果。
+新跑2个static uniform、8个static science、2个moving384。相同SWIFT glass48周期
+铺接1/2/4/8倍，384²为147456节点；helper逐项精确复现前三档IC后才生成384。
+box10、gamma1.4、beta5、boost1、CFL.2、t1，dt cap1/256、1/512、1/1024、1/2048。
+384 memory cap1024MiB，其它512MiB；最多4个singleton，OMP/BLAS均1线程。
+
+运行中阶段记录：两个新static uniform gates通过；static48/96/192/384全部完成。192时moving/static
+L1比值：N rho .86758、velocity .56265；LDA rho1.70917、velocity .78496。不能预设
+moving在所有变量上更好。前三档初始节点/状态一致，static坐标/网格速度/面积核验通过。
+Static384 rho/velocity L1：N 5.33660e−4/2.05251e−3，LDA1.85296e−5/6.02721e−5。
+Static192→384 rho/velocity阶：N .975/.959，LDA1.470/1.628。
+两个moving384仍在运行，尚无完整第四点比较或最终结论。moving显著慢于static，
+已核验各约单核CPU、380MiB RSS正常推进；最初约两小时的总时长估计偏短。
+
+运行入口 `tests/rd/run_yee_static_moving_convergence.py`，分析入口
+`tests/rd/analyze_yee_static_moving_convergence.py`；逐例状态在档案runs/下，progress.py
+和summary_partial.json只反映已完成或实际日志状态。保留所有断言/容差，不改变solver。
+
+用户随后要求转后台并结束前台对话。交接时两个moving384约t=.45，停止的仅为前台
+轮询；native driver PID14433及其children14437/14438继续运行。watcher PID14608
+在全部完成后自动分析、验证、生成PNG/PDF及focused report。后续仍需视觉QA、最终
+解释和本条/context收尾；不把尚未完成的moving384计作成功结果。
+
+用户追问moving耗时：读取所有四例相同Step1024/t=.5的cpu.txt。累计计时N static/moving
+1085.67/6519.64s，LDA1087.48/6509.29s，均约6倍。Moving voronoi占77.7–78.5%，
+其insert子项占总计67.7–68.7%；RD占14.8–15.7%。LDA static/moving RD累计
+810.80/963.03s，网格8.57/5111.52s。父子计时不可相加；这是并发运行下内置计时，
+不是控制机器负载的性能benchmark。冻结run.c每moving步调用create_mesh，static保留
+网格。两者均单rank、FORCE_EQUAL_TIMESTEPS、相同dt cap，故未启用MPI/hierarchy
+不能解释配对约6倍差距。当前ALE equalstep在rd_ale_prepare_step明确拒绝NTask!=1，
+并行化需要实现/验证，不能直接mpirun加核；hierarchy受全域dt cap约束，本收敛对照
+不能假定有明显收益。原始同刻计时保存timing_at_t0p5.json。后台计算未改变。
+
+
+**最终完成与复核（用户恢复high-res分析后）：** 全部12新run完成，含两个moving384，
+并复用6个moving低分辨率controls。所有来源/IC/参数/步数核验通过，152个production
+文件未改。两张图已视觉检查，summary.json、verification.json、report.md已生成。
+
+384 rho/velocity L1：N static5.33660e−4/2.05251e−3，moving4.67114e−4/1.15948e−3；
+LDA static1.85296e−5/6.02721e−5，moving2.88755e−5/6.87148e−5。
+末段rho/velocity阶：N static.975/.959、moving.963/.954；LDA static1.470/1.628、
+moving1.604/1.090。N moving误差降低12.47%/43.51%；LDA moving误差高55.83%/14.01%，
+velocity在384已被static反超。不能宣称moving普遍更优或LDA所有变量已稳定二阶。
+这是h/dt共同加密，不是纯时间阶；未新跑384半dt或comoving。
+
+384 moving N/LDA质量相对漂移−6.065e−7/−2.870e−7，static约机器精度。
+保存状态及日志predictor均正，无science failure。Element conservation最大绝对defect
+N5.227e−16/LDA1.233e−15。LDA moving F1 fallback次数48/96/192/384为0/0/71/31898，
+384约占corrector-element更新0.00528%；不能由次数推断其为速度降阶原因。
+归因仍需固定h的dt敏感性及有针对性的消融，旧低分辨率frame结果不能替代384验证。
+总耗时moving约2h53min、static约32min，配对比约5.4–5.5，属于并发运行计时。
+
+报告：[Yee384四点static/moving对照](RD_YEE_STATIC_MOVING_384_20260924.md)。
+两后台exec session已正常退出并回收，无待运行算例。本轮数值分析不再修改thesis。
+
+
+## 108. 2026-09-24：Chapter 3伪逆说明与moving distribution精简
+
+**作者：Codex；请求：Zhenyu明确授权在Chapter 3补充伪逆说明，精简4.2 distribution，
+只编译Chapter 3与4.2局部预览。**
+
+依据log1及regularize_matrix_debug_report.md §3：在停滞的Roe线性化系统中，LDA/N
+右端属于range(S^-)，且K_i^+消去ker(S^-)。伪逆给出相容系统的精确解，节点residual
+唯一，虽然中间解不唯一。新增段落说明旧S^-对角扰动破坏守恒恒等式，现解未扰动系统。
+没有声称任意速度扰动都破坏守恒，也没有把此证明外推到任意Gauss contour右端。
+Chapter 3的LDA守恒表述改为sum beta_i phi=phi，避免奇异时错误声称全空间sum beta=I。
+
+4.2 distribution删除突兀的invertibility假设、重复midpoint/global-lumping/阶段解释，
+保留全部公式和labels、N的mesh correction及N/lumped、LDA/F1的阶段式。LDA表述为
+必须满足的element residual守恒条件，并引用现有4.3求解实现。4.3的spatial compatibility
+和temporal fallback说明逐字保留。保留精简后的modified area positivity与时间阶限制。
+
+只编译Chapter 3和Section 4.2，XeLaTeX通过，零未定义引用/文献、零重复label。
+预览分别33页、20页；渲染检查修改页（combined PDF13/14/44/45）。原4.2.1已有
+1.57pt overfull不在本轮编辑范围。外部引用复用上次完整编译的labels/citations，预览
+页码为局部页码，公式/节编号不变。只安装两份TeX，其余126个tracked文件hash未变，
+master.pdf未动，未commit/push/同步Overleaf。
+
+档案：`../local_runs/chapter3_4_distribution_20260924_v1/`，含原文/hash、patch、
+局部编译源/日志、qa.json、两份preview PDF和安装核验。用户自行通过原工作流同步。
+
+
+## 109. 2026-09-24：Yee四点整体收敛拟合及结论措辞修正
+
+**作者：Codex；用户纠正：收敛阶用全体点的log-log直线拟合，不能将某相邻区间
+的斜率当作整体阶。单个分辨率点可能偏离趋势，需继续加密才可判断趋势是否持续；
+本轮没有时间跑768²，只在讨论中列出可能机制。**
+
+主图改为原始误差散点加每组一条幂律拟合线，四点等权OLS：log(E)=log(C)+p log(h)，
+h=10/Nx。全部误差和static/moving ratios逐项与旧summary一致，没有选择性删点。
+整体rho/velocity阶：N static.9720/.9279、moving.8995/.9044；LDA static1.6870/1.7738、
+moving1.7358/1.4065。R²记录在summary fits和报告；相邻斜率移到附录仅作诊断。
+
+修正§107先前过度强调末段的解释：不能凭192→384区间断言LDA持续降阶。
+384同分辨率误差大小仍是有效观测，但不等于渐近阶判定。讨论保留空间/时间误差混合、
+网格几何/regularization/拓扑变化、矩阵条件数/数值秩与少量F1 fallback等可能因素，
+没有归因结论。用户明确不追加768²，本轮也未启动其它模拟或修改thesis。
+
+脚本、主图PNG/PDF、summary/report/context已更新；拟合用独立中心化斜率公式核对，
+图已视觉检查。旧产物保留在档案before_global_fit/。
+
+
+## 110. 2026-09-24：boosted Yee的LDA密度profile与径向误差
+
+**作者：Codex；用户要求解释boost下moving未必优于static，并直接画密度profile。**
+只后处理§107的384²、t1、boost1、lab/Gauss3 LDA两例。147456原始节点直接绘制，
+半径相对解析中心(6,5)，周期距离，不拟合中心/不重插值；bin0.05，先计算每节点
+解析误差再按median-dual面积加权。完整域L1复现原summary，shell贡献和也核验。
+
+密度profile几乎重合。Moving的核心r<1平均误差+2.251e−4，1<r<2为−7.993e−5，
+有正负非轴对称散布；r<2贡献moving总rho L1的87.79%，static为63.14%。r<1 moving
+MAE3.6826e−4/static1.0170e−4，r1–2为1.4630e−4/9.0239e−5；r2–3反而更小，
+1.7307e−5/3.3935e−5，外围也总体更小。因此额外误差集中核心，非整个profile失真。
+
+boost1与解析最大旋转速度.7958同量级；当前网格随局部流速+压力预测+规整运动，
+不是只随boost刚性平移。减小bulk-advection误差不保证减小其它离散项的总和。
+图支持空间定位，不证明具体误差源；保留几何/拓扑、时间项、条件数/F1等候选机制，
+不判定持续降阶、不追加模拟或修改thesis。全四点拟合口径维持§109。
+
+报告：[Yee密度profile](RD_YEE_DENSITY_PROFILES_20260924.md)。脚本
+`tests/rd/plot_yee_density_profiles.py`及档案副本，density_profiles.json含快照hash和
+全部统计，两张PNG/PDF已生成，PNG视觉检查通过。
+
+
+## 111. 2026-09-24：Yee boost10静态/移动LDA对照（后台运行中）
+
+**作者：Codex；用户要求提高vx并比较192²及以下，以区分bulk-advection优势与
+可能的moving误差平台。** 本轮不改thesis/solver/default，不commit/push。
+
+冻结复用§107两份LDA lab/Gauss3 mixed-F1静态/移动二进制，source SHA256
+b2a915f657bfc46ae6cce1cc315ea3776fafb74e8cd3e8d08b6d7a43302dd9c6，核验当前152个
+production文件hash。Boost1→10仅改IC vx，其它字段逐项不变。48/96/192²到t1，
+四种mesh/boost组合统一dt cap1/1024,1/2048,1/4096；补跑匹配boost1 controls，
+避免将旧4倍大dt对照当纯boost测试。四uniform gates和两192短pilot均通过。
+最多四单线程solver workers，另48co-moving诊断临时增至五（已结束），符合local
+6–8core预算；OMP和OpenBLAS均1，MaxMem512MiB。未追加384/768。
+
+目前七science完成，一失败，四192继续。96² density L1 static boost1/10为
+1.7031580e-4/1.8668099e-3；moving2.9420123e-4/2.9433091e-4。Boost增加static
+10.9609倍，moving只增.04408%；boost10 moving/static rho=.157665,velocity=.0487785。
+原始节点rho(r)和面积加权annular绝对误差图已绘制、视觉检查。Moving两个boost
+径向曲线几乎重合。48/96 boost1减dt后density变化约1%，不能解释上述boost效应。
+
+48movingboost10 lab在step243,t≈.237305触发A2 raw residual conservation：
+defect4.8811713e-12>tol2.1550948e-12，roundoff_scale2.36955。之前rho/p predictor
+正；保留失败，不放宽容差，不赋t1误差。此前一完整步SVD fallback6850/9216，
+rank3/4=1249/5601，min pivot1.11e-21，F1 lumped476。不可据此唯一归因或称负密度。
+
+随后仅补同48² boost10 co-moving诊断，核验Config唯一差RD_ELEMENT_COMOVING_FRAME，
+source/IC/dt/容差一致。Uniform defect1.9873e-14，science1024步到t1，存盘及日志
+predictor正。rho L1 .0010557291,velocity .0013091227,mass drift−1.4197e-5。
+此诊断说明frame敏感性，不唯一确定失败矩阵步骤，也不替代lab曲线缺失点。
+
+当前不能称error floor：旧boost1 rho随h一直降至384²。对boost不敏感不等于对h
+不敏感；edge flip/geometry/time terms/reconstruction/quadrature/matrix/F1可列候选，
+未作独立归因。仅完整三点系列做全范围log-log拟合，不从失败系列剩下两点宣称三点阶。
+
+Archive `../local_runs/yee_boost10_static_moving_20260924_v2/`含README、progress.py、
+全部provenance、scripts、partial summary和96图。Main session5902在所有运行结束后
+会因原all-success断言非零退出（预期，不取消其它运行）；独立session94005 watcher
+等待status_science.json并对成功/失败统一后处理。最后的图需人工视觉QA并更新记录。
+诊断session13500已正常结束。Preparation-only v1也保留失败记录，无solver启动。
+
+报告：[Yee boost10对照](RD_YEE_BOOST10_SENSITIVITY_20260924.md)。后续只需检查后台
+完成状态、最终verification/report/plots与失败，不重跑既有目录。
+
+**2026-09-25运行状态纠正与恢复（Codex）：** 用户问是否完成。13:59CST检查发现
+四192日志最后更新均为前晚23:36，原parent/watcher/native进程均不存在，session5902
+也已无效。确切中断原因不明，不声称solver失败。此前“后台仍持续运行”的保证不准确，
+已向用户纠正。最后t：moving boost1/.10为.358154/.291504，static为.744385/.650635。
+没有可用192 restart checkpoint，保留原日志及hash，未覆盖既有输出。
+
+只将四192在新archive `../local_runs/yee_boost10_static_moving_20260925_recovery_v1/`
+从原IC重跑，source/binary/IC/dt完全一致，仅OutputDir不同。已完成/明确失败案例
+通过symlink只读复用；48lab失败继续保留。改用一次性macOS launchd任务，label
+com.zhenyuwu.codex.yee-boost10-recovery-20260925-v1，非周期调度/无KeepAlive。
+已验证parentPID30904/PPID1，四run日志推进；四workers且OMP/BLAS1。
+新pipeline等四例结束后自动failure-aware分析，不再因既有48失败跳过分析。
+最终结果/视觉QA仍待完成。旧watcher不再使用。无solver/default/thesis修改。
+
+## 112. 2026-09-25：开启co-moving数值对照，保留thesis选择及A2容差
+
+**作者：Codex；用户决定当前先开启co-moving，但不改thesis默认；询问是否守恒要求过严。**
+核对A2代码：D=max|Phi−sum flux|，tol=4096 eps S，S含相消前|K+||x|与Phi构造尺度。
+不是严格零误差，也不是固定绝对1e-12。48Yee失败D/S=2.05996e-12、允许9.09495e-13，
+超阈2.264945倍。可能全流程roundoff尺度估计不足，但因4096安全因子及未知数值秩/
+相容性，不能直接判定过严。现日志不含失败单元的完整矩阵/奇异值；之前aggregate
+rank不能替代。Phi+B x=(Phi−Sminus x)+(Sminus+B)x可分解solve/range和split误差，
+需将来针对性采集，不据小绝对数值宣称全局守恒已满足。Gresho同boost通过不保证
+Yee局部矩阵同样数值性质。容差及production source未修改。
+
+新增archive `../local_runs/yee_boost10_comoving_20260925_v1/`，moving两boost1/10及
+三分辨率48/96/192全部co-moving，避免混合frame拟合。静态lab controls复用recovery，
+已有lab恢复运行继续保留作对照。复用已完成48boost10 co-moving及uniform，补boost1
+uniform、boost10短192pilot和五science。验证sole Config差为frameflag、同source及
+152production hashes。MaxMem512MiB、OMP/BLAS1、最多额外2workers（总计最多6）。
+一次性launchd label com.zhenyuwu.codex.yee-comoving-20260925-v1，启动日志正常，
+uniform通过；pilot后检查再science。最终分析等待复用static也完成，图需视觉QA。
+
+报告：[A2容差核对与co-moving运行选择](RD_YEE_A2_TOLERANCE_AUDIT_20260925.md)。
+不改变默认Config、thesis或容差，不commit/push；lab失败记录保留。
+
+## 113. 2026-09-25：停止本地测试，整理提交并准备COSMA接续
+
+**作者：Codex；用户明确要求停止当前测试，清理代码并提交GitHub，详细记录待办。**
+两launchd任务及六个active worker已SIGTERM，随后注销任务并用process list确认没有
+solver/launcher存活。所有原始输出保留。四lab/static192恢复运行停止于t=.205811,
+.165771,.706299,.704590；两个co-moving192停止于t=.0175781。新增co-moving48/96
+其余三例尚未开始。每例termination_status.json及汇总明确user_stopped/not_started，
+不是物理失败或成功终态；没有人为写run_status=0。原48lab A2失败仍独立保留。
+
+[详细COSMA交接](RD_COSMA_YEE_HANDOFF_20260925.md)记录全部决定、结果、失败、中断与
+七项顺序待办：重建/gates、匹配收敛组、lab复现、全点拟合/密度profile、独立diagnostics、
+A2单元分解及后续误差机制消融。当前moving单rank限制必须明确，集群并行独立case。
+不改thesis，不调A2容差，不启动COSMA jobs。
+
+代码整理包括此前已验证但未提交的begin/end及restart处理、显式common-beta选项、
+实验N/Gauss3 guard、配置和对应测试；标准mixed-stage行为不改。补充独立lab配置，
+修正boost science中有失败就跳过全部后处理的driver问题，gate仍保持fail-closed。
+增加portable `prepare_yee_boost_cosma.py`，校验8个原IC的tracked hash，重写目的地路径，
+生成18primary或27含lab独立case及manifest/TSV，不负责提交。保存parameter template，
+明确不能用polar Yee generator替代当前glass48 tiled家族。7.4MB输入包在local_runs/
+cosma_handoff_20260925/yee_inputs，未加入Git，需另行rsync。
+
+验证：152production文件hash与先前数值档案完全一致；make check_rd四脚本全部通过，
+含compiled common-beta fixture；29份新增Python脚本语法通过；27case准备、3配置active
+flags与归档binary一致；输入缺失/变化和重写已有目录均被拒绝；diff whitespace和shell
+syntax通过。未重启任何hydro模拟。COSMA运行以及适配Slurm日志的完整分析仍待完成，
+没有把Mac专用历史driver假装成portable。
+
+当前未提交的图稿/绘图资产和Chapter3.7 scratch与运行迁移无关，保留原状不合入。
+代码与交接文档分开提交；首次GitHub fetch超时，push状态以最终Git核验为准。
