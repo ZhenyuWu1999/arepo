@@ -170,8 +170,35 @@ void run(void)
 
       free(time_bin_hydro);
       free(hydro_particles);
+
+#ifdef RD_RK2_SPLIT_STAGES
+      /* create_mesh() reconstructs lists using its temporary all-active bin.
+       * Restore the lists as well as P[].TimeBinHydro. In particular, a
+       * TimeMax extension may have rescaled the saved particle bins. */
+      reconstruct_timebins();
+      mark_active_timebins();
+      make_list_of_active_particles();
+#endif
     }
 #endif /* #if defined(VORONOI_STATIC_MESH) */
+
+#ifdef RD_RK2_SPLIT_STAGES
+  /* A normal checkpoint is between the hydro hooks and must close its pending
+   * RD step (ALE has not run either sweep yet). The final restart is instead
+   * a completed step; an extension must begin a new one. */
+  if(RestartFlag == 1 && All.RD_EqualStepEnd == 0)
+    {
+#ifdef RD_ALE_EQUALSTEP
+      /* A closed moving restart has no saved tessellation. Reconstruct the
+       * opening mesh before timestep/gradient setup in the extension. */
+      mark_active_timebins();
+      make_list_of_active_particles();
+      create_mesh();
+      mesh_setup_exchange();
+#endif
+      RestartFlag = 0;
+    }
+#endif
 
 #ifdef RD_OUTPUT_DIAGNOSTICS
   int loop_test = 0;
@@ -230,19 +257,7 @@ void run(void)
 
         /* compute intercell flux with Riemann solver and update the cells with the fluxes */
 #ifdef RESIDUAL_DISTRIBUTION
-#ifdef RD_HIERARCHICAL_TIMESTEPS
-#ifndef RD_ALE_HIERARCHICAL
-          compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR);
-#endif
-#elif !defined(RD_RK2_TOTAL_RESIDUAL)
-          compute_residuals(&Mesh);
-#else
-          /* Under RD_RK2_TOTAL_RESIDUAL the complete two-stage step runs at
-           * the second, unconditional call site. Doing nothing here also
-           * removes the restart asymmetry of the half-step pair: this call
-           * sits inside the RestartFlag branch and is skipped on a restart
-           * iteration. */
-#endif
+          rd_step_begin(&Mesh);
 #else
           compute_interface_fluxes(&Mesh);
 #endif /*ifdef RESIDUAL_DISTRIBUTION*/
@@ -348,19 +363,7 @@ void run(void)
       exchange_primitive_variables_and_gradients();
 
 #ifdef RESIDUAL_DISTRIBUTION
-#ifdef RD_HIERARCHICAL_TIMESTEPS
-#ifdef RD_ALE_HIERARCHICAL
-      /* The new connectivity exists only after this moving-mesh rebuild.
-       * Concentrate both RK sweeps at this event; the predictor call performs
-       * the geometric-ledger close, and the corrector reuses the same mesh. */
-      compute_residuals(&Mesh, RD_RK_STAGE_PREDICTOR);
-      compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR);
-#else
-      compute_residuals(&Mesh, RD_RK_STAGE_CORRECTOR);
-#endif
-#else
-      compute_residuals(&Mesh);
-#endif
+      rd_step_end(&Mesh);
 #else
       compute_interface_fluxes(&Mesh);
 #endif /*#ifdef RESIDUAL_DISTRIBUTION*/

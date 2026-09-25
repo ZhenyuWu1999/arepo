@@ -491,6 +491,7 @@ check_docs: $(DOCS_CHECK)
 .PHONY: check_rd
 check_rd:
 	@$(PYTHON) tests/rd/test_lda_f1_rank_deficiency.py
+	@$(PYTHON) tests/rd/test_lda_common_beta.py
 	@$(PYTHON) tests/rd/test_n_frame_covariance.py
 	@$(PYTHON) tests/rd/test_ale_shear_eigenvalue_floor.py
 

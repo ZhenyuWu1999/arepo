@@ -52,15 +52,35 @@ static lapack_int solve_system(int n, double *A, double *b);
 
 #ifdef RESIDUAL_DISTRIBUTION
 
+/* Standard static LDA/F1 retains its mixed-stage baseline. A common
+ * interval-opening distribution is an explicit comparison option only.
+ * Moving geometry, N/B, and four-pass rate-Heun have separate definitions. */
+#if defined(RD_LDA_COMMON_OPENING_BETA) || defined(RD_LDA_MIXED_STAGE_BETA)
+#if !defined(VORONOI_STATIC_MESH) || !defined(LDA_SCHEME) || !defined(RD_RK2_TOTAL_RESIDUAL) || \
+    defined(RD_RK2_RATE_CONSISTENT_HEUN)
+#error "LDA beta comparison options require standard static LDA/F1."
+#endif
+#if defined(RD_LDA_COMMON_OPENING_BETA) && defined(RD_LDA_MIXED_STAGE_BETA)
+#error "Select only one LDA beta comparison option."
+#endif
+#ifdef RD_LDA_COMMON_OPENING_BETA
+#define RD_LDA_COMMON_BETA
+#endif
+#endif
+
 /* Static full-mesh LDA uses the same P1-U edge states, including the
  * synchronized/frozen predictor states already exchanged by the hierarchy.
  * Quadrature adds no topology state or MPI payload. Keep the moving-hierarchy
- * and active-mesh extensions guarded until separately validated. */
+ * and active-mesh extensions guarded until separately validated. Equal-step
+ * ALE N may also use Gauss3 with the existing conservative N correction;
+ * this does not extend the standard scalar N positivity result. */
 #if defined(RD_ALE_CONTOUR_GAUSS) &&                                                            \
-    (!defined(RD_ALE_CONTOUR_RESIDUAL) || !defined(LDA_SCHEME) ||                               \
-     (!defined(RD_ALE_EQUALSTEP) &&                                                            \
-      !(defined(VORONOI_STATIC_MESH) && defined(CREATE_FULL_MESH) && defined(RD_RK2_TOTAL_RESIDUAL))))
-#error "RD_ALE_CONTOUR_GAUSS requires equal-step ALE LDA or static full-mesh total-residual RK2 LDA."
+    (!defined(RD_ALE_CONTOUR_RESIDUAL) ||                                                      \
+     !((defined(LDA_SCHEME) &&                                                                \
+        (defined(RD_ALE_EQUALSTEP) ||                                                         \
+         (defined(VORONOI_STATIC_MESH) && defined(CREATE_FULL_MESH) && defined(RD_RK2_TOTAL_RESIDUAL)))) || \
+       (defined(N_SCHEME) && defined(RD_ALE_EQUALSTEP) && RD_ALE_CONTOUR_GAUSS == 3)))
+#error "RD_ALE_CONTOUR_GAUSS requires ALE LDA, experimental equal-step ALE N/Gauss3, or static full-mesh RK2 LDA."
 #endif
 #if defined(RD_ALE_CONTOUR_GAUSS) && (RD_ALE_CONTOUR_GAUSS != 3 && RD_ALE_CONTOUR_GAUSS != 5)
 #error "RD_ALE_CONTOUR_GAUSS must be 3 or 5 quadrature points."
@@ -183,7 +203,11 @@ static lapack_int solve_system(int n, double *A, double *b);
 #elif defined(RD_ALE_HIERARCHICAL)
 #define RD_RK2_STAGE_BETA_LABEL "concentrated-ALE-hierarchy-N-Campoli"
 #elif defined(LDA_SCHEME)
+#ifdef RD_LDA_COMMON_BETA
+#define RD_RK2_STAGE_BETA_LABEL "two-call-LDA-F1-common-opening"
+#else
 #define RD_RK2_STAGE_BETA_LABEL "two-call-LDA-F1-frozen"
+#endif
 #else
 #define RD_RK2_STAGE_BETA_LABEL "two-call-N-lumped"
 #endif
@@ -194,11 +218,23 @@ static lapack_int solve_system(int n, double *A, double *b);
 #endif
 
 #if defined(RD_RK2_TOTAL_RESIDUAL) && !defined(RD_HIERARCHICAL_TIMESTEPS)
-#define RD_RK2_INTERNAL_LOOP
+#define RD_RK2_EQUALSTEP
+#endif
+
+#ifdef RD_RK2_SPLIT_STAGES
+#if !defined(RESIDUAL_DISTRIBUTION) || (!defined(VORONOI_STATIC_MESH) && !defined(RD_ALE_EQUALSTEP)) || !defined(FORCE_EQUAL_TIMESTEPS) || \
+    !defined(RD_RK2_EQUALSTEP) || (!defined(N_SCHEME) && !defined(LDA_SCHEME)) || defined(RD_RK2_RATE_CONSISTENT_HEUN)
+#error "RD_RK2_SPLIT_STAGES requires static or ALE equal-timestep N/LDA with standard total-residual RK2."
+#endif
+#if defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || defined(MHD) || defined(PASSIVE_SCALARS) || \
+    defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(COOLING) || \
+    defined(RD_RT_FIXED_BOUNDARY) || defined(RD_DIAG_PREDICTOR_ONLY) || defined(RD_DIAG_SKIP_PREPARE) || defined(RD_DIAG_NO_KICK)
+#error "RD_RK2_SPLIT_STAGES supports source-free hydro without refinement or stage-altering diagnostics."
+#endif
 #endif
 
 #if defined(RD_ALE_APOSTERIORI_FALLBACK) && \
-    (!defined(RD_ALE_EQUALSTEP) || !defined(RD_RK2_INTERNAL_LOOP) || !defined(B_SCHEME) || defined(RD_RK2_RATE_CONSISTENT_HEUN))
+    (!defined(RD_ALE_EQUALSTEP) || !defined(RD_RK2_EQUALSTEP) || !defined(B_SCHEME) || defined(RD_RK2_RATE_CONSISTENT_HEUN))
 #error "RD_ALE_APOSTERIORI_FALLBACK is the equal-step two-pass B-engine diagnostic (binary LDA/N only)."
 #endif
 
@@ -227,7 +263,11 @@ static lapack_int solve_system(int n, double *A, double *b);
 #define RD_RK2_STAGE_BETA_LABEL "coherent-total-B"
 #define RD_UPWIND_NRHS 3
 #else
+#ifdef RD_LDA_COMMON_BETA
+#define RD_RK2_STAGE_BETA_LABEL "common-opening"
+#else
 #define RD_RK2_STAGE_BETA_LABEL "mixed"
+#endif
 #define RD_UPWIND_NRHS 3
 #endif
 
@@ -1220,6 +1260,27 @@ static void rd_check_conservation(const double flux[4][3], const double Phi[4], 
   (void)roundoff_scale;
 #endif
 }
+
+#ifdef RD_LDA_COMMON_BETA
+/*! Extend the singular spatial distribution to arbitrary stage residuals:
+ * beta_i = -K_i^+ S^dagger + (I - S S^dagger)/3, S=sum K^-.
+ * The unresolved component is shared equally. This is an explicit numerical
+ * choice, needed because phi(U*) need not belong to range(S(U^n)); it is not
+ * a tolerance change or a full-rank conservation repair. Compatible targets
+ * retain the original upwind distribution. The temporal rank fallback is
+ * still lumped. */
+static void rd_common_beta_unresolved(const double S[4][4], const double x[4], const double target[4],
+                                      double projected[4], double share[4])
+{
+  for(int k = 0; k < 4; k++)
+    {
+      projected[k] = 0.0;
+      for(int p = 0; p < 4; p++)
+        projected[k] += S[k][p] * x[p];
+      share[k] = (target[k] - projected[k]) / 3.0;
+    }
+}
+#endif
 
 #ifdef RD_DEBUG_ASSERTS
 /*! \brief Assertion A1:  sum_{i in T} K_i = 0.
@@ -3433,7 +3494,7 @@ static int rd_aposteriori_expand_halo(const tessellation *T, const struct rd_ele
 
 #endif
 
-#ifdef RD_RK2_INTERNAL_LOOP
+#ifdef RD_RK2_EQUALSTEP
 /*! \brief Snapshot the intensive nodal state U^n before the predictor sweep. */
 static void rd_rk2_save_stage0(void)
 {
@@ -3632,10 +3693,65 @@ static void rd_rk2_prepare_corrector(void)
 #endif
     }
 }
-#endif /* #ifdef RD_RK2_INTERNAL_LOOP */
+#endif /* #ifdef RD_RK2_EQUALSTEP */
+
+/*! The two main-loop hooks describe the lifetime of an RD step, not a claim
+ * that every scheme evaluates its predictor on the opening mesh. Equal ALE
+ * requires the new connectivity for both sweeps; begin only records its end
+ * time and leaves all node/mesh data untouched. No preview or replay is needed. */
+void rd_step_begin(tessellation *T)
+{
+  (void)T;
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_RK2_SPLIT_STAGES)
+  if(NTask != 1 || NumGas == 0 || NumPart != NumGas || All.ComovingIntegrationOn || All.RD_EqualStepEnd != 0)
+    terminate_program("ALE begin requires a closed, one-rank, gas-only, non-comoving step");
+  int bin = P[0].TimeBinHydro; /* FORCE_EQUAL_TIMESTEPS assigns the same bin to all nodes. */
+  if(bin <= 0 || bin >= TIMEBINS || !TimeBinSynchronized[bin])
+    terminate_program("ALE begin received an invalid equal timestep");
+#ifdef RD_DEBUG_ASSERTS
+  /* Check the assignment invariant at the opening hook, before recording an
+   * endpoint. Keep the extra node scan out of non-debug equal-step runs. */
+  for(int i = 1; i < NumGas; i++)
+    if(P[i].TimeBinHydro != bin)
+      terminate_program("ALE begin requires equal hydro timebins: node=%d bin=%d expected=%d", i, P[i].TimeBinHydro, bin);
+#endif
+  All.RD_EqualStepEnd = All.Ti_Current + (((integertime)1) << bin);
+#ifdef RD_DEBUG_ASSERTS
+  mpi_printf("RD-STEP time=%.8g hook=begin sweeps=0 pending_endpoint=%lld\n", All.Time, (long long)All.RD_EqualStepEnd);
+#endif
+#elif defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_RK2_SPLIT_STAGES)
+#ifndef RD_ALE_HIERARCHICAL
+  compute_residuals(T, RD_RK_STAGE_PREDICTOR);
+#endif
+#elif !defined(RD_RK2_TOTAL_RESIDUAL)
+  compute_residuals(T);
+#endif
+}
+
+void rd_step_end(tessellation *T)
+{
+#if defined(RD_ALE_EQUALSTEP) && defined(RD_RK2_SPLIT_STAGES)
+  if(All.RD_EqualStepEnd == 0 || All.RD_EqualStepEnd != All.Ti_Current)
+    terminate_program("ALE end does not match the opening hook's endpoint");
+  compute_residuals(T); /* Original two sweeps, one element set and one ALE geometry. */
+  All.RD_EqualStepEnd = 0;
+#ifdef RD_DEBUG_ASSERTS
+  mpi_printf("RD-STEP time=%.8g hook=end sweeps=2 pending_endpoint=0\n", All.Time);
+#endif
+#elif defined(RD_ALE_HIERARCHICAL)
+  compute_residuals(T, RD_RK_STAGE_PREDICTOR);
+  compute_residuals(T, RD_RK_STAGE_CORRECTOR);
+#elif defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_RK2_SPLIT_STAGES)
+  compute_residuals(T, RD_RK_STAGE_CORRECTOR);
+#else
+  compute_residuals(T);
+#endif
+}
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
 void compute_residuals(tessellation *T, int rd_stage)
+#elif defined(RD_RK2_SPLIT_STAGES) && !defined(RD_ALE_EQUALSTEP)
+void compute_residuals(tessellation *T, int rd_requested_stage)
 #else
 void compute_residuals(tessellation *T)
 #endif
@@ -3646,6 +3762,40 @@ void compute_residuals(tessellation *T)
   TIMER_START(CPU_RESIDUAL_DISTRIBUTION);
 
   rd_reset_solver_statistics();
+
+#if defined(RD_RK2_SPLIT_STAGES) && !defined(RD_ALE_EQUALSTEP)
+  integertime rd_equal_interval = 0;
+  if(rd_requested_stage == RD_RK_STAGE_PREDICTOR)
+    {
+      if(All.RD_EqualStepEnd != 0)
+        terminate_program("RD equal predictor called with an unconsumed corrector");
+
+      /* HighestActiveTimeBin still describes the previous synchronization
+       * after timestep selection. Read the newly assigned vertex bins. */
+      int local_bins[2] = {TIMEBINS, 0}, global_bins[2];
+      for(int bin_index = 0; bin_index < NumGas; bin_index++)
+        {
+          int bin = P[bin_index].TimeBinHydro;
+          local_bins[0] = imin(local_bins[0], bin);
+          local_bins[1] = imin(local_bins[1], -bin);
+        }
+      MPI_Allreduce(local_bins, global_bins, 2, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+      if(global_bins[0] <= 0 || global_bins[0] >= TIMEBINS || global_bins[0] != -global_bins[1] ||
+         !TimeBinSynchronized[global_bins[0]])
+        terminate_program("RD split equal predictor requires one synchronized vertex bin");
+      rd_equal_interval = ((integertime)1) << global_bins[0];
+    }
+  else if(rd_requested_stage == RD_RK_STAGE_CORRECTOR)
+    {
+      if(All.RD_EqualStepEnd == 0 || All.RD_EqualStepEnd != All.Ti_Current)
+        terminate_program("RD equal corrector does not match a saved predictor endpoint");
+    }
+  else
+    terminate_program("invalid RD equal RK stage");
+
+  if(All.ComovingIntegrationOn)
+    terminate_program("RD_RK2_SPLIT_STAGES has only been defined for non-comoving hydro");
+#endif
 
 #ifdef RD_RT_FIXED_BOUNDARY
   for(int component = 0; component < 4; component++)
@@ -3682,6 +3832,15 @@ void compute_residuals(tessellation *T)
   rd_ale_prepare_step(T, &set);
 #elif defined(RD_ALE_HIERARCHICAL)
   rd_ale_hierarchical_prepare(T, &set, rd_stage);
+#elif defined(RD_RK2_SPLIT_STAGES)
+  /* Keep the predictor's divisor through the corrector, including a domain
+   * migration or restart. Only element indices/normals are rebuilt here. */
+  if(rd_requested_stage == RD_RK_STAGE_PREDICTOR)
+    rd_accumulate_dual_area(T, &set);
+  else
+    for(int area_index = 0; area_index < NumGas; area_index++)
+      if(!isfinite(SphP[area_index].DualArea) || SphP[area_index].DualArea <= 0.0)
+        terminate_program("RD equal corrector lost its predictor DualArea");
 #elif !defined(RD_HIERARCHICAL_TIMESTEPS)
   rd_accumulate_dual_area(T, &set);
 #else
@@ -3730,7 +3889,7 @@ void compute_residuals(tessellation *T)
   int *thistask_triangles = set.element;
   tri_normals_list        = set.normals;
 
-#if defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+#if defined(B_SCHEME) && defined(RD_RK2_EQUALSTEP)
   /* A total-B corrector needs both spatial-stage distributions. The equal-bin
    * static element set has the same persistent ordering in both sweeps. */
   double(*rd_b_flux_n_stage0)[4][3] =
@@ -3759,17 +3918,26 @@ void compute_residuals(tessellation *T)
       if(DP[DT[thistask_triangles[i]].p[j]].task != ThisTask)
         Max_N_FluxRD_export++;
 
-#ifdef RD_RK2_INTERNAL_LOOP
+#ifdef RD_RK2_EQUALSTEP
   /* Two-stage GL+F1 total-residual step (analysis document sections 1, 9,
    * 10): stage 0 is the RD predictor U* = U^n - (dt/|S_i|) sum phi_i(U^n),
    * stage 1 the corrector distributing the total residual. Both stages use
    * the FULL timestep; the half-step convention of the baseline pair is
-   * unreachable on this path. */
+   * unreachable on this path. Static split hooks execute only the requested
+   * sweep; equal ALE keeps both sweeps here after the single mesh rebuild. */
   int rd_stage;
 #ifdef RD_RK2_RATE_CONSISTENT_HEUN
   const int rd_number_of_passes = 4;
 #else
   const int rd_number_of_passes = 2;
+#endif
+#if defined(RD_RK2_SPLIT_STAGES) && !defined(RD_ALE_EQUALSTEP)
+  const int rd_first_pass = rd_requested_stage;
+  const int rd_pass_end   = rd_requested_stage + 1;
+  (void)rd_number_of_passes;
+#else
+  const int rd_first_pass = 0;
+  const int rd_pass_end   = rd_number_of_passes;
 #endif
 #ifdef RD_ALE_APOSTERIORI_FALLBACK
   int fallback_attempt = 0;
@@ -3787,7 +3955,7 @@ void compute_residuals(tessellation *T)
         }
       fallback_retry = 0;
 #endif
-  for(rd_stage = 0; rd_stage < rd_number_of_passes; rd_stage++)
+  for(rd_stage = rd_first_pass; rd_stage < rd_pass_end; rd_stage++)
     {
       if(rd_stage == 0)
         rd_rk2_save_stage0();
@@ -3841,7 +4009,7 @@ void compute_residuals(tessellation *T)
       rd_record_dt_extrapolation(0.0); /* no Taylor extrapolation on this path */
 #endif
 
-#if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+#if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_EQUALSTEP)
   FILE *rd_theta_map_fp = NULL;
   if(rd_stage == 1 && fabs(All.Time - All.TimeMax) <= 16.0 * DBL_EPSILON * dmax(1.0, fabs(All.TimeMax)))
     rd_theta_map_fp = rd_theta_map_open();
@@ -3898,12 +4066,15 @@ void compute_residuals(tessellation *T)
       /* Spatial/mass weights for k=2v-S^-1Mv and the Heun average. */
       const double rd_pass_weight[4] = {2.0, 1.0, 1.0, 0.5};
       triangle_dt *= rd_pass_weight[rd_stage];
-#elif !defined(RD_RK2_INTERNAL_LOOP)
+#elif !defined(RD_RK2_EQUALSTEP)
       triangle_dt *= 0.5; /* the baseline applies two half-weight Heun calls per step */
 #endif
 
       // compute residual: set up initial states
       double U_fluid[DIMS + 1][DIMS + 2];  // specific conserved fluid variables
+#ifdef RD_LDA_COMMON_BETA
+      double U_beta[3][4]; /* interval-opening state; never used for phi(U*) */
+#endif
       double C_sound[DIMS + 1];
       double Pressure[DIMS + 1];
 
@@ -4080,6 +4251,20 @@ void compute_residuals(tessellation *T)
                   terminate_program("primexch energy <= 0 error.");
                 }
             }
+#ifdef RD_LDA_COMMON_BETA
+          /* In the hierarchy these primitives are the interval-opening
+           * states, before the live-only predictor below. In equal stepping
+           * the primitives already contain U*, so undo its stored increment.
+           * The existing ghost exchange supplies that increment as well. */
+          for(k = 0; k < 4; k++)
+            {
+              U_beta[j][k] = U_fluid[j][k];
+#ifndef RD_HIERARCHICAL_TIMESTEPS
+              if(rd_stage == 1)
+                U_beta[j][k] -= dU_vertex[j][k];
+#endif
+            }
+#endif
 #ifdef RD_HIERARCHICAL_TIMESTEPS
           if(rd_stage == RD_RK_STAGE_CORRECTOR)
             {
@@ -4200,12 +4385,46 @@ void compute_residuals(tessellation *T)
           terminate_program("RD element Roe average is not a valid state");
         }
 
+#ifdef RD_LDA_COMMON_BETA
+      /* Keep K(U*) for the conservative spatial residual, but build K+/-
+       * from U^n. Thus beta^n acts on phi(U*) and on F1 without an extra
+       * residual sweep, factorisation, or stored per-triangle beta tensor. */
+      double rd_stage_average[4] = {velx_avg, vely_avg, h_avg, Cs_avg};
+      double rd_beta_average[4] = {velx_avg, vely_avg, h_avg, Cs_avg};
+      if(rd_stage == 1)
+        {
+          double weight_sum = 0.0, vx_sum = 0.0, vy_sum = 0.0, h_sum = 0.0;
+          for(j = 0; j < 3; j++)
+            {
+              double rho = U_beta[j][0];
+              double pressure = GAMMA_MINUS1 *
+                  (U_beta[j][3] - 0.5 * (U_beta[j][1] * U_beta[j][1] + U_beta[j][2] * U_beta[j][2]) / rho);
+              if(!(rho > 0.0) || !(pressure > 0.0) || !isfinite(rho) || !isfinite(pressure))
+                terminate_program("RD common-beta opening state is not physical");
+              double weight = sqrt(rho);
+              weight_sum += weight;
+              vx_sum += weight * U_beta[j][1] / rho;
+              vy_sum += weight * U_beta[j][2] / rho;
+              h_sum += weight * ((U_beta[j][3] + pressure) / rho);
+            }
+          rd_beta_average[0] = vx_sum / weight_sum;
+          rd_beta_average[1] = vy_sum / weight_sum;
+          rd_beta_average[2] = h_sum / weight_sum;
+          rd_beta_average[3] = sqrt(GAMMA_MINUS1 * (rd_beta_average[2] -
+              0.5 * (rd_beta_average[0] * rd_beta_average[0] + rd_beta_average[1] * rd_beta_average[1])));
+          if(!(rd_beta_average[3] > 0.0) || !isfinite(rd_beta_average[3]))
+            terminate_program("RD common-beta Roe average is not physical");
+        }
+#endif
+
       // compute residual: Reassign variables to local equivalents
+#ifndef RD_LDA_COMMON_BETA
       double velx_c  = velx_avg / Cs_avg;
       double vely_c  = vely_avg / Cs_avg;
       double h_c     = h_avg / Cs_avg;
       double alpha   = GAMMA_MINUS1 * (velx_avg * velx_avg + vely_avg * vely_avg) / 2.0;
       double alpha_c = alpha / Cs_avg;
+#endif
 
       // compute residual: Calculate K+,K- and K matrices for each vertex
       double vel_dot_n, velvertex_dot_n;
@@ -4237,6 +4456,22 @@ void compute_residuals(tessellation *T)
           // fill in Kmatrix[4][4][j][p]
           for(p = 0; p < 3; p++)
             {
+#ifdef RD_LDA_COMMON_BETA
+              /* Only the unsplit Jacobian follows the residual's stage.
+               * The split pair uses one common opening-state distribution. */
+              const double *average = (p == kfull) ? rd_stage_average : rd_beta_average;
+              double velx_avg = average[0], vely_avg = average[1], h_avg = average[2], Cs_avg = average[3];
+              double velx_c = velx_avg / Cs_avg, vely_c = vely_avg / Cs_avg, h_c = h_avg / Cs_avg;
+              double alpha_c = (GAMMA_MINUS1 * (velx_avg * velx_avg + vely_avg * vely_avg) / 2.0) / Cs_avg;
+              double vel_dot_n = velx_avg * N_X[j] + vely_avg * N_Y[j];
+              double lambda1 = vel_dot_n + Cs_avg - velvertex_dot_n;
+              double lambda2 = vel_dot_n - Cs_avg - velvertex_dot_n;
+              double lambda3 = vel_dot_n - velvertex_dot_n;
+              Value1 = p == kplus ? dmax(0.0, lambda1) : (p == kminus ? dmin(0.0, lambda1) : lambda1);
+              Value2 = p == kplus ? dmax(0.0, lambda2) : (p == kminus ? dmin(0.0, lambda2) : lambda2);
+              Value3 = p == kplus ? dmax(0.0, lambda3) : (p == kminus ? dmin(0.0, lambda3) : lambda3);
+              Value4 = Value3;
+#else
               if(p == 0)
                 {  // Identify and select positive eigenvalues
                   Value1 = Lambda_plus[j][0];
@@ -4259,6 +4494,7 @@ void compute_residuals(tessellation *T)
                   Value4 = Lambda[j][3];
                 }
 
+#endif /* RD_LDA_COMMON_BETA */
               Value12  = (Value1 - Value2) / 2.0;
               Value123 = (Value1 + Value2 - 2.0 * Value3) / 2.0;
 
@@ -4886,6 +5122,23 @@ void compute_residuals(tessellation *T)
         }
 
 #ifdef LDA_SCHEME
+#ifdef RD_LDA_COMMON_BETA
+      if(solve_rank < 4)
+        {
+          double projected[4], share[4];
+          rd_common_beta_unresolved(Sminus, X_lda, Phi, projected, share);
+          /* Independently check the raw range contribution before adding the
+           * defined complement; a broken K split must still fail A2. */
+          rd_check_conservation(Flux_RD, projected, LDA_roundoff_scale + phi_scale,
+                                thistask_triangles[i], "LDA-common-range");
+          for(k = 0; k < 4; k++)
+            {
+              for(j = 0; j < 3; j++)
+                Flux_RD[k][j] += share[k];
+              LDA_roundoff_scale += 3.0 * fabs(share[k]);
+            }
+        }
+#endif
 #ifdef RD_ALE_CONDITION_DIAGNOSTIC
       rd_diagnose_lda_condition(Sminus, kplus, Phi, X_lda, Flux_RD, Velvertex_avg, velx_avg, vely_avg, h_avg,
                                 Cs_avg, N_X, N_Y, Mag, LDA_roundoff_scale + phi_scale, thistask_triangles[i]);
@@ -5064,7 +5317,7 @@ void compute_residuals(tessellation *T)
       B_roundoff_scale = dmax(B_roundoff_scale, dmax(LDA_roundoff_scale, N_roundoff_scale));
       rd_check_conservation(Flux_RD, Phi, B_roundoff_scale + phi_scale, thistask_triangles[i], "B");
 
-#ifdef RD_RK2_INTERNAL_LOOP
+#ifdef RD_RK2_EQUALSTEP
       if(rd_stage == 0)
         {
           /* Preserve the undisguised N and LDA pieces. Once the predictor has
@@ -5126,7 +5379,7 @@ void compute_residuals(tessellation *T)
         }
 #endif
 
-#if defined(RD_RK2_INTERNAL_LOOP) && !defined(RD_RK2_RATE_CONSISTENT_HEUN)
+#if defined(RD_RK2_EQUALSTEP) && !defined(RD_RK2_RATE_CONSISTENT_HEUN)
       if(rd_stage == 1)
         {
           /* Corrector: replace the stage-1 spatial distribution by the total
@@ -5183,9 +5436,10 @@ void compute_residuals(tessellation *T)
                * four directions): beta_i is undefined there. The F1 temporal
                * target is an arbitrary vector, unprotected by Lemma 1, so
                * S^- z = T_target need not even be consistent, and no
-               * generalized inverse can restore sum_i beta_i = I on a singular
-               * S^-. The lumped mass is the unique conservative element-local
-               * choice, so fall back to it and count the event.
+               * bare generalized inverse restores sum_i beta_i = I on a
+               * singular S^-. Retain the conservative lumped temporal policy
+               * and count the event, including under common-beta spatial
+               * range completion. Other conservative extensions are possible.
                *
                * Rank, not "the SVD path was taken", is the criterion. Consistency
                * of S^- z = T_target is what is actually required and is stricter
@@ -5417,7 +5671,7 @@ void compute_residuals(tessellation *T)
 
           rd_check_conservation(Flux_RD, total_target, rk2_scale + 0.5 * phi_scale, thistask_triangles[i], "RK2-total");
         }
-#endif /* RD_RK2_INTERNAL_LOOP && !RD_RK2_RATE_CONSISTENT_HEUN */
+#endif /* RD_RK2_EQUALSTEP && !RD_RK2_RATE_CONSISTENT_HEUN */
 
 #if defined(RD_HIERARCHICAL_TIMESTEPS) && defined(LDA_SCHEME)
       if(rd_stage == RD_RK_STAGE_CORRECTOR)
@@ -5426,13 +5680,15 @@ void compute_residuals(tessellation *T)
            *
            * The opening call has already applied -h_T phi_i(U^n)/2 and
            * assembled the full vertex predictor dU.  To reproduce the
-           * concentrated mixed-beta LDA+F1 corrector when all bins are equal,
+           * concentrated LDA+F1 corrector when all bins are equal,
            * the closing ledger contribution is
            *
-           *   |T| dU_i/3 - h_T beta_i^* [ |T| sum_j dU_j/(3 h_T) ]
+           *   |T| dU_i/3 - h_T beta_i [ |T| sum_j dU_j/(3 h_T) ]
            *                    - h_T phi_i(U*)/2.
            *
-           * Since the common ledger multiplier below is -h_T/2, add
+           * beta is the predicted-state matrix by default, or the opening
+           * matrix with RD_LDA_COMMON_OPENING_BETA. Since the common ledger
+           * multiplier below is -h_T/2, add
            * 2 (T_i^F1 - |T| dU_i/(3 h_T)) to the spatial residual. Frozen
            * vertices have dU_i=0 by Construction A. Summing over i cancels
            * the two temporal terms element by element, so the correction does
@@ -5598,7 +5854,7 @@ void compute_residuals(tessellation *T)
 #endif  // TWO_DIMS
     }   // for loop of triangles, i= 0~ Ndt_thistask
 
-#if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+#if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_EQUALSTEP)
   if(rd_theta_map_fp != NULL)
     fclose(rd_theta_map_fp);
 #endif
@@ -5667,7 +5923,7 @@ void compute_residuals(tessellation *T)
     }
 #endif
 
-#ifdef RD_RK2_INTERNAL_LOOP
+#ifdef RD_RK2_EQUALSTEP
       myfree_movable(FluxRD_list);
     } /* stage loop */
 
@@ -5727,7 +5983,19 @@ void compute_residuals(tessellation *T)
   myfree(bad_vertex);
   myfree(fallback_element);
 #endif
-#endif /* RD_RK2_INTERNAL_LOOP */
+#endif /* RD_RK2_EQUALSTEP */
+
+#if defined(RD_RK2_SPLIT_STAGES) && !defined(RD_ALE_EQUALSTEP)
+  if(rd_requested_stage == RD_RK_STAGE_PREDICTOR)
+    All.RD_EqualStepEnd = All.Ti_Current + rd_equal_interval;
+  else
+    All.RD_EqualStepEnd = 0;
+#ifdef RD_DEBUG_ASSERTS
+  mpi_printf("RD-EQUAL time=%.8g stage=%s pending_endpoint=%lld\n", All.Time,
+             rd_requested_stage == RD_RK_STAGE_PREDICTOR ? "predictor" : "corrector",
+             (long long)All.RD_EqualStepEnd);
+#endif
+#endif
 
 #ifdef RD_ALE_EQUALSTEP
   rd_ale_finish_step(&set);
@@ -5847,10 +6115,10 @@ void compute_residuals(tessellation *T)
   }
 #endif /* #ifdef RD_DEBUG_ASSERTS */
 
-#ifndef RD_RK2_INTERNAL_LOOP
+#ifndef RD_RK2_EQUALSTEP
   myfree_movable(FluxRD_list);
 #endif
-#if defined(B_SCHEME) && defined(RD_RK2_INTERNAL_LOOP)
+#if defined(B_SCHEME) && defined(RD_RK2_EQUALSTEP)
   myfree(rd_b_phi_stage0);
   myfree(rd_b_flux_lda_stage0);
   myfree(rd_b_flux_n_stage0);

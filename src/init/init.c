@@ -64,6 +64,10 @@ int init(void)
 
   assert(RestartFlag != 1);
 
+#ifdef RD_RK2_SPLIT_STAGES
+  All.RD_EqualStepEnd = 0;
+#endif
+
   if(All.ComovingIntegrationOn)
     if(All.PeriodicBoundariesOn == 1)
       {

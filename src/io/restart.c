@@ -1331,6 +1331,9 @@ void readjust_timebase(double TimeMax_old, double TimeMax_new)
       ti_end /= 2;
       All.Ti_Current /= 2;
       All.Previous_Ti_Current /= 2;
+#ifdef RD_RK2_SPLIT_STAGES
+      All.RD_EqualStepEnd /= 2;
+#endif
 
 #ifdef PMGRID
       All.PM_Ti_begstep /= 2;

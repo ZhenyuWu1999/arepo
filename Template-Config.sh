@@ -62,7 +62,10 @@
 #RD_OUTPUT_DIAGNOSTICS         # Write verbose RD triangulation diagnostics
 #RD_DEBUG_ASSERTS              # RD invariant assertions (sum_i K_i = 0, conservation) and solver statistics
 #RD_ALWAYS_PSEUDOINVERSE       # RD: always use the minimum-norm solve (reference path, no pivot branch)
-#RD_RK2_TOTAL_RESIDUAL         # RD: two-stage GL+F1 total-residual RK2 (thesis ch.3 / Arpaia-Ricchiuto); whole step at the second call site
+#RD_RK2_TOTAL_RESIDUAL         # RD: two-stage GL+F1 total-residual RK2 (thesis ch.3 / Arpaia-Ricchiuto)
+#RD_LDA_COMMON_OPENING_BETA   # comparison only: common interval-opening beta for static LDA/F1; default uses stage beta
+#RD_LDA_MIXED_STAGE_BETA      # legacy explicit selection of the mixed-stage default; incompatible with COMMON_OPENING_BETA
+#RD_RK2_SPLIT_STAGES           # Equal N/LDA begin/end hooks: static splits sweeps; ALE defers both to one rebuilt mesh
 #RD_RK2_RATE_CONSISTENT_HEUN    # experiment: equal-bin LDA+F1 semi-discrete operator advanced by Heun (four element sweeps)
 #RD_ALE_GEOMETRY_DIAGNOSTICS    # Stage-0 moving-mesh geometry audit; diagnostic only, currently 2-D/equal-step/one-rank
 #RD_ALE_SPLIT_MESH_VELOCITY       # Experimental: assemble the mesh-velocity residual on U rather than the Roe linearisation
@@ -73,7 +76,7 @@
 #RD_ALE_CFL_TIMESTEP             # Experimental: include the current-mesh ALE-RD spectral bound in timestep selection
 #RD_ELEMENT_COMOVING_FRAME       # Experimental LDA/N solve and distribution in element co-moving conservative variables
 #RD_ALE_CONTOUR_RESIDUAL          # Experimental P1 conservative-state contour residual; laboratory or element frame
-#RD_ALE_CONTOUR_GAUSS=3          # P1-U edge Gauss3/5: static full-mesh LDA/F1 or equal-step ALE LDA; no positivity limiter
+#RD_ALE_CONTOUR_GAUSS=3          # P1-U edge Gauss3/5 for LDA; experimental equal-step ALE N supports Gauss3; no positivity limiter
 
 #--------------------------------------- Mesh motion and regularization; default: moving mesh
 #VORONOI_STATIC_MESH           # static mesh

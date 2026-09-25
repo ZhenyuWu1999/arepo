@@ -1055,6 +1055,12 @@ extern struct global_data_all_processes
   double Timebase_interval; /*!< factor to convert from floating point time interval to integer timeline */
   integertime Ti_Current;   /*!< current time on integer timeline */
   integertime Previous_Ti_Current;
+#ifdef RD_RK2_SPLIT_STAGES
+  /* Zero at a completed step; otherwise the endpoint to close at rd_step_end.
+   * Static split has a saved predictor; ALE defers both sweeps to the new mesh.
+   * Stored with All in binary restarts, including between the hydro hooks. */
+  integertime RD_EqualStepEnd;
+#endif
   integertime Ti_nextoutput; /*!< next output time on integer timeline */
   integertime Ti_lastoutput;
 
@@ -1352,7 +1358,8 @@ extern struct sph_particle_data
   /* Per-step transients for the two-stage total-residual update. Both are
    * intensive nodal states U = Q/DualArea = {rho, rho vx, rho vy, rho e},
    * NOT the integrated conserved quantities Q (Codex audit 11.2). Excluded
-   * from snapshot/restart IO. */
+   * from snapshot IO; binary restarts and domain migration carry the complete
+   * SphP record, including these fields. */
   double RD_Ustage0[4]; /* nodal U at t^n, saved before the predictor sweep */
   double RD_dU[4];      /* U* - U^n after the predictor stage */
 #ifdef RD_HIERARCHICAL_TIMESTEPS
