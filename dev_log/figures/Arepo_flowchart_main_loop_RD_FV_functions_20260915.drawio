@@ -1,0 +1,213 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="Electron" agent="AREPO-RD native diagram builder" compressed="false">
+  <diagram id="arepo-main-loop-rd-fv" name="AREPO main loop - RD or FV">
+    <mxGraphModel dx="1381" dy="748" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1280" background="#FFFFFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" value="Frame and notes" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontStyle=1;fontSize=28;" value="AREPO main loop - RD or FV" vertex="1">
+          <mxGeometry height="34" width="1100" x="38" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=14;" value="Main-loop structure with RD or FV hydrodynamics; function names and numbered blocks" vertex="1">
+          <mxGeometry height="20" width="1300" x="38" y="59" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dot-0" parent="1" style="ellipse;fillColor=#4397FF;strokeColor=none;" value="" vertex="1">
+          <mxGeometry height="10" width="10" x="38" y="94" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-text-0" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=12;" value="Timesteps" vertex="1">
+          <mxGeometry height="18" width="215" x="57" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dot-1" parent="1" style="ellipse;fillColor=#3FB8B9;strokeColor=none;" value="" vertex="1">
+          <mxGeometry height="10" width="10" x="230" y="94" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-text-1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=12;" value="Domain / mesh" vertex="1">
+          <mxGeometry height="18" width="215" x="249" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dot-2" parent="1" style="ellipse;fillColor=#FC9432;strokeColor=none;" value="" vertex="1">
+          <mxGeometry height="10" width="10" x="470" y="94" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-text-2" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=12;" value="Fluid state" vertex="1">
+          <mxGeometry height="18" width="215" x="489" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dot-3" parent="1" style="ellipse;fillColor=#FF8F8F;strokeColor=none;" value="" vertex="1">
+          <mxGeometry height="10" width="10" x="680" y="94" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-text-3" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=12;" value="Hydrodynamics" vertex="1">
+          <mxGeometry height="18" width="215" x="699" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dot-4" parent="1" style="ellipse;fillColor=#E08FFF;strokeColor=none;" value="" vertex="1">
+          <mxGeometry height="10" width="10" x="940" y="94" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-text-4" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=12;" value="Gravity / sources (optional)" vertex="1">
+          <mxGeometry height="18" width="350" x="959" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="frame" parent="1" style="rounded=0;fillColor=none;strokeColor=#505862;strokeWidth=0.7;connectable=0;" value="" vertex="1">
+          <mxGeometry height="1120" width="1348" x="26" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="loop-ribbon" parent="1" style="rounded=0;fillColor=#69ACF6;strokeColor=#505862;strokeWidth=0.7;" value="" vertex="1">
+          <mxGeometry height="1120" width="24" x="26" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="loop-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;align=center;rotation=270;fontColor=#FFFFFF;fontStyle=1;fontSize=13;" value="run(): while (1)" vertex="1">
+          <mxGeometry height="24" width="300" x="-112" y="673" as="geometry" />
+        </mxCell>
+        <mxCell id="scope" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=12;" value="RD and FV are alternative hydrodynamic solvers at the two main-loop entry points." vertex="1">
+          <mxGeometry height="20" width="1250" x="80" y="1165" as="geometry" />
+        </mxCell>
+        <mxCell id="scope-conditional" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=12;" value="Mesh updates, gravity and source terms depend on the simulation configuration." vertex="1">
+          <mxGeometry height="20" width="1250" x="80" y="1189" as="geometry" />
+        </mxCell>
+        <mxCell id="function-scope" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Arial;fontColor=#303B47;spacing=0;fontSize=11;" value="Selected main-loop calls are shown; initialization and restart setup are omitted." vertex="1">
+          <mxGeometry height="20" width="1250" x="80" y="1213" as="geometry" />
+        </mxCell>
+        <mxCell id="connections" parent="0" value="Flow connectors" />
+        <mxCell id="flow-01" edge="1" parent="connections" source="outputs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="node-timebins" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-02" edge="1" parent="connections" source="node-timebins" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="sources-first" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-03" edge="1" parent="connections" source="sources-first" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="gradients-first" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-04" edge="1" parent="connections" source="gradients-first" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="vertex-velocity" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-05" edge="1" parent="connections" source="vertex-velocity" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="exchange-predictor" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="862.5" />
+              <mxPoint x="480" y="275" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="flow-06" edge="1" parent="connections" source="exchange-predictor" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="rd-predictor" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-07" edge="1" parent="connections" source="rd-predictor" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="next-sync" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-08" edge="1" parent="connections" source="next-sync" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="active-nodes" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-09" edge="1" parent="connections" source="active-nodes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="domain-mesh" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-10" edge="1" parent="connections" source="domain-mesh" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="exchange-corrector" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="910" y="1050" />
+              <mxPoint x="910" y="275" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="flow-11" edge="1" parent="connections" source="exchange-corrector" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="rd-corrector" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-12" edge="1" parent="connections" source="rd-corrector" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="recover-primitives" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-13" edge="1" parent="connections" source="recover-primitives" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="sources-second" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow-14" edge="1" parent="connections" source="sources-second" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="outputs" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1340" y="867.5" />
+              <mxPoint x="1340" y="197.5" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="entry-from-setup" edge="1" parent="connections" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#505862;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=1.2;endSize=9;" target="outputs" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="265" y="125" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="process" parent="0" value="Process blocks" />
+        <mxCell id="outputs" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#707782;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Write outputs;&lt;br&gt;stop at final time&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;create_&lt;wbr&gt;snapshot_&lt;wbr&gt;if_&lt;wbr&gt;desired()&lt;br&gt;produce_&lt;wbr&gt;dump(); create_&lt;wbr&gt;end_&lt;wbr&gt;file()  [at final time]&lt;/div&gt;" vertex="1">
+          <mxGeometry height="105" width="370" x="80" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="node-timebins" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#4097FF;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Select hydro timesteps&lt;br&gt;from the CFL condition;&lt;br&gt;assign node timebins&lt;br&gt;(equal or hierarchical)&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;find_&lt;wbr&gt;timesteps_&lt;wbr&gt;without_&lt;wbr&gt;gravity()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="155" width="370" x="80" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="sources-first" parent="process" style="rounded=0;arcSize=8;whiteSpace=wrap;html=1;fillColor=#E08FFF;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Gravity / source terms:&lt;br&gt;first half-step&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;find_&lt;wbr&gt;gravity_&lt;wbr&gt;timesteps_&lt;wbr&gt;and_&lt;wbr&gt;do_&lt;wbr&gt;gravity_&lt;wbr&gt;step_&lt;wbr&gt;first_&lt;wbr&gt;half()&lt;br&gt;do_&lt;wbr&gt;second_&lt;wbr&gt;order_&lt;wbr&gt;source_&lt;wbr&gt;terms_&lt;wbr&gt;first_&lt;wbr&gt;half()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="165" width="370" x="80" y="465" as="geometry" />
+        </mxCell>
+        <mxCell id="gradients-first" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FF9429;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Exchange primitives;&lt;br&gt;calculate gradients&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;exchange_&lt;wbr&gt;primitive_&lt;wbr&gt;variables()&lt;br&gt;calculate_&lt;wbr&gt;gradients()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="115" width="370" x="80" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="vertex-velocity" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#3FB8B9;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Set vertex velocities;&lt;br&gt;update neighbour tree&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;set_&lt;wbr&gt;vertex_&lt;wbr&gt;velocities()&lt;br&gt;ngb_&lt;wbr&gt;update_&lt;wbr&gt;velocities()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="115" width="370" x="80" y="805" as="geometry" />
+        </mxCell>
+        <mxCell id="exchange-predictor" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FF9429;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Exchange primitives,&lt;br&gt;vertex velocities&lt;br&gt;and gradients&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;exchange_&lt;wbr&gt;primitive_&lt;wbr&gt;variables_&lt;wbr&gt;and_&lt;wbr&gt;gradients()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="120" width="370" x="510" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="rd-predictor" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FF8F8F;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;&lt;b&gt;First hydrodynamic stage&lt;/b&gt;&lt;br&gt;(RD or FV)&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;RD: rd_&lt;wbr&gt;step_&lt;wbr&gt;begin(&amp;amp;Mesh)&lt;br&gt;FV: compute_&lt;wbr&gt;interface_&lt;wbr&gt;fluxes(&amp;amp;Mesh)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="190" width="370" x="510" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="next-sync" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#4097FF;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Advance to the next&lt;br&gt;synchronization time;&lt;br&gt;mark active timebins&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;find_&lt;wbr&gt;next_&lt;wbr&gt;sync_&lt;wbr&gt;point()&lt;br&gt;  includes mark_&lt;wbr&gt;active_&lt;wbr&gt;timebins()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="165" width="370" x="510" y="585" as="geometry" />
+        </mxCell>
+        <mxCell id="active-nodes" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#4097FF;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Build active-node lists;&lt;br&gt;drift synchronized nodes&lt;br&gt;to the current time&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;make_&lt;wbr&gt;list_&lt;wbr&gt;of_&lt;wbr&gt;active_&lt;wbr&gt;particles()&lt;br&gt;&amp;nbsp;&amp;nbsp;calls drift_&lt;wbr&gt;particle(i, All.Ti_&lt;wbr&gt;Current)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="155" width="370" x="510" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="domain-mesh" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#3FB8B9;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Domain / tree update (when due);&lt;br&gt;mesh construction (when required)&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;[when domain update is due]&lt;br&gt;drift_&lt;wbr&gt;all_&lt;wbr&gt;particles()&lt;br&gt;domain_&lt;wbr&gt;Decomposition(); ngb_&lt;wbr&gt;treebuild(NumGas)&lt;br&gt;[when mesh construction is required]&lt;br&gt;create_&lt;wbr&gt;mesh(); mesh_&lt;wbr&gt;setup_&lt;wbr&gt;exchange()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="170" width="370" x="510" y="965" as="geometry" />
+        </mxCell>
+        <mxCell id="exchange-corrector" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FF9429;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Exchange primitives&lt;br&gt;and gradients&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;exchange_&lt;wbr&gt;primitive_&lt;wbr&gt;variables_&lt;wbr&gt;and_&lt;wbr&gt;gradients()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="120" width="370" x="940" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="rd-corrector" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FF8F8F;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;&lt;b&gt;Second hydrodynamic stage&lt;/b&gt;&lt;br&gt;(RD or FV)&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;RD: rd_&lt;wbr&gt;step_&lt;wbr&gt;end(&amp;amp;Mesh)&lt;br&gt;FV: compute_&lt;wbr&gt;interface_&lt;wbr&gt;fluxes(&amp;amp;Mesh)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="190" width="370" x="940" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="recover-primitives" parent="process" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FF9429;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Recover primitives for&lt;br&gt;synchronized nodes;&lt;br&gt;close the hydro step&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;update_&lt;wbr&gt;primitive_&lt;wbr&gt;variables()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="145" width="370" x="940" y="605" as="geometry" />
+        </mxCell>
+        <mxCell id="sources-second" parent="process" style="rounded=0;arcSize=8;whiteSpace=wrap;html=1;fillColor=#E08FFF;strokeColor=none;fontColor=#FFFFFF;fontFamily=Arial;align=center;verticalAlign=middle;overflow=visible;shadow=0;fontSize=14;spacing=10;" value="&lt;div style=&quot;font-size:14px;line-height:125%;&quot;&gt;Gravity / source terms:&lt;br&gt;second half-step&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;height:9px;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;font-family:Courier New;font-size:12px;line-height:135%;&quot;&gt;do_&lt;wbr&gt;second_&lt;wbr&gt;order_&lt;wbr&gt;source_&lt;wbr&gt;terms_&lt;wbr&gt;second_&lt;wbr&gt;half()&lt;br&gt;do_&lt;wbr&gt;gravity_&lt;wbr&gt;step_&lt;wbr&gt;second_&lt;wbr&gt;half()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="155" width="370" x="940" y="790" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-01" value="1" vertex="1" parent="outputs" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-02" value="2" vertex="1" parent="node-timebins" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-03" value="3" vertex="1" parent="sources-first" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-04" value="4" vertex="1" parent="gradients-first" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-05" value="5" vertex="1" parent="vertex-velocity" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-06" value="6" vertex="1" parent="exchange-predictor" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-07" value="7" vertex="1" parent="rd-predictor" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-08" value="8" vertex="1" parent="next-sync" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-09" value="9" vertex="1" parent="active-nodes" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-10" value="10" vertex="1" parent="domain-mesh" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-11" value="11" vertex="1" parent="exchange-corrector" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-12" value="12" vertex="1" parent="rd-corrector" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-13" value="13" vertex="1" parent="recover-primitives" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="step-number-14" value="14" vertex="1" parent="sources-second" style="ellipse;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#364152;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;resizable=0;">
+          <mxGeometry x="7" y="7" width="22" height="22" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

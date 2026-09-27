@@ -103,3 +103,47 @@ Function-version SHA256:
 `cf149b7e0a4713b41482609eb14c745e9aa3db86994462204d31406a071919c4`.
 Builder: `build_arepo_main_loop_functions_drawio.py`; it leaves the concise
 source unchanged. Both Desktop PDFs and the concise draw.io file remain intact.
+
+## Latest generic RD / FV version, 2026-09-14 (log3 §53)
+
+Use `Arepo_flowchart_main_loop_RD_FV_functions_20260914.drawio` and its matching
+white-background PNG for the current generic main-loop discussion. This copies
+the numbered §50 reviewed figure and removes static/ALE dispatch labels. Blocks
+7/12 show the RD begin/end hooks and alternative FV flux call; the internal
+numerical stages are not expanded. All14 numbered boxes,15 edges and manual
+gravity edits are preserved. Matching files are in the user's thesis resource
+directory; earlier sources and previews remain untouched.
+
+Builder: `build_arepo_main_loop_rd_fv_drawio.py`. It checks the reviewed input
+hash and rejects existing output paths. Do not regenerate over later manual
+edits. Figure delivery/protection record is under workspace
+`local_runs/flowchart_rd_fv_20260914_v1/delivery.json`.
+
+The 2026-09-15 wording copy, `Arepo_flowchart_main_loop_RD_FV_functions_20260915.drawio`
+and matching PNG, changes only the two hydro headings to First/Second
+hydrodynamic stage. Use this latest copy for continued editing. The function
+names remain rd_step_begin/end; the 2026-09-14 version is preserved. See log3 §54.
+
+## Enlarged landscape thesis copy, 2026-09-15 (log3 §58)
+
+The latest thesis layout is
+`Arepo_flowchart_main_loop_RD_FV_functions_landscape_20260915.drawio`, with a
+matching native vector PDF. Both files also reside in the thesis resource
+directory; the PDF is included on a landscape page in Chapter4.1.
+Use this new draw.io copy for further layout edits. All earlier files,
+including the user-finalised `Arepo_flowchart_main_loop_RD_FV_functions.pdf`,
+are preserved.
+
+The source of this revision is the editable XML embedded in that final PDF,
+including the user's deleted labels. The reflow keeps all14 numbered boxes,
+15 connections and function names, aligns the three columns, reduces gaps,
+increases label sizes and routes the return arrow above the boxes. Most box
+labels use dark ink on the existing colours for contrast. The background is
+white. Figure4.1 remains on printed page140; actual function labels grow from
+about3.38pt to6.80pt in the compiled thesis.
+
+`build_arepo_main_loop_landscape_drawio.py` accepts an input draw.io XML and a
+new output path, checks label/edge identity and refuses an existing output.
+The authoritative extracted source, before/after thesis text, native export,
+compile and visual QA records are archived in workspace
+`local_runs/thesis_flowchart_landscape_20260915_v1/`.

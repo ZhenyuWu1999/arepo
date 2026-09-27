@@ -6065,3 +6065,266 @@ syntax通过。未重启任何hydro模拟。COSMA运行以及适配Slurm日志�
 
 当前未提交的图稿/绘图资产和Chapter3.7 scratch与运行迁移无关，保留原状不合入。
 代码与交接文档分开提交；首次GitHub fetch超时，push状态以最终Git核验为准。
+
+## 114. 2026-09-25：Chapter3奇异矩阵说明按用户思路简化
+
+**作者：Codex；用户要求解释N/LDA求解Sminus*x=b，伪逆特解与零空间分量消去，随后
+强调无需展开过多术语。** 仅替换本地chapter3既有singular-matrix段落，顺序为逆的
+作用/线性系统→停滞时仍有解→伪逆给x0→x=x0+z、Sminus*z=0→Kplus*z=0→节点
+residual不受不唯一性影响。未引入range/minimum-norm等新讨论，保留Roe停滞情形
+这一必要适用范围。旧diagonal-perturbation说明保留；所有原scheme公式和label未改。
+
+Chapter3局部XeLaTeX编译34页，无未定义引用/文献、无overfull，编辑页13–14已视觉
+核对。仅安装chapter3.tex，其余tracked文件与原master.pdf均保持hash；Chapter4、
+solver、COSMA任务未动。无commit/push/Overleaf同步。Archive：
+`../local_runs/chapter3_singular_clarification_20260925_v1/`，含原文/hash、patch、编译/
+局部PDF、渲染页及安装核验。外部章节引用复用已有labels；不是全书重新编译。
+
+**§114文字顺序修订：** 用户要求保留原来语言风格，先讲fluid velocity=0及K矩阵很多
+zero entries，接旧diagonal perturbation，再介绍当前pseudoinverse及零空间消去。
+按该顺序仅重排/调整这段，保留Roe零速度情形限定。Chapter3局部重编译34页，
+无未定义引用/overfull，页13–14视觉检查通过；只安装chapter3.tex，无同步/提交。
+更新archive：`../local_runs/chapter3_singular_clarification_20260925_v2/`。
+
+## 115. 2026-09-26：只读复核 thesis 4.2 数学及 Scope 精简建议
+
+**作者：Codex；用户请求：再检查 moving mesh RD theory 是否有大问题，并判断删除4.2.3。**
+以thesis main当前0f560a0的chapter4.tex为准，读取Chapter3及4.3相关定义，对照Arpaia2015
+§4.4.2/4.5/6.1和Appendix。ALE变换、P1 mean-mesh contour、Roe mesh correction、二维
+midpoint DGCL、O(dt³)时间乘积及两阶段modified-area推导未发现需要重构的代数错误。
+200组独立三角形检查最大defect3.49e-16；不是native hydro验证或普遍二阶/正性证明。
+
+必须补条件：4.2当前无条件sum LDA residual=target，秩亏伪逆实际上只给Sminus的range
+投影；Chapter3对Roe RHS的说明不能直接外推到Gauss contour。独立正状态三角形反例
+rho=p=1、速度(1,0)/(0,1)/(-1,-1)、gamma1.4，Roe速度0、H25/6、rank3，G3 exact
+contour=(-1,0,.1,-257/60)，左零向量与target乘积−7/60，明确不相容。4.3已解释空间
+assertion及F1 temporal lumping，建议4.2补相容条件并交叉引用，不必再展开伪逆。
+不将此反例当作此前Yee A2失败的机制归因。
+
+另需修正4.2引言：Arpaia2015§6明确包含完整理想气体Euler，不是只有scalar/simplified
+Euler；geometric source应说吸收到modified dual-area coefficient。Scope无新推导且
+其label没有其它.tex引用，可以删去独立4.2.3，将必要固定连接/守恒边界衔接留在4.2.2
+末尾，lab/equalstep/MPI范围并入4.3。4.3的endpoint/topology conservation说明仍须保留。
+
+报告：[4.2数学复核](RD_THESIS_42_MATH_REVIEW_20260926.md)；档案
+`../local_runs/chapter4_2_math_review_20260926_v1/`。未改/编译thesis，源码hash保持；
+未运行hydro、未改solver、未commit/push。结论是可以开始4.3，4.2定稿前补上述条件和事实。
+
+## 116. 2026-09-26：Roe/Gauss伪逆比较、Arpaia第6节细查及一处授权措辞修改
+
+**作者：Codex；用户要求比较奇异时两种residual，明确Arpaia的标量推导/Euler推广区别，
+并授权只把geometric source句中的median dual cell改为modified dual-area coefficient。**
+
+同矩阵下LDA节点和为P*Phi，P=Sminus*Sminus_dagger。纯特征Roe RHS在所述停滞情形
+相容，而独立Gauss RHS不必相容；投影Gauss不等于改回Roe。前轮单元的Roe target
+(-1,0,1/14,-25/6)经伪逆sum误差8.88e-16，G3 target(-1,0,.1,-257/60)的sum误差.0264750。
+重要补充：实际moving Roe含C=-int sigma grad(U-Uhat)，C不能自动继承相容性。给前例
+加共同boost/mesh speed(0,1)，C=(0,0,0,-1/14)；把完整Roe target送入LDA产生.0169579
+defect，N在伪逆特征分配后直接加C/3则闭合至1.05e-15。故不能说所有moving Roe均相容。
+全为独立单元代数，不是native试验或Yee失败归因；生产代码仅阅读。
+
+用户关于“主要推导使用标量方程”的澄清准确。Arpaia§6.1只是简述矩阵/特征分解推广，
+并把细节引向旧文献；但§6.2确实解完整Euler，包括二维Riemann与Mach3移动壁面。
+其§3.3.1允许contour或exact mean-Jacobian，不可无依据断言“他们只Roe、我们才Gauss”。
+§6未展开我们的U/Z/Uhat mesh correction、G3规则或伪逆相容性/F1 fallback，且网格为
+固定连接的给定连续变形，不覆盖AREPO重连。区别是推导详细程度和具体构造，不是PDE
+是否完整。§115前轮解释在此细化。
+
+只安装chapter4.tex第454行的一处短语替换；其余128个tracked/snapshotted文件和PDF
+hash均未变。未编译（一处普通文字替换、公式/label/TeX命令不变），未commit/push/sync。
+报告：[伪逆与Arpaia第6节详查](RD_THESIS_42_ARPAIA_SINGULAR_FOLLOWUP_20260926.md)。
+档案：`../local_runs/chapter4_2_followup_20260926_v1/`，含patch、hash及独立数值对照。
+
+## 117. 2026-09-26：零速度时Roe/Gauss显式推导及Arpaia积分含义澄清
+
+**作者：Codex；用户要求详细展开v=0时两种residual及伪逆效果，并追问Arpaia是否
+直接精确积分Euler Jacobian而不作线性化。** 本轮仅讨论与独立代数核对，未改thesis。
+
+确认两种residual的差异先于矩阵求逆：当前Gauss对应P1-U非线性边界通量，守恒Roe
+对应P1-Z的精确通量积分；二者重构不同。静止网格、Roe平均v=0时，显式Sminus秩3，
+右零向量e_rho、左零向量(-H,0,0,1)，相容条件Phi_E=H*Phi_rho。报告给出K、Sminus、
+伪逆解和每节点分配公式。标准数值坐标中，伪逆将不相容Gauss的质量/能量分量一起
+投影，动量不变；并非变回Roe。变量缩放会改变不相容RHS的最小二乘投影。
+
+关键限定：若每个节点v_i=0且网格静止，则Roe/Gauss的质量及能量residual均为零，
+二者都相容，伪逆不丢失总residual。压力residual仍可因P1-U/P1-Z而不同：直角单位
+三角形rho=(1,4,9)、p=1、gamma1.4，Gauss=0而Roe=(0,-7/36,-1/18,0)。此前反例
+只有Roe平均速度为零，不能描述为所有节点速度均为零。moving时须改为相对速度
+及单独处理混合重构修正C；不将静止结论无条件外推。
+
+Arpaia2015§3.3.1给出contour与exact mean-Jacobian两种路径；§6.1未指定Euler的
+体积分/边界求积规则，故不能说他实际计算精确Euler平均Jacobian且不作线性化。
+进一步查其[14] Ricchiuto–Abgrall2010作者公开稿§5.1式(52)，明确上风矩阵取节点
+守恒量算术平均状态的Jacobian，这不是P1-U的真实单元平均Jacobian；不能反向推定
+2015具体实现。应区分非线性总residual计算和局部特征矩阵构造。
+
+报告：[零速度显式推导](RD_THESIS_42_ZERO_VELOCITY_DERIVATION_20260926.md)。档案
+`../local_runs/chapter4_2_zero_velocity_20260926_v1/`。三组独立单元检查通过，包含
+Sminus/projector/每节点分配/N闭合以及Roe与P1-Z contour一致性；后者最大误差
+8.89e-16。初次脚本最终wrapper遇Python list/abs类型错误，修正后通过，未改公式。
+无hydro运行、无solver/thesis编辑、无编译/commit/sync；chapter4 hash仍为b3d3e720…f64b。
+
+## 118. 2026-09-26：Chapter 4收尾结构讨论，implementation精简及三组测试
+
+**作者：Codex；用户倾向维持4.2现有表述，将contour residual进一步测试放future work，
+下一步简述implementation，展示Yee+boost收敛、Gresho+boost、Sod后结束本章。**
+尊重本轮写作范围，不继续改写4.2，也不删除4.2.3或编辑4.3；此前数学/文献核对保留
+为记录，用户的组织选择不自动消除已识别的适用条件。
+
+阅读现有4.3和log3§103–113后，建议保留4.3 implementation and results标题，将现有
+五个实现小节压成一个约1–2页overview，再依次设Yee、Gresho、Sod三个结果小节，
+最后短summary/outlook。正文只留状态/面积关系、一次重建后的midpoint与两阶段更新、
+实际scheme/residual/frame及运行范围；函数名、编译宏、临时存储和长诊断推导移出正文。
+测试设置可共用一表，保留影响结果解释的奇异处理、拓扑/端点守恒限制简述。
+
+三测试分工：Yee检验光滑精度与boost敏感性，用所有有效分辨率点整体log-log拟合；
+Gresho展示涡旋保持及boost前后去平移的vphi剖面；Sod展示激波/接触与振荡，报告节点
+散布，不能用平滑均值掩盖undershoot。若测试采用Gauss，应在implementation中明示，
+系统Roe/Gauss比较及奇异时稳健性留future work。无需增加新的测试家族。
+
+本地记录已有完整boost1 Yee四点拟合和当前Gresho/Sod对照；匹配boost1/10后续系列在
+§113被用户停止并交接COSMA，不能把中断输出当收敛终点，也未在本轮读取远端进展。
+最终曲线须使用同配置、同结束时间的完整结果，不混用lab/comoving及历史repair版本。
+无新模拟、无thesis/solver编辑、无commit/sync。本条是结构建议与用户偏好记录。
+
+## 119. 2026-09-26：4.3三小节结构确定，Implementation overview草稿取舍
+
+**作者：Codex；用户指定4.3.1 Implementation overview、4.3.2 Numerical tests、
+4.3.3 Ongoing work，后者简述hierarchical timesteps中的edge flip问题；本轮要求
+查看已有草稿并建议哪些内容保留。** 阅读chapter4.tex现有4.3全部正式草稿，以及
+4.1存储说明、4.2 midpoint/distribution和草稿末尾hierarchical flip讨论；未编辑thesis。
+
+建议核心保留现有State storage与One mesh rebuild两部分，压缩数据字段/函数/宏/临时
+ledger细节。沿用既有median dual area与modified dual-area coefficient符号，说明端点
+Q=|S|U与RK更新权重的区别，不再为实现单独增加m_i/D_i符号体系。保留新Delaunay
+connectivity下回算old/midpoint坐标，以及一次重建后用同一midpoint几何作两阶段更新。
+可引用4.1流程图，最多保留存储关系及坐标回算两组公式。
+
+LDA solves与F1部分压成方法选择和必要求解说明；概述须覆盖后面测试实际使用的
+N/Roe+lumped与LDA/Gauss3+F1，不能把所有测试统称LDA/F1。Gauss correction的实现
+拆分、重复的LDA/F1公式及因子分解细节可移出正文；保留简短伪逆、F1 temporal
+lumping及空间分配检查说明。运行范围和实际timestep选择简述，具体参数归4.3.2。
+
+Connectivity/endpoint长推导不放overview，但其当前守恒限制不能被完全删掉或说成
+仅hierarchy存在：概述末尾留一句，必要解释归4.3.3。后者重点讲coarse interval内
+edge flip可令旧三角形在RK闭合前消失，新三角形缺少对应阶段历史，已有静态hierarchy
+规则不能直接照搬；共同端点的flip与coarse interval内部的flip要区分。既有示意图
+可选保留，完整pending-history/repair算法列表无需进入精简正文。
+
+建议4.3.1写成约五段连续文字（约1–1.5页）：承接静态实现与范围→面积/状态→网格
+与两阶段流程→实际residual/distribution选择及求解→检查和局限衔接。不增新测试或
+数学证明，不修改4.2、不安装结构调整、不编译、不commit/sync。
+
+## 120. 2026-09-26：按授权删除4.2末尾红字alternative formulations
+
+**作者：Codex；用户明确要求先删除4.2.2红字部分。** 定位到现有4.2末尾唯一的
+红字Alternative formulations (to delete)块，删除原chapter4.tex第920–1453行（含
+配对begingroup/endgroup，534行、29个label）。保留4.2黑字推导及Scope subsection；
+4.3正文与红字Alternative implementations保留，仅把其中一处指向已删除co-moving
+理论段的hyperref及“retained among the alternative formulations”改为独立描述，
+避免失效链接与失实位置指引。未执行前轮讨论中的4.3结构重写。
+
+删除前全文、被删块、patch与核验归档于
+`../local_runs/chapter4_2_remove_red_20260926_v1/`。TeX环境配对及删除label的跨文件
+引用检查通过；本轮diff whitespace检查通过。相对HEAD的既有第454行尾空格仍保留。
+128个其它tracked/snapshotted文件（含master.pdf）hash未变。未编译、commit或同步。
+
+## 121. 2026-09-26：整合4.3.1并保留红字详细草稿，生成PDF预览
+
+**作者：Codex；用户授权整合4.3.1 Implementation overview，将移出部分放入4.3红字
+区，并先查看PDF。** 以用户已提交的thesis e4fcd84为起点，新增约450词、五段正文，
+保留两组公式：Q=median area*U及新连接关系下old/midpoint坐标回算。正文简述共同
+时间步/二维单rank范围、一次mesh rebuild后的两阶段更新、N/Roe+lumped与LDA/Gauss3
++F1、伪逆/F1 lumping和几何/守恒限制。沿用modified dual-area coefficient措辞。
+
+原4.3开头及五个实现小节完整移入红字Implementation details retained for revision，
+小节改为不编号标题；原Alternative implementations同样保留。所有原label和文字均
+核对保留，红字仅调整标题/换行/图文排版。4.1/4.2逐字未变，未恢复上一轮删除的4.2
+红字；未编写4.3.2结果或4.3.3 Ongoing work。只安装chapter4.tex，其余128个原文件
+（含master.pdf）hash未变，无commit/push/sync。
+
+使用LaTeX compile与PDF技能，在隔离副本XeLaTeX编译Chapter4并抽取4.3预览，共13页：
+第1–2页为新overview，第3–13页为红字留存。引用其它章节时复用已有aux，编号为局部
+Chapter4构建；不是全书重编译。无未定义引用、无重复label、4.3零overfull；此前4.1/
+4.2的既有overfull不在交付PDF范围。所有预览页已视觉检查，修正长代码名换行、图与
+caption跨页及段落首行孤行。一次排版helper因已有另一samepage环境触发断言，未写入，
+改为目标段定位后通过；不涉及数学修改。
+
+档案：`../local_runs/chapter4_3_1_overview_20260926_v1/`，含原文/hash、完整移出文字、
+patch、编译副本/日志、QA与安装核验。PDF：`output/pdf/chapter4_3_preview.pdf`。
+
+## 122. 2026-09-27：equal-timestep edge flip与新dual area的实际代码路径核对
+
+**作者：Codex；用户指出4.3.1缺少connectivity change/edge flip说明，要求确认代码
+是否修正，以及此前“换成新的S”的含义。** 只读检查本地94cd37a，相关source无未提交
+修改。main/run.c:344重建mesh后在:366调用rd_step_end；solver:3702开头hook只记时间，
+:3736在新connectivity上计算两遍residual，没有旧三角形的半步状态需要跨flip保留。
+
+主路径确实实施保持节点U的面积权重转换：solver:2513–2521用保留的旧实际DualArea
+恢复Uold=Qold/Sold；:2554及geometry.c:36–59用新三角形节点回算old/mid/new几何；
+:2629累积实际新端点Snew，:2636累积modified coefficient D，默认D每元素贡献
+[A_mid+(A_new-A_old)/2]/3，A_old属于新连接的回算几何。:2678–2679同时令临时Q=D*Uold、
+DualArea=D；两阶段完成后:2705–2711取Unew=Qbar_new/D，写回Qnew=Snew*Unew及DualArea=Snew。
+因此不是只替换分母而保持原Q不变；保留的是节点状态，而新P1插值基与积分权重改变。
+当前Arpaia选择的RK除数D也不能简单写成实际Snew；Campoli选项才在prepare直接用Snew。
+
+源码另有RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC保护的rd_ale_apply_topology_repair
+(:2175–2449)，按changed-patch defect修正节点状态，并在prepare重标定前调用。
+它是实际可选修正代码，并非只有设想，但当前论文/Yee参考配置及核对的Gresho/Sod
+编译header未启用。该patch transfer只针对actual old basis到pulled-back new basis，
+不自动消除后续Arpaia divisor到endpoint权重转换的另一项误差。finish对非均匀场记录
+endpoint总量漂移，严格终止检查只应用于uniform case（:2727–2738）。
+
+结论：应在overview明确“继承节点U、按新连接重算权重、同步重标定Q”；这已实现，
+与独立的严格守恒修正是两件事。单纯在同一时刻换基产生sum(Snew-Sold)*Uold，通常
+非零，所以不能把已有新S处理说成无条件守恒remap。现有overview最后一句应理解为
+参考配置未应用该守恒修正，而非源码里不存在修正实现。
+
+档案`../local_runs/chapter4_3_connectivity_audit_20260927_v1/audit.json`记录source与
+配置/hash及thesis hash。本轮未运行hydro、未改代码/thesis/PDF、未commit或同步。
+
+## 123. 2026-09-27：4.3.1以三句话补充equal-step edge flip处理
+
+**作者：Codex；用户授权用两三句话提及上一轮核对的connectivity处理。** 将overview
+末尾原守恒限制说明扩为三句：继承用旧dual area恢复的节点状态，在新triangulation
+重算modified dual-area coefficient及endpoint area；按这些权重重标定extensive量，
+两个RK阶段均使用新connectivity；非均匀场的connectivity/endpoint转换守恒误差在
+参考配置中未作conservative correction。避免原“remains ongoing work”被理解为源码
+没有可选修正，也未将基线重标定称为严格守恒remap。
+
+只改本地chapter4.tex的4.3.1末段；前文、4.2及4.3红字草稿逐字未变。备份、独立patch
+和hash核验保存在`../local_runs/chapter4_3_1_edgeflip_note_20260927_v1/`。
+本轮仅纯文本编辑及diff核验，未重新编译PDF、未运行hydro、未commit/push/sync。
+
+## 124. 2026-09-27：4.3.1加入RK前后两组面积转换公式
+
+**作者：Codex；用户要求写入此前解释中第2、3步的公式，分别明确RK更新前转换与
+收到RK更新后的转换。** 以用户已提交的thesis cb6beb3为起点，只扩展overview存储段：
+先Uold=Qold/Sold、Qbar_base=Sbar*Uold；两个RK阶段把Qbar_base更新为Qbar_new后，
+再Unew=Qbar_new/Sbar、Qnew=Snew*Unew。使用既有modified dual-area coefficient
+符号，不引入新的D_i记号，并定义Qbar为使用modified coefficient表示的extensive量。
+上一轮edge-flip说明、其余4.3及红字草稿、4.1/4.2均未变。
+
+隔离副本XeLaTeX编译成功；新增公式在预览中编号4.47、4.48。交付的2页overview PDF
+已逐页视觉检查，无公式溢出/遮挡、未定义引用或重复label。Chapter4其它部分原有的
+overfull提示不在交付范围。首次提取调用系统Python缺少pypdf，改用已配置的bundled
+Python后成功，无安装依赖。tracked hash及git diff --check确认仅chapter4.tex修改。
+
+档案`../local_runs/chapter4_3_1_area_conversions_20260927_v1/`含原文、hash、独立patch、
+编译副本及QA。PDF为`output/pdf/implementation_overview.pdf`；不是全书重新编译，
+本地master.pdf未覆盖。未运行hydro、未commit/push/sync。
+
+## 125. 2026-09-27：解决thesis main推送被远端Overleaf更新拒绝
+
+**作者：Codex；用户报告git push因fetch first失败，按其同步意图完成整合和重推。**
+本地main为用户提交e9ba5c7（4.3.1两组转换公式），tracked工作区干净。fetch后远端为
+9cf7a6a，含Overleaf提交c91056b及其merge；净改动只有master.tex中SK批注颜色orange
+改red、abstract.tex增加SK评语，与本地chapter4.tex无路径重叠。
+
+先保存HEAD、文件hash与Chapter4副本，执行无冲突merge并在提交前检查暂存区只含
+两项远端修改；逐文件核验它们与origin一致，Chapter4及30个未跟踪文件hash未变。
+创建merge commit 6af0539（按项目约定标注Zhenyu Wu与Codex GPT-6），保留双方原始
+提交历史；普通push成功，远端main与本地HEAD一致，无force push或rebase。
+tracked工作区干净，原有未跟踪编译文件/配置未加入提交。未修改论文内容或编译PDF。
+
+档案：`../local_runs/thesis_push_reconcile_20260927_v1/`，含原始状态、hash及核验记录。
