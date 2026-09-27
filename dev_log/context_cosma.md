@@ -1,13 +1,24 @@
 # AREPO-RD COSMA context
 
-Updated: 2026-09-25
+Updated: 2026-09-27
 
 This file records the COSMA environment for compiling and running the public
 AREPO residual-distribution branch. It supplements context.md (the original
 Cuillin workflow) and context_localMac.md (small native Apple-Silicon tests).
 The scientific history remains in the numbered development logs.
 
-## Current handoff: boosted Yee LDA
+## Current handoff: return to local experiments, 2026-09-27
+
+Zhenyu has requested that subsequent experiments run on the local Mac; COSMA
+is not needed for the next phase. The copied boosted-Yee comparison figures
+and summaries are available in the workspace's
+`cosma_runs/yee_n_boost10_20260926/comparison_latest/` directory.
+See [the local return record](RD_LOCAL_RESUME_COSMA_IMPORT_20260927.md) for
+verified file provenance and the pending source/log integration status.
+This local handoff does not claim to have checked live COSMA jobs or raw
+snapshots, and does not launch, cancel or restart a cluster campaign.
+
+## Historical handoff: boosted Yee LDA, 2026-09-25
 
 The local Mac tests were stopped at the user's request on2026-09-25. Follow
 [RD_COSMA_YEE_HANDOFF_20260925.md](RD_COSMA_YEE_HANDOFF_20260925.md) for exact inputs,

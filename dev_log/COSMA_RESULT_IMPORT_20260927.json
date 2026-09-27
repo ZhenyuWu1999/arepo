@@ -1,0 +1,162 @@
+{
+  "import_date": "2026-09-27",
+  "local_root": "/Users/zhenyuwu/arepo_rd/cosma_runs/yee_n_boost10_20260926/comparison_latest",
+  "relative_to_repository": "../cosma_runs/yee_n_boost10_20260926/comparison_latest",
+  "copied_by": "user via scp",
+  "copied_file_count": 19,
+  "files": {
+    "before_profile_style_v2/vortex_profiles.pdf": {
+      "bytes": 305822,
+      "sha256": "9b345f763a5b136a376c2e012e94cdfecc72702be96a4d9e088786045e22d4ae"
+    },
+    "before_profile_style_v2/vortex_profiles.png": {
+      "bytes": 574322,
+      "sha256": "ce249f3fe03ade3c2a1d75443a7d4e4f3b2d6bd14b653b0320c5fdb8a68134ad"
+    },
+    "combined_convergence.pdf": {
+      "bytes": 20899,
+      "sha256": "71ddcf47fc02632b415edad8eb63f9d9aefc942dcf9aafad1a7d61381af9268c"
+    },
+    "combined_convergence.png": {
+      "bytes": 189302,
+      "sha256": "b5fc415028b4a43cd3201559945e21f12364e5c9eb9617f5a83fbba2bc34b4ff"
+    },
+    "compare_yee_cosma.py": {
+      "bytes": 15454,
+      "sha256": "cba297429849dbade7eeba634b1c6874fd9bae5e1730a5a241d65a181f2a90fd"
+    },
+    "comparison.json": {
+      "bytes": 335053,
+      "sha256": "6a562971f0f4def4cf4fd85b6a603bb47a096f016cd4d443b4e169745fe1b280"
+    },
+    "profile_style_review.json": {
+      "bytes": 1382,
+      "sha256": "bbf6188be759a53438d45bc70a10916d5aaef027d46ed7d8261fc92217b0128e"
+    },
+    "profile_style_v2/__pycache__/prepare_yee_boost_cosma.cpython-312.pyc": {
+      "bytes": 11413,
+      "sha256": "965f1b7dc8f6f13decd72d794fc43c7a8d93933836d5be7cfcf7c50f12836da1"
+    },
+    "profile_style_v2/__pycache__/yee_cosma_campaign.cpython-312.pyc": {
+      "bytes": 22559,
+      "sha256": "31dce9b61abf5f276c038fdcb4b6377dea64435d0ac51003dea56b350a736bc3"
+    },
+    "profile_style_v2/compare_yee_cosma.py": {
+      "bytes": 17425,
+      "sha256": "18ed5326b2ca697d5d1fc6d5eb267cc432f59c00b85770d7c2f91247b67e7b71"
+    },
+    "profile_style_v2/prepare_yee_boost_cosma.py": {
+      "bytes": 7249,
+      "sha256": "ad8eb70247c75593d48c4ce47d9de560635eae455cf559f53eafece80614cd09"
+    },
+    "profile_style_v2/unchanged_inputs.json": {
+      "bytes": 371,
+      "sha256": "0bab7fe4345f3d9967f8478287e3730e23b4d7dbf989f4bf228c94dc027fdc00"
+    },
+    "profile_style_v2/vortex_profiles.pdf": {
+      "bytes": 481604,
+      "sha256": "3c5c37ba3049b4a314d5f5e60bda4aec014af88e388b1314d137f5b1e799edca"
+    },
+    "profile_style_v2/vortex_profiles.png": {
+      "bytes": 827587,
+      "sha256": "b477accd0139dfccd5e8b7de6aa171c768cc6cdb0fa363d431514739446fea4a"
+    },
+    "profile_style_v2/yee_cosma_campaign.py": {
+      "bytes": 12383,
+      "sha256": "d523a489abf847daa43308c753543a0affdb8f43006c176d174f9a320872c28c"
+    },
+    "report.md": {
+      "bytes": 4741,
+      "sha256": "1fbe35276f5015725d0a56b604c832b683c2cdde603d4d7eb60a2e51e6c001d6"
+    },
+    "verification.json": {
+      "bytes": 881,
+      "sha256": "ed63f204161ad1b007f45bf575419bed2cab499747d9c928871534da005ee331"
+    },
+    "vortex_profiles.pdf": {
+      "bytes": 481604,
+      "sha256": "3c5c37ba3049b4a314d5f5e60bda4aec014af88e388b1314d137f5b1e799edca"
+    },
+    "vortex_profiles.png": {
+      "bytes": 827587,
+      "sha256": "b477accd0139dfccd5e8b7de6aa171c768cc6cdb0fa363d431514739446fea4a"
+    }
+  },
+  "checks_against_supplied_review": {
+    "combined_convergence.png": true,
+    "combined_convergence.pdf": true,
+    "comparison.json": true,
+    "report.md": true,
+    "vortex_profiles.png": true,
+    "vortex_profiles.pdf": true,
+    "profile_style_v2/compare_yee_cosma.py": true,
+    "compare_yee_cosma.py": true
+  },
+  "comparison_cases": 16,
+  "n_per_side": [
+    48,
+    96,
+    192,
+    384
+  ],
+  "boost": [
+    10,
+    0
+  ],
+  "endpoint": 1.0,
+  "ranks": 1,
+  "weighting": "mass",
+  "four_point_fit_checks": [
+    {
+      "method": "N_static_lab",
+      "field": "rho_l1",
+      "recorded_order": 0.6986410929318558,
+      "recomputed_order": 0.698641092931856
+    },
+    {
+      "method": "N_static_lab",
+      "field": "velocity_l1",
+      "recorded_order": 0.6938692875833532,
+      "recomputed_order": 0.6938692875833532
+    },
+    {
+      "method": "N_moving_comoving",
+      "field": "rho_l1",
+      "recorded_order": 0.9033814896422514,
+      "recomputed_order": 0.9033814896422516
+    },
+    {
+      "method": "N_moving_comoving",
+      "field": "velocity_l1",
+      "recorded_order": 0.9142693314197075,
+      "recomputed_order": 0.9142693314197075
+    },
+    {
+      "method": "LDA_static_lab",
+      "field": "rho_l1",
+      "recorded_order": 1.862087306037147,
+      "recomputed_order": 1.862087306037147
+    },
+    {
+      "method": "LDA_static_lab",
+      "field": "velocity_l1",
+      "recorded_order": 1.9153598974844002,
+      "recomputed_order": 1.9153598974844006
+    },
+    {
+      "method": "LDA_moving_comoving",
+      "field": "rho_l1",
+      "recorded_order": 1.7393369553300295,
+      "recomputed_order": 1.7393369553300295
+    },
+    {
+      "method": "LDA_moving_comoving",
+      "field": "velocity_l1",
+      "recorded_order": 1.4012667402762402,
+      "recomputed_order": 1.4012667402762402
+    }
+  ],
+  "reported_gates": 12,
+  "validation_scope": "Verified copied-file hashes, JSON consistency and fits from recorded errors only. Raw snapshots, binaries, Configs, job logs and gate outputs were not copied, so no native-run revalidation was performed.",
+  "git_integration": "Pending location of COSMA commits; GitHub develop_pureC_RD was 94cd37a on initial fetch."
+}

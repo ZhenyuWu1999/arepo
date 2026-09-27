@@ -3,7 +3,17 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-09-25
+Updated: 2026-09-27
+
+**Current execution preference (2026-09-27): return to the local Mac.** The user
+requests subsequent experiments locally; COSMA is not needed for the next phase.
+The copied Yee boost10 comparison is in
+`../cosma_runs/yee_n_boost10_20260926/comparison_latest/`.
+See [local return and COSMA import](RD_LOCAL_RESUME_COSMA_IMPORT_20260927.md)
+for Git-integration status and [file checks](COSMA_RESULT_IMPORT_20260927.json).
+Use `LocalMac`, isolated build/run artifacts, and both `OMP_NUM_THREADS=1` and
+`OPENBLAS_NUM_THREADS=1`; moving equal-step RD remains one MPI rank. No new
+hydro case has been launched and old interrupted campaigns are not restarted.
 
 **STOPPED for COSMA migration (2026-09-25, log3 §113):** User explicitly
 terminated all local hydro tests. Both launchd jobs removed and all six solver

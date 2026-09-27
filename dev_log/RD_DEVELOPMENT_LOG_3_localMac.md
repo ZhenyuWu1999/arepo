@@ -6328,3 +6328,31 @@ Python后成功，无安装依赖。tracked hash及git diff --check确认仅chap
 tracked工作区干净，原有未跟踪编译文件/配置未加入提交。未修改论文内容或编译PDF。
 
 档案：`../local_runs/thesis_push_reconcile_20260927_v1/`，含原始状态、hash及核验记录。
+
+## 126. 2026-09-27：保存本地AREPO工作，登记COSMA结果，准备回到Mac实验
+
+**作者：Codex；用户要求commit本地AREPO，合并GitHub上的COSMA Yee+boost工作，
+并说明后续暂时不用COSMA，回到本地实验。** 已将全部44项既有本地改动保存为
+`e3ec73b`：log3至§125、4.2数学核对报告、旧main-loop/MPI/hierarchy图件与诊断工具。
+无production source/Config更改；保存前后的44文件逐一hash一致。Python语法与XML
+解析通过；初次完整diff whitespace检查报告生成SVG的原有行尾空格，保留图件原始
+字节；排除SVG后的diff whitespace检查通过。未运行hydro或重绘图件。
+
+实际远端状态与用户预期不同：两次fetch及GitHub全部branch head查询中，
+`origin/develop_pureC_RD`仍是`94cd37a`，未找到Sep25之后的COSMA提交。只读SSH尝试
+因keyboard-interactive认证失败，未进入COSMA。已向用户询问正确仓库/分支/提交号，
+或在尚未push时先完成COSMA推送；未将本地旧source冒称为合并后的COSMA源码。
+本次未push本地分支，COSMA源码与日志的Git合并仍待该信息。
+
+用户scp的`../cosma_runs/yee_n_boost10_20260926/comparison_latest/`共19文件原地保留。
+8项文件hash检查通过；comparison.json中16个science case均记为t1完整、boost(10,0)、
+一rank、Nx48/96/192/384、N与LDA、static lab与moving comoving。按记录误差值独立
+复算8组四点mass-weighted收敛阶，全部相符。这只验证复制与summary内部一致性，
+不等于重检native结果；当前副本没有raw HDF5、binary、Configs或job/gate logs，报告
+中的12个gate结论保留其原始来源归属。
+
+新增[文件清单](COSMA_RESULT_IMPORT_20260927.json)与
+[回到本地的交接记录](RD_LOCAL_RESUME_COSMA_IMPORT_20260927.md)，更新local/COSMA
+context：后续用LocalMac/Homebrew/OpenBLAS、OMP与BLAS线程均1、独立build/run档案；
+此前中止的Mac案例不自动重启。本轮无新实验、无Linux binary移植、无thesis改动。
+Git整合档案位于`../local_runs/arepo_cosma_reconcile_20260927_v1/`。
