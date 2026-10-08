@@ -83,6 +83,15 @@ handoff for the intervening moving-mesh hierarchy work.
 | 57 | Insert the approved table with Voronoi/Delaunay elements and organise Section 4.1 into implementation and computational efficiency |
 | 58 | Enlarge Figure 4.1 with a compact editable layout and a landscape thesis page, preserving the user-finalised originals |
 | 59 | Export a native four-rank glass triangulation; verify ownership, periodic topology and MPI packets; illustrate real boundary examples |
+| 165 | Rusanov/Sedov literature provenance and LDA blending choices |
+| 166 | Staggered Lagrangian RD versus the current moving ALE mesh |
+| 167 | Conservative positive LDA/F1 + common-Gauss Rusanov prototype |
+| 168 | Sedov angular scatter audit, separated from radial shock broadening |
+| 169 | Proposed entropy and local oscillation constraints; not implemented |
+| 170 | Classical RD B/Bmax experiment, complete RK correction and native tests |
+| 171 | Consolidated LDA/Rusanov development record, results and remaining limits |
+| 172 | Local thesis 4.3.3 Ongoing work draft and two-page review PDF |
+| 173 | Explain conservation defects through the P1 basis change and label repair experimental |
 
 ---
 
@@ -6356,3 +6365,2303 @@ tracked工作区干净，原有未跟踪编译文件/配置未加入提交。未
 context：后续用LocalMac/Homebrew/OpenBLAS、OMP与BLAS线程均1、独立build/run档案；
 此前中止的Mac案例不自动重启。本轮无新实验、无Linux binary移植、无thesis改动。
 Git整合档案位于`../local_runs/arepo_cosma_reconcile_20260927_v1/`。
+
+## 127. 2026-09-27：4.3.2加入两张Yee图，核对Gresho boost图的可用性
+
+**作者：Codex；用户确认COSMA尚未commit、暂缓整合，转而要求将两张Yee图放入4.3.2，
+并准备Gresho boost0/3/10图、查看本地boost结果。** 更新交接记录为用户明确deferred，
+未继续fetch/SSH或改动Git提交。论文新增Numerical tests与Yee subsubsection，复制原始
+vector PDF为chapter4/figures/yee_boost10_convergence.pdf及yee_boost10_profiles.pdf。
+两份复制与已验证COSMA figure hashes相同；正文/图注明确boost(10,0)、t1、N48/96/192/384、
+匹配dt1/1024至1/8192、最终mass权重、四点log-log拟合，以及static lab/moving comoving
+选择。图中低误差与拟合阶分别描述，不声称严格Galilean不变性或理论阶。4.3.1及此前
+正文、所有红字留存逐字不变；Gresho后续插图位置仅留source comments。
+
+隔离副本XeLaTeX成功，导出4.3.2三页预览，图号4.6/4.7；逐页检查文字、图例和caption，
+无裁切/重叠、未定义引用/重复label或本节overfull。旧4.1/4.2警告在交付范围之外。
+只改chapter4.tex并新增两份PDF，其它原tracked文件hash不变；无commit/push或主PDF覆盖。
+档案`../local_runs/chapter4_3_2_yee_figures_20260927_v1/`，预览
+`output/pdf/numerical_tests_yee.pdf`。
+
+本地当前Gresho有moving N/Roe、LDA/Gauss3，lab/comoving、boost0/10共8个t1结果；
+逐一打开终点HDF5确认2304节点，各4096步；153个生产/构建文件hash与当前本地一致。
+已查看现有boost叠加剖面与boost10节点图：LDA峰.9391，N在b0/b10分别.8524/.8590，
+解析峰1。boost3只有历史不同配置的图，不能直接拼接当前结果；当前matched static
+controls也不齐。若只moving需补两个b3；若static/moving还需六个匹配static control。
+尚未启动新模拟。详细[图件准备记录](RD_GRESHO_THESIS_FIGURE_READINESS_20260927.md)。
+
+## 128. 2026-09-27：glass48、boost10、lab-only Gresho static/moving对照完成
+
+**作者：Codex；用户将Gresho改为glass IC、只要lab frame，并要求先做boost10，视结果
+决定是否省略boost3。** 从本地2858d43及当前工作树冻结source，独立构建N/Roe+lumped、
+LDA/Gauss3+mixed-F1的static/moving四套Mac程序。无production/default Config修改；
+一rank，OMP与OpenBLAS均1，最多四个独立案例并行。保留source tar、hash、Config/
+header、binary/linkage、参数、所有native日志与快照。未恢复旧中止campaign、未访问COSMA。
+
+采用既有SWIFT glass48的2304点，unit box、gamma5/3、boost(10,0)，一个稍超周期边界
+的坐标分量mod1后再计算解析IC；四组t0快照按ID逐位相同。全部lab，moving保留现有
+Arpaia权重、mesh regularization及谱CFL限制，无topology repair。四组t1均4096等步
+（dt1/4096），存t0/.5/1三个快照。四个uniform控制及四个Gresho短程pilot均到.03125；
+uniform最大状态差分别2.043e-13/3.331e-13/1.874e-13/2.363e-13，均通过原1e-12门槛。
+四个science全部正常结束，已存快照状态有限且rho/p为正，无native断言失败。12案例
+现已全部结束，boost0/3未启动。
+
+t1最终mass加权vphi L1：N static .2399602、moving .01890833；LDA static .1635014、
+moving .00717532。moving/static为.07880/.04389，约改善12.7/22.8倍；moving峰值
+.85338/.95336。static N强扩散，static LDA剖面明显散开、含负vphi；不能仅看峰值评价。
+moving总质量相对漂移+3.70739e-5/+4.13801e-5，总能量+2.71762e-5/+2.48148e-5；
+static为roundoff。此例没有给topology与endpoint权重误差单独归因，也未验证严格
+Galilean不变性或收敛阶。用于简要展示强boost下moving/static差异，可先省boost3。
+
+完成lab-only两panel的N/LDA剖面PDF/PNG，扣除已知解析平移及速度boost，使用全部
+原生点，不拟合中心/插值/binning。PDF渲染视觉检查通过；初稿裁掉33个static LDA负尾
+点，最终已扩展坐标范围完整显示。gate报告最初对舍入Time作差得到伪dt范围，后改报
+Systemstep；只修分析元数据，无重新积分或参数修改。冻结runner保留，修订gate检查
+helper另存。论文尚未加入新Gresho图、无commit/push。
+
+详见[结果及限制](RD_GRESHO_GLASS_BOOST10_LAB_20260927.md)。档案
+`../local_runs/gresho_glass_boost10_lab_20260927_v1/`；最终PDF为
+`output/pdf/gresho_glass_boost10_lab_static_moving.pdf`。
+
+## 129. 2026-09-27：补N的static/moving boost0，区分网格优势与Galilean invariance
+
+**作者：Codex；用户怀疑moving N boost10比static N boost0还好，要求补static0并询问
+这是否还能说明Galilean invariance。** 同时补moving0以直接分离mesh与boost因素。
+复用§128冻结且hash核验相同的两套N binary/header/Config，不重编译或改solver。
+相同glass48、gamma5/3、lab、t1、4096等步、dt1/4096；新IC仅把原boost10的vx减10，
+其他dataset逐位相同。各自uniform、pilot、science共6个新案例全部完成；uniform最大
+缺陷1.60e-14/7.99e-15通过原1e-12标准；所有已存状态有限且rho/p正，无native断言失败。
+两worker、一rank、OMP/BLAS各1。152个production/build文件hash未变。
+
+最终mass加权vphi L1：static0 .05809649，moving0 .01888672；复用static10 .23996020、
+moving10 .01890833。moving10/static0=.32546，约低3.07倍，确认用户观察；moving10/
+moving0=1.001144，误差指标仅相差.1144%。static0峰.66347，moving0/10峰.85168/.85338。
+moving0总质量漂移+3.9302e-5，仍不严格全局守恒。
+
+解释：boost0仍有局部旋转穿越static网格；moving去掉常数boost后网格仍跟随旋转，
+并未变成static0。代码K特征速度包含(u-sigma).n，实际sigma还含压力预测/regularization。
+因此moving10好于static0与Galilean invariance不矛盾。符合boost试验定义的比较是
+moving0/10；另核对Springel2010 §3.4/§8.5，不把FV证明套用到当前RD。
+
+仍不能宣称严格invariance：t1去boost按ID匹配的velocity-vector L1差.00238766，
+坐标RMS差.00238050，最大坐标差.0388953；这属于联合mesh/state covariance检查，
+不是相同空间点的Eulerian场误差。短程.03125已经有最大速度差9.0841e-5、坐标差
+1.4501e-6。本轮没有将差异归因到某一种residual/矩阵/flip机制，也未称全是roundoff。
+适合写“moving N对bulk boost很不敏感”；.1144%是误差指标之差，不是逐点解之差。
+
+新两panel PDF/PNG：static与moving分别叠加boost0/10，只lab，全部原生节点。
+PDF已渲染及视觉检查，点未裁切、图例可读。详见
+[控制实验及解释](RD_GRESHO_N_BOOST0_CONTROLS_20260927.md)。档案
+`../local_runs/gresho_n_glass_boost0_controls_20260927_v1/`，含复用provenance、全部raw
+输出、gates、summary及图件。没有LDA0/boost3、thesis修改、commit/push或COSMA操作。
+
+## 130. 2026-09-27：完成boost3、t3的glass N/LDA static/moving对比图
+
+**作者：Codex；用户明确要求新增boost vel=3、t=3，LDA和N的moving/static对照。**
+沿用glass48（2304点）、lab、gamma5/3及§128四套冻结binary，各自复制独立artifact与
+输入/运行目录；程序hash完全相同，无重编译、production/default Config更改。新IC只
+把boost10输入的vx减7，其他dataset逐位相同。四个uniform及四个pilot均到.046875，
+各256步；uniform最大差2.653e-15/1.039e-13/1.860e-15/3.461e-15，全过原1e-12门槛。
+
+四个science均正常完成t3，无native断言失败，全部20个已存science快照状态有限、
+rho/p/mass正。完整时间步序列相同，均16384步：原cap1/4096在TimeMax3的integer
+timebase下向下量化为实际dt3/16384。不能误写12288步或实际dt1/4096。存0/.75/1.5/
+2.25/3共5个快照；四组t0坐标及原始物理字段按ID逐位相同，static坐标始终固定。
+本地最多4worker、一rank/例、OMP/BLAS各1；全部12案例结束，无活动solver。
+
+t3质量加权vphi L1：N static .23991685、moving .04720931；LDA static .22266181、
+moving .01260077。moving/static=.196774/.056592，约改善5.08/17.67倍。N static/
+moving峰.13646/.72920；LDA static/moving峰.89870/.90243，但static LDA散点畸变明显、
+最低vphi−.69283，不能只看峰值。moving质量相对漂移+1.42443e-4/+1.77547e-4，能量
+−7.6013e-5/−1.31865e-4；static守恒为roundoff。没有将此前boost10/t1与此boost3/t3
+混作相同时间的Galilean invariance验证。
+
+已有analyzer改为从campaign读取boost/end/output times并核验完整dt histories；新
+通用runner支持复用冻结四套binary。旧档案/图片/scripts未改。最终两panel PDF/PNG
+显示全部原生点，扣已知boost、无拟合中心/插值/binning；保留负尾，图例移到坐标轴外
+避免遮点，PDF已渲染与视觉核查。配置/输入/参数/hash检查通过。无thesis修改或commit/
+push/COSMA操作。报告[boost3/t3结果](RD_GRESHO_GLASS_BOOST3_T3_LAB_20260927.md)，
+档案`../local_runs/gresho_glass_boost3_t3_lab_20260927_v1/`，PDF为
+`output/pdf/gresho_glass_boost3_t3_lab_static_moving.pdf`。
+
+## 131. 2026-09-27：glass48、t3的moving N/LDA boost0/10单独预览
+
+**作者：Codex；用户选择glass48、t3、boost0/10的moving LDA/N，并明确“先单独预览”。**
+保持lab frame，用§128冻结binary新跑4个science（N/LDA×boost0/10）及各自uniform/
+pilot，共12个native案例。两个boost子目录独立保存输入、Config/header、binary与
+source/build/linkage provenance；同一scheme的两boost程序hash一致。runner新增
+method选择，不额外启动static。初始输入只改vx整体boost，其他dataset逐位相同。
+
+四个uniform和四个pilot均到.046875并过原门槛；四个science全到t3，无native断言
+失败，20个science快照有限且rho/p/mass正。四组完整时间步序列相同，16384步、
+dt3/16384；存0/.75/1.5/2.25/3。相同boost下N/LDA初始快照逐位相同；跨boost坐标、
+ID和mass完全相同，扣boost速度差至多1.78e-15、pressure2.13e-14。152个production/
+build hash未改，OMP/BLAS1、一rank/例、最多四worker，现已全部结束。
+
+最终mass加权vphi L1：N boost0 .04724472、boost10 .04707784；LDA .01252980/.01249125。
+boost10/0为.996468/.996924，误差指标相对差.3532%/.3076%；两boost径向剖面接近
+重合。N峰.73544/.74164，LDA峰.89759/.89396。moving质量漂移N +1.519e-4/+1.592e-4，
+LDA +1.769e-4/+1.710e-4，仍不是严格全局守恒。
+
+不把误差指标接近解释为完整解严格Galilean不变：t3按ID扣boost后的坐标RMS差为
+N .0472334、LDA .00957318；速度vector L1差.0448393/.0104613。由于节点位置已不同，
+这是联合mesh/state covariance诊断，不是相同空间点的Eulerian场误差。此轮未隔离
+机制，也不把差别全称为roundoff。只支持本测试中径向剖面/误差对bulk boost敏感度小。
+
+生成N/LDA两panel、每panel叠加boost0/10及解析曲线的单独PDF/PNG，使用全部原生点，
+不拟合中心或插值/binning，图例置于轴外。最终PDF渲染视觉检查通过；一次分析未结束
+时提前查看render路径失败，待完成后正常检查，不涉及hydro失败或重跑。按用户要求
+未修改论文。报告[boost0/10 t3预览](RD_GRESHO_MOVING_BOOST0_10_T3_20260927.md)，
+档案`../local_runs/gresho_glass_moving_boost0_10_t3_lab_20260927_v1/`，PDF为
+`output/pdf/gresho_glass48_t3_moving_boost0_10.pdf`。无commit/push/COSMA操作。
+
+## 132. 2026-09-27：t3预览左侧增加static N、boost0对照
+
+**作者：Codex；用户要求左侧补static mesh boost0，仍为glass48、t3，以展示涡旋自身
+旋转的耗散也因moving mesh减小。** 沿用“先单独预览”，没有修改论文。复用§128
+冻结N static binary，新跑uniform/pilot/science共三例，一rank、OMP/BLAS各1，
+未重编译或改production/default Config；155个source/build文件hash仍匹配。
+
+uniform及pilot到.046875，256步，uniform最大差2.49e-14低于原1e-12门槛；science
+正常到t3，耗时201.91s，16384步、dt3/16384。完整time/step历史与§131四组moving
+相同；static0和moving0 N初始字段按ID逐位相同，static坐标各快照固定。全部25个
+science快照有限且rho/p/mass正，无native断言失败，已无活动solver。
+
+t3 static0 N mass加权vphi L1=.12085623，moving0=.04724472，比例.39091671，约
+降低60.91%（2.558倍）；峰值.485980/.735437。面积加权L1=.12048805/.04715843，
+vector速度L1=.12831442/.04903911。结果支持无bulk boost时局部旋转涡旋衰减也更小；
+并不隔离某一flux/regularization/flip机制。原boost0/10剖面的弱boost敏感性结论及
+完整mesh/state非精确不变的限制仍保留。static质量/能量漂移为−6.66e-16/0；moving0
+N仍为+1.519e-4/−2.087e-4，不混淆耗散和全局守恒性质。
+
+新analyzer读取并重新核验原moving数据，不覆盖旧图/summary；新两panel图左侧加灰色
+static0方点，右侧LDA保留原数据。全部2304原生点、解析中心、不插值/binning；最终
+PDF渲染检查通过，图例可读、点未裁切。报告
+[static0/t3对照](RD_GRESHO_STATIC0_T3_OVERLAY_20260927.md)，档案
+`../local_runs/gresho_glass_t3_static0_overlay_20260927_v1/`，PDF为
+`output/pdf/gresho_glass48_t3_moving_boost0_10_static0.pdf`。无commit/push/COSMA操作。
+
+## 133. 2026-09-27：拉取Overleaf更新，4.3.1采用远端版本
+
+**作者：Codex；用户明确要求从GitHub拉取Overleaf变化，主要4.3.1采用Overleaf版。**
+论文仓库main原HEAD6af0539，远端新增3个提交至06c9647；本地唯一tracked改动是
+chapter4.tex中新增4.3.2 Yee测试。先备份本地/基线/远端正文、完整diff、状态和两个
+Yee PDF，生成三方合并预览，无冲突；定向暂存Chapter4后fast-forward，再恢复本地
+增量。远端4.3.1、删除4.2.3与Chapter1修改已同步；没有改写Overleaf内容。
+
+核验4.3.1逐字匹配远端，本地4.3.2 Yee内容保留，32个untracked文件hash不变；
+HEAD等于origin/main、index为空、无冲突且diff检查通过。仅清理本轮临时stash，
+两条原有stash保留。没有新commit/push，未编译PDF，现有master.pdf早于此次同步。
+备份与verification位于`../local_runs/thesis_overleaf_sync_20260927_234550/`。
+Gresho仍为单独预览，未在此次同步时插入论文。AREPO代码与实验数据未改。
+
+## 134. 2026-09-27/28：完成Chapter3三处红字与K矩阵核验，编译审核PDF
+
+**作者：Codex；用户明确授权Chapter3红字修改，包括distribution schemes、CGAL
+引用和K matrix复核，并要求编译PDF审核。** 在论文main06c9647上保留本地Chapter4
+改动，备份正文/bib/PDF及tracked hashes后处理全部三处TODO。Distribution Schemes
+增加Deconinck/Ricchiuto2017、Csik2002、Paardekooper2017、Morton2023的出处说明及
+N定义的Roe/Sidilkover1992引用；CGAL新增官方文献表核验的Fabri et al.2000条目。
+
+K显式矩阵16项原式无误。正文明确n_i=ell_i*n_hat_i，K_i=ell_i*A(n_hat_i)/2，
+特征值同样缩放。检查原standalone triangle2D.h和当前AREPO几何/矩阵构造，均保存
+单位法向量并另乘0.5*边长。符号求导16项差全部为零；提取未修改native C函数验证
+160个三角形/480个K矩阵（gamma1.4和5/3，含零速），完整矩阵scaled差1.06e-14，
+K±差≤2.40e-14，特征值差1.45e-13。没有production修改或新的hydro实验。
+
+XeLaTeX全文247页完成，零未解析引用/交叉引用，零编译错误。初次隔离build缺少
+include子目录、随后缓存转换旧XDV均未交付；完整重编译后又发现root旧bbl遮住
+新引用，改用build目录BibTeX和build优先TEXINPUTS解决。PDF转换从thesis目录运行，
+使相对图片路径有效。原有其他章节overfull与少量bib/package警告不扩大修改范围。
+最终正文114--117、123及书目198页渲染检查通过，法向量定义与公式同页，矩阵/引用
+清晰。核验tracked修改仅本次Chapter3 tex/bib，Chapter4 hash与任务开始逐字一致。
+
+审核PDF `output/pdf/thesis_chapter3_review.pdf` 位于
+`../local_runs/thesis_ch3_rednotes_20260927_235021/`；本地论文master.pdf和生成bbl也已
+刷新。完整审核/构建记录见[报告](RD_THESIS_CH3_REDNOTES_20260928.md)。未commit/push，
+未写Overleaf，Gresho仍未插入论文。
+
+## 135. 2026-09-28：按用户澄清恢复K/Distribution原文，追溯LDA和N出处
+
+**作者：Codex；用户明确要求撤回§134中K与Distribution Schemes的新增文字。**
+用户只要求核验K元素，且distribution引用应追溯早期LDA/N来源，而非再增加review、
+Morton或Paardekooper介绍。两块已逐字恢复到修改前/论文HEAD06c9647，包括原红字
+TODO；保留CGAL/Fabri2000引用。K矩阵16项原式无误，未修改元素或重复运行solver。
+
+研究核实N可追溯Roe1987 CoA8720，Roe/Sidilkover1992是合适的早期期刊出处。
+Deconinck等1993 Computational Mechanics论文§3.1、式(23)明确将LDA命名归于
+Struijs/Deconinck/Roe1991 VKI LS1991-01；官方VKI目录也确认元数据。Euler system
+N的matrix推广应另看van der Weide/Deconinck1996，Abgrall/Barth2002明确归因。
+1987/1991/1996原件未取得，未声称读过或断言1991绝对首创LDA；新引用尚未写入论文。
+完整出处、证据和最小引用建议见[研究记录](RD_THESIS_CH3_LDA_N_ORIGINS_20260928.md)。
+
+完整247页PDF重编译成功，无未解析引用/交叉引用；正文115--117页渲染检查通过。
+保留其他章节原有BibTeX警告。论文master.pdf/bbl已刷新，Chapter4 hash不变。
+档案`../local_runs/thesis_ch3_origins_20260928_105952/`，审核PDF
+`output/pdf/thesis_chapter3_restored.pdf`。无commit/push/Overleaf写入/COSMA操作。
+
+## 136. 2026-09-28：按用户指定添加N、LDA及Euler矩阵形式的四篇引用
+
+**作者：Codex；用户明确指定N用Roe1992、LDA用Struijs1991，Euler矩阵形式加
+van der Weide1996与Abgrall2002。** 在原有介绍句中插入引用：N名称括号内引用
+Roe/Sidilkover1992，N矩阵公式前引用van der Weide/Deconinck1996和Abgrall/Barth2002；
+LDA名称括号内引用Struijs/Deconinck/Roe1991。新增后三篇BibTeX条目（Roe1992原有），
+移除Distribution节“add ref”红字。核验移除新增citation后逐字等于修改前正文
+（除已完成的TODO），未增加说明句、未改公式或K区域；Chapter4 hash不变。
+
+引用来源沿用§135记录，另核对SIAM官方Abgrall/Barth条目24(3):732--769。
+论文采用通常引用年份2002（原文copyright2002；出版社当前issue页面标January2003）。
+XeLaTeX/BibTeX/xdvipdfmx全文247页完成，无LaTeX错误或未解析引用；原Chapter1两项
+BibTeX警告仍保留。正文117--118与书目189、220、223页渲染检查通过，四篇引用显示正确。
+档案`../local_runs/thesis_ch3_scheme_citations_20260928_111819/`，包含修改前备份、
+diff、完整build和verification；审核PDF为`output/pdf/thesis_chapter3_scheme_citations.pdf`。
+master.pdf/bbl同步刷新。无commit/push、Overleaf写入、solver/COSMA操作。
+
+## 137. 2026-09-28：Chapter2 Table2.1改成与AREPO流程图相同的整页横向
+
+**作者：Codex；用户明确授权Chapter2 Table1旋转排版以改善阅读。** 原表使用
+sidewaystable，只旋转内容，PDF页无Rotate；AREPO流程图使用pdflscape，PDF页Rotate90。
+将Table2.1改为landscape内table[p]，通过afterpage保持原有分页及标题与段落衔接；
+master.tex仅新增afterpage包。表内数据、caption、label和全部正文逐字保留。
+
+XeLaTeX两遍与xdvipdfmx完整构建成功，仍247页，无编译错误/未解析引用。全PDF逐页
+提取文字对照完全相同（忽略空白），仅PDF106页/正文84页旋转元数据从0变为90；
+正文83--85页渲染检查通过，表格直接横向正读，列与引用未裁切。Chapter3 tex/bib及
+Chapter4 hash不变，master.pdf已刷新。档案
+`../local_runs/thesis_ch2_table_landscape_20260928_112503/`含before、diff、build和verification；
+交付`output/pdf/thesis_chapter2_table_landscape.pdf`。未commit/push或写Overleaf。
+
+## 138. 2026-09-28：Gresho boost图改为均值线与浅散点，讨论合并vortex测试
+
+**作者：Codex；用户提出4.3.2中Yee/Gresho boost合并，并要求参考Chapter3加平均线、
+降低散点透明度、图例放图内、标题缩短。** 按之前“先单独预览”的范围，只生成新图，
+没有修改论文。复用§132的五组glass48/t3/lab原始数据，核验summary/PDF/snapshot hashes
+并精确复现原mass-weighted L1；没有solver测试或重跑。
+
+绘图沿用Chapter3的35个[0,0.7)等宽径向bin、无权重节点平均，alpha0.09全部节点散点。
+每组2304节点全在bins内且全部绘制。moving0实线与moving10虚线、错开的空心marker
+避免近重合曲线互相遮盖；static N0灰色对照保留。图例移至右上角、移除L1长文本；
+标题仅Gresho/glass48²/t3，panel仅N/LDA。PDF渲染检查通过，原图/数据/论文hash不变。
+
+建议统一subsubsection为Boosted vortex tests，Yee收敛与Gresho保持性分别叙述和成图。
+指出现有Yee moving数据用element co-moving frame，而本Gresho组用lab frame；实际
+合并时要缩窄Yee原文“For these boosted tests”的范围，不能写成共用同一frame配置。
+档案`../local_runs/gresho_boost_style_preview_20260928_114134/`保存PDF/PNG、5份bin CSV、
+拟用caption及验证记录。详见[图形与结构建议](RD_GRESHO_BOOST_STYLE_20260928.md)。
+无论文插图/commit/push/COSMA操作。
+
+## 139. 2026-09-28：区分Gresho两侧moving boost0配色
+
+**作者：Codex；用户要求两侧moving boost0不要同为橙色。** 保留N面板橙色，
+LDA面板改为紫色（#9467bd），散点、均值线和图例同步。其他样式不变。
+重新生成独立PDF/PNG并渲染检查；五组case记录、输入hash与五份径向均值CSV
+均与§138逐字一致，无新solver运行或论文修改。档案：
+`../local_runs/gresho_boost_color_preview_20260928_v1/`，含绘图脚本及verification.json。
+
+## 140. 2026-09-28：Gresho插入4.3.2，并准备三组Sod本地审核图
+
+**作者：Codex；用户授权将§139配色版Gresho图插入4.3.2，少写文字，并先本地审核Sod。**
+Yee/Gresho共用Boosted vortex tests小标题，新增一段Gresho设置与结果说明及Figure4.8。
+限定Yee原co-moving说明的范围，Gresho明确lab frame；无4.3.1或理论改动。
+为避免浮动插图混入红字备选稿，三张vortex图后clearpage。249页全文编译通过，
+无未解析引用/LaTeX错误；正文165--169渲染审核，Figure4.8在正文168/PDF190页。
+论文master.pdf更新；Chapter2/3/master.tex等原改动及红字正文逐字保留。
+
+Sod复用§104完成的lab moving N/Roe与LDA/Gauss3：glass128²共16384节点，
+单管初始有效Nx64，gamma1.4，rawt=.08、tau=.16；CFL.08、cap1/3000，N/LDA实际
+917/970步，未声称相同步长历史。制作三页独立审核PDF及各页PNG/PDF：密度/vx/压力/
+比内能全剖面，接触间断/激波放大，rawt0/.04/.08二维密度中央条带。散点保留全管
+8187节点，均值用128等宽xi bins；误差仍按原节点median-dual area加权。
+检查源码/二进制/Config/IC/参数hash、五份快照时间和正性，复现原3个L1至1e-14；
+比内能与状态方程一致。密度图仅从快照节点重建Delaunay进行显示，不当作native
+connectivity诊断。三页PDF均已渲染审核，输入hash复检不变。
+
+N较弥散，LDA更尖锐但vx最低-0.737816，密度/压力欠冲也保留；原全局质量/能量漂移
+完整记录。只是一组分辨率的moving结果，无新增hydro运行、static对照或收敛结论。
+Sod暂未放论文。档案：`../local_runs/sod_thesis_preview_20260928_v2/`；论文更新档案
+`../local_runs/thesis_gresho_sod_preview_20260928_v1/`。详见
+[Sod审核记录](RD_SOD_THESIS_PREVIEW_20260928.md)。无commit/push/Overleaf/COSMA操作。
+
+## 141. 2026-09-28：匹配static Sod，并以一阶LDA检查Morton比较
+
+**作者：Codex；用户要求绘制static mesh Sod，检查是否像Morton2023那样无明显振荡。**
+新建4个冻结同源static二进制，先过4个uniform门禁，再完成4个Sod science运行。
+与§104 moving对照使用相同glass128²/单管Nx64、gamma1.4、rawt.08/tau.16、CFL.08、
+cap1/3000。Static N/Roe+lumped RK2、LDA/Gauss3+F1为主对照；另外用现有
+RD_DIAG_PREDICTOR_ONLY跑Gauss3/Roe一阶LDA。无生产源码或默认配置修改。
+
+结论：static LDA/F1最低vx=-.729293，moving=-.737816，大幅欠冲未随网格固定而消失。
+Static N最低-2.13e-8；一阶Gauss/Roe LDA最低-1.60/-1.71e-8，负速度 trough消失，
+但最高vx1.1695/1.1385仍有正向过冲。主F1与一阶CFL/cap相同、实际步历史不同；
+不能声称严格同dt因果隔离或证明F1代码错误。结果表明网格运动/edge flip并非
+该欠冲的必要条件，后续可检查时间更新/质量形式。Static质量/能量漂移≤4e-16。
+
+核验binary/Config/IC/param/source hashes；所有static坐标逐位不变、VertexVelocity=0，
+初态与moving匹配1e-14，所有保存状态正且有限，原moving L1复现到1e-14。
+三页PDF包含全剖面、contact/shock放大、静态F1/一阶LDA对照，散点保留8187节点，
+均值128xi bins、误差仍按原始节点dual area加权；三页渲染通过。
+
+重新核对Morton原文§5.1.1/Fig7：一阶LDA1/N1、规则隔行错点、gamma5/3、CFL.4，
+明确指出LDA1在x=.5有振荡并随分辨率减弱，不是无振荡保证。本轮保留当前glass和
+gamma1.4等，不冒称完整Morton复现。档案`../local_runs/sod_static_matched_20260928_v1/`；
+[报告](RD_SOD_STATIC_COMPARISON_20260928.md)。论文未改，无commit/push/COSMA操作。
+
+## 142. 2026-09-28：推送用户已提交的三张moving-mesh论文图
+
+**作者：Codex；用户要求先将上次commit的图片推送GitHub。** 检查确认目标为thesis
+main上的用户提交2efbebe（add figures for moving mesh results），只新增Yee convergence、
+Yee profiles和Gresho boost profiles三个PDF。Fetch发现origin/main从268bb20前进到
+8f3d53f，新增Overleaf Chapter1修改及merge。将尚未发布的图片提交rebase到其上，
+无冲突，新hash aa3712a；核验三张图片blob与原提交一致、Chapter1与远端逐字一致。
+正常push origin HEAD:main成功（8f3d53f→aa3712a），随后核对远端main与本地HEAD。
+未新增图片内容、未提交本地未跟踪文件、未push AREPO仓库或Sod预览。保留用户原
+commit作者。此次仅Git同步，未重新编译；本地master.pdf尚未包含新拉取的Chapter1更新。
+
+## 143. 2026-09-28：删除Chapter3 TODO并调整两张RT图为横向页面
+
+**作者：Codex；用户要求删除Chapter3 TODO，将两张R–T instability图横过来方便阅读。**
+删除K矩阵附近唯一剩余的法向量归一化TODO，矩阵公式与说明不变。将Figure3.8/3.9
+由sidewaysfigure改为afterpage内的landscape/figure，沿用已加载的包；图宽改用横页
+linewidth，保持原有图形比例。两份原图PDF、caption、label和其余章节逐字保留。
+
+全文XeLaTeX编译成功，249页；两图在正文134/135页（PDF156/157），Rotate90，打开即
+可正向横读。矩阵所在页、两图及相邻正文页均渲染检查，无裁切或分页异常；无编译
+错误、未解析引用或过大浮动警告。核对所有tracked文件hash，仅chapter3.tex变化；
+git diff --check通过。master.pdf/master.bbl已刷新，也包含§142拉取的Chapter1内容。
+档案`../local_runs/thesis_ch3_rt_landscape_20260928_v1/`保存before/build/diff/verification，
+交付`output/pdf/thesis_chapter3_rt_landscape.pdf`。无solver操作、commit或push。
+
+## 144. 2026-09-28：核实Sod坐标、镜像分辨率及Morton/SWIFT初值差异
+
+**作者：Codex；用户要求先核实initial condition、xi/tau、镜像后的有效resolution，
+进一步对比Morton2023和SWIFT Sod2D。** 直接检查共享IC、六组static/moving零时快照、
+归档Config/参数/hash；均为单位周期方盒，x<.5高密高压，周期接缝处反向Riemann问题。
+16384节点，半盒管道8187节点；h0=1/128，Ltube=.5，初始有效Nx64。不是128个bin或
+sqrt8187。IC位置逐位等于取模后的SWIFT glass128；几何并非逐点镜像。
+
+xi=2(x-.25)、tau=2t保持pseudo1D Euler缩放，速度/密度/压力不改。10001点解析解
+rawt.08与tau.16逐位一致；按精确波速，周期双激波首次相遇rawt.142681，晚于当前终点。
+Morton§5.1.1初始rho/v/p相同，但gamma5/3而本组1.4；其规则隔行错点、CFL.4、LDA1/N1
+也不同。文中该节/图注未列终止时间，不声称t.2已经核实或当前组是论文复现。
+
+核对本地SWIFT与upstream b2ac805的Sod2D源码：makeIC/参数逐字一致。默认rhoR=.140625、
+gamma5/3；两种glass128²/48²各缩放.5后沿x铺两份，2×.5盒共37376粒子。由面积和粒子数
+直接得到rhoR/rhoL=(48/128)²，名义粒子等质量。其中央单位宽图窗左/右间距1/256与1/96，
+两半段分别128/48间隔；不同于我们两侧1/64，也不能称为统一Nx128。默认时间.2/CFL.1。
+
+此核实不改变先前共用IC的static/moving或F1/FE内部对照结论；只限定跨论文/代码比较。
+[详细记录](RD_SOD_IC_MORTON_SWIFT_AUDIT_20260928.md)；档案
+`../local_runs/sod_ic_audit_20260928_v1/`含audit.py/json、hash和固定revision的SWIFT源文件。
+未修改实验输入、solver或论文，未新跑hydro，无commit/push。
+
+## 145. 2026-09-28：Sod_2d_Morton的glass一阶N/LDA两档计算
+
+**作者：Codex；用户要求改成Morton2023设置但保留glass，并命名Sod_2d_Morton。**
+新增独立example/run/analyze/README，使用同源冻结构建，无solver/default改动。
+核对本地原RD SODX constants/setup：2×2周期盒、中央高态、T_TOT=.2；此副本无Git元数据，
+不冒称已经确认论文Figure7原始revision。按论文设置v=0而不复制本地旧代码1e-9seed。
+gamma5/3，rho/p=1/1与.125/.1，CFL.4，静网格Roe残差、完整forward-Euler N/LDA。
+通过既有predictor-only guard实现一阶，避免关闭RK2落入legacy两调用路径。
+
+有效Nx64/128对应全盒128²/256²；统一wrapped relaxed glass128，高分辨率2×2周期铺接。
+新图取1<x<2，xi=x-1、tau=t，终止.2；不沿用旧单位盒tau=2t。5时刻输出。
+两项uniform先过（最大9.44e-16），再跑四项science，最多2worker、每rank OMP/BLAS1。
+四项均完成，实际226/481（N）和235/489（LDA）步；AREPO carrier/tree/dyadic时间步保留，
+虽CourantFac相同，不声称与原代码nodal RD CFL逐步一致。cap.02未限制实际步长。
+
+N vx_max .867319/.856229，LDA .955933/.879791，解析平台.841195。LDA稀疏波尾部过冲仍有，
+高分辨率明显减弱；Nx64最低vx约-.000210，Nx128约-1.8e-8，没有先前F1约-.73的大槽。
+本轮同时改变EOS/时间格式等，不能单独归因gamma或称所有RK2错误。全部保存状态正/有限，
+N/LDA初态逐位匹配，坐标不变/VertexVelocity0，最大质量漂移3.95e-16、能量8.08e-16。
+两页PDF与nativePNG保留全部节点散点及128bin均值，误差按原节点dual area加权，已渲染审核。
+
+[详细记录](RD_SOD_2D_MORTON_GLASS_20260928.md)。档案
+`../local_runs/Sod_2d_Morton/20260928_v1/`含source/config/binary/IC/参数及hash、日志、快照、
+summary/verification和审核PDF。未写论文、commit/push或操作COSMA。
+
+## 146. 2026-09-28：同一Sod_2d_Morton配置补齐moving mesh与RK2/F1
+
+**作者：Codex；用户澄清应针对该物理配置把moving mesh、RK2等都算一遍。**
+沿用§145完全相同IC/source：gamma5/3、2×2周期盒、有效Nx64/128、xi=x-1、tau=t、
+终点.2、CFL.4、cap.02、lab frame。新增7隔离构建、7uniform gate和14science runs；
+连同4项已完成一阶Roe基准，共18science全部完成，无数值失败或调小CFL重试。
+新增static N/RK2、LDA/Euler/Gauss3、LDA/F1 Roe/Gauss3；moving N/RK2/Roe split、
+LDA/F1 Roe split/Gauss3。既有split-stage guard禁止predictor-only，未硬拼moving Euler，
+未修改guard、solver、默认Config或增添limiter。单rank，OMP/BLAS均1，最多2worker。
+
+9项总uniform最大偏差2.00e-15；135保存状态均正/有限，初态匹配、EOS、stage0/1、
+static位置不变及moving实际运动均核查。归档source/config/binary/IC/参数/快照hash复核。
+所有组使用相同CFL/cap而非相同dt；moving Roe/F1 Nx128最小dt9.76562e-5，其余Nx128
+最小.000390625。均未触及cap.02。未声称这些时间步等同原standalone nodal RD CFL。
+
+LDA/F1大负速度槽仍在：Nx128 static/moving Roe为-.594770/-.595945，Gauss3为
+-.594740/-.583813。静网格一阶和N/RK2没有同量级负槽，不能泛称所有RK2有问题。
+静网格加密后负槽面积约减半但深度不明显下降。Moving三组在两档均降低rho L1，
+接触间断更锐利，但vx/p L1均升高。Moving Roe/F1 Nx128有明显接触区散点离群：
+vx_max1.200884、e_max8.531915；Gauss3为.991746/2.324658，平均线会掩盖局部极值。
+静网格质量/能量漂移≤3.95e-16/1.08e-15；moving最大为.0958%/.2112%，明确记录，
+不以uniform gate代替非均匀物理守恒验证。逐步ALE记录与快照漂移相符至打印精度。
+
+`run_variants.py`/`analyze_variants.py`及README加入example。完整18行误差与步长表见
+[报告](RD_SOD_2D_MORTON_VARIANTS_20260928.md)。档案
+`../local_runs/Sod_2d_Morton/20260928_full_v1/`保存全部配置、数据、日志和summary/verification。
+六页PDF按mesh/time/residual各两档排列，保留全部原始散点与128bin均值，误差按原节点
+当前dual area加权。全部页面渲染检查；Roe大能量离群点专门标注并复核，无裁切。
+纯本地预览，未改论文、commit/push或操作COSMA；所有计划计算均已结束。
+
+## 147. 2026-09-28：Sod管道横轴简化为x，沿用t=.2比较约定
+
+**作者：Codex；用户接受默认Morton输出t=.2，并询问周期镜像与xi平移的关系，要求简化横轴。**
+按横轴直接标x、范围0–1理解其“改成x = 1”，已先说明此理解。核对实际IC生成器与
+本地原SODX setup：原坐标X∈[0,2)，.5<X<1.5为高态，外侧低态；左管0<X<1为反向
+Riemann初态，右管1<X<2为标准Sod，原盒两端低态周期连接。这里仅物理量初态镜像，
+不声称glass节点逐点对称。新显示坐标x=X-1等于原xi，只平移，不缩放长度或时间。
+
+两种analysis绘图入口的横轴改为x，标题时间改为t=.2；不改任何IC、原archive metadata、
+CSV、误差数据或solver。新presentation档案`../local_runs/Sod_2d_Morton/20260928_display_x_v1/`
+从18个原终点快照与bin CSV重画六页PDF；逐位核对原散点/均值，输入hash前后不变。
+六页渲染审核及文本标签检查通过，保留所有离群点与极值标注。用户t=.2约定已记录，
+仍区分采用的比较时间与论文图注是否明确标注的文献事实。未重跑hydro、改论文或push。
+
+## 148. 2026-09-28：确认一阶RD更新并收敛Sod主图范围
+
+**作者：Codex；用户重申thesis中LDA默认Gauss3 contour，主要比较static/moving RK2
+及static first-order RD，并核实forward Euler是否就是删去Chapter3的RK2第二阶段。**
+核对solver3921–3972、4057–4071、5382附近及实际归档Config：predictor-only使用完整dt，
+stage0完成后直接break，保留U*=U^n-dt/|S_i| sum(phi_i^T)，不进入corrector或F1时间项。
+与Chapter3 eq:RD_2D_update/eq:RD_RK2_predictor一致。保持TOTAL_RESIDUAL+PREDICTOR_ONLY
+是为了走完整时间步路径；不能简单去掉TOTAL_RESIDUAL后落入legacy半权重调用。
+
+新增plot_main_comparison.py，从既有18组中选12组：两档Nx的N一阶Roe/static、N RK2
+Roe/static/moving，LDA一阶Roe/static、LDA RK2 Gauss3/F1/static/moving。主图每列只保留
+三个数值曲线和解析解；图例改为first-order RD，页脚明确一阶Roe及RK2残差配置。
+Morton式LDA一阶基准与thesis默认RK2之间同时改变残差，不能当作纯时间格式对照；
+static/moving RK2是同残差家族的mesh对照。诊断Roe-LDA moving组保留原档案，不再混入主图。
+
+新presentation档案`../local_runs/Sod_2d_Morton/20260928_main_comparison_v1/`，两页按
+Nx128、Nx64排列；全部原始散点及128-bin均值保留，输入SHA和重算均值逐位核对通过。
+PDF两页渲染检查通过，无裁切或图例遮挡关键特征。README/local context同步。
+未重新计算hydro、修改solver/论文、commit/push或操作COSMA。
+
+## 149. 2026-09-28：Sod曲线改虚线、简化标题并核实比内能振荡
+
+**作者：Codex；用户要求三条数值曲线均改虚线避免遮挡，去掉页脚，标题仅保留Sod
+shock tube, Nx=...，并询问specific internal energy为何振荡明显。**
+plot_main_comparison.py改用短/中/长虚线及不同相位，解析解保留黑实线。新v2档案
+`../local_runs/Sod_2d_Morton/20260928_main_comparison_v2/`保留原v1和全部science数据；
+输入hash与原始散点/128-bin均值核对不变，两页Nx128/64均渲染检查。
+
+读取实际HDF5的Density/Pressure/InternalEnergy，对12个终点快照491520节点逐点检查
+e=p/[(gamma-1)rho]：最大绝对偏差4.44e-16、相对偏差2.14e-16。不是把total energy当成
+specific internal energy，也未混用gamma。源码update_primitive_variables.c的非宇宙学
+理想气体路径先由E/M-v²/2恢复e，再用p=(gamma-1)rho e设置压力；EOS一致性只证明
+绘图字段关系正确，不能排除产生rho/p误差的solver问题。
+
+Nx128 static LDA/Gauss3/RK2在x=.709069的节点rho=.176757（解析.229806，-23.08%），
+p=.293417（解析.293945，-.18%），所以e=2.490006（解析1.918654，+29.78%）。该接触
+区域的bin峰值e_mean=2.270096，p_mean/[(gamma-1)rho_mean]=2.269239；平均运算与取比值
+不交换，但此差别远小于主峰，不是主峰来源。激波前x=.884357节点p低65.48%、rho低
+40.84%，e相应低41.64%；moving对应最低e=.583489，压力/密度相对下冲也吻合。
+上述是振荡在派生变量中的代数表现，尚不判定RK2/F1振荡的具体数值机制。
+
+audit_internal_energy.py/json保存检查和节点ID，verification保存输出hash/审核结果。
+未重新跑hydro、修改solver/论文、commit/push或操作COSMA。
+
+## 150. 2026-09-28：Sod仅保留rho/vx/p并提高导出清晰度
+
+**作者：Codex；用户要求去掉specific internal energy，提高DPI，并随即澄清标题应为
+Sod shock tube, Nx=..., gamma=..., t=...。** plot_main_comparison.py改为3×2布局，
+两页仍为Nx128、Nx64，标题包含gamma5/3和t.2；保持已有虚线、颜色、全部散点和均值。
+PNG由180dpi提升到600dpi（5700×4740）；PDF显式600dpi raster scatter，曲线/文字为矢量。
+直接检查PDF12个嵌入散点图层的像素尺寸和变换矩阵，确认两向均600dpi。
+
+新档案`../local_runs/Sod_2d_Morton/20260928_main_comparison_v3/`保留旧版本，复核science
+输入hash、散点/均值及方法metadata不变；两页渲染检查通过。README/local context同步。
+此为展示修改，未重新跑hydro、改solver/thesis、commit/push或操作COSMA。
+
+## 151. 2026-09-28：将Nx64 Sod图和简短描述加入Chapter4.3.2
+
+**作者：Codex；用户选择Nx64用于thesis，理由为Nx128虽精度更高但定性行为不变，
+点数较多影响可读性，要求先放入图片并添加少量文字。** 在Chapter4.3.2新增Sod shock
+tube小标题和两短段，交代gamma5/3初态、128² glass全盒2×2、周期反向双管、显示x=X-1、
+有效Nx64、lab frame/CFL.4、t.2，以及moving接触间断更锐利和两种mesh的LDA/RK2振荡。
+图注记录N/LDA、static first-order/static RK2/moving RK2、全节点散点和128-bin无权均值，
+并明确一阶Roe、N RK2/Roe、LDA RK2/Gauss3+F1，未将其解释为纯时间推进对照。
+
+从已审核v3两页PDF提取第2页到thesis `chapter4/figures/sod_glass_Nx64_t02_profiles.pdf`，
+逐字节核对page content和所有XObject数据流，保持矢量曲线/文字与600dpi散点。
+新图为Figure4.9，正文169页（PDF191），说明文字在正文166页（PDF188）。新增短图目录
+标题以避免完整图注扩张list of figures；原vortex文字、图注、红色草稿与4.3.1逐字保留。
+
+隔离完整源树XeLaTeX/latexmk编译成功，共250页，无编译错误、未解析引用、重复label或
+float-too-large。渲染检查PDF187–192页通过；新内容无裁切或溢出。复核tracked文件hash，
+本轮仅chapter4.tex变化，用户原chapter3修改完整保留。master.pdf/master.bbl已刷新。
+档案`../local_runs/thesis_ch4_sod_20260928_v1/`保存before、source/build、diff、provenance、
+verification和两页Sod新增内容review PDF。未重新计算hydro、commit/push或操作COSMA。
+
+## 152. 2026-09-29：审核用户的boosted-vortex文字并核实Yee盒长
+
+**作者：Codex；用户修改4.3.2的Yee/Gresho说明后要求审阅，并询问box size10是否正确。**
+读取thesis main219853e（及前一Yee修改），本轮不编辑论文。参数模板
+examples/yee_2d/boost_comparison/param.template:26为BoxSize10；本地COSMA移交的
+Nx48/96/192 boost10 HDF5 Header均10，坐标覆盖0–10；COSMA comparison归档分析函数以
+中心(5+10t,5)和周期10求精确解，故t1正好平移一个盒长。Gresho使用单位周期盒。
+移交HDF5符合本地inputs_manifest，但其文件SHA与后来COSMA comparison.json记录不同，
+初次尝试逐文件对应断言失败，未将本地文件冒称为逐字节验证过的COSMA原始IC。
+COSMA原始快照/参数不在当前导入副本；此处核实配置和坐标定义，未连接COSMA重验原始运行。
+
+按comparison.json重算四点mass-weighted拟合：moving LDA密度阶1.739337，速度阶
+1.401267，用户将1.401写成density是明确笔误。速度仅前三点阶1.553560，相邻阶
+1.736805、1.370314、1.106998，故不能把偏低阶数仅归于384单点。密度前三点1.813868。
+两种mesh误差比支持显著降低；最大速度改善约22.5倍，密度约4.4–8.5倍。
+
+核对当前所有匹配glass Gresho campaign：static boost10终点t1，static boost3终点t3，
+static boost0终点t3；boost0/10的t3配对只有moving。未找到支持文中新句static boost10
+在t3 completely dissipated的当前结果。boost10/t1 static N峰.15345确实强耗散，但不
+代替未计算的t3。重叠径向剖面支持弱boost敏感性，不证明完整mesh/state轨迹严格不变。
+建议保留用户强调的bulk advection与涡旋自身旋转两项意义，弱化严格不变及因果表述，
+将edge-flip影响留作未验证机制；恢复一句Yee static-lab/moving-comoving与h/dt同步细化
+说明，修正scalar/vector boost记号、0和10间缺and及equal timesteps语法。
+本轮仅更新本项目工作记录；无论文修改、编译、hydro运行、commit/push或远程操作。
+
+## 153. 2026-09-29：澄清Yee static盒长、周期边界和N²分辨率定义
+
+**作者：Codex；用户追问static Yee是否同样box10，periodic是否要求单位盒，以及固定N²
+是否降低分辨率。** 再读static boost10参数：BoxSize10、PeriodicBoundariesOn1，与moving
+共用盒长和IC。直接读取本地yee_static_moving_384_20260924_v1/inputs的四个HDF5，
+Header均10、节点数依次2304/9216/36864/147456，确为48²/96²/192²/384²。
+当前解析初值函数在(5,5)中心使用exp(-r²)尺度，未将r除以盒长，涡旋长度尺度约1。
+
+解释periodic仅要求U(x+L)=U(x)，不限定L1。N是每盒边名义点数而非每单位长度点数，
+h_nom=sqrt(A/Ntot)=10/N，四档为.208333/.104167/.0520833/.0260417。
+若保持涡旋物理尺度不变而把L由1放到10，用户指出的线性分辨率降低10倍成立；
+若连涡旋尺度与单位一致归一化，则h/涡旋尺度不变。不能仅将BoxSize改1而保持未缩放
+的Yee公式，因为这同时改变涡旋相对盒长及周期镜像问题。Static/moving同盒同点集，
+比较不因盒长10失配；固定L下以N拟合收敛阶仍正确，建议论文明确h_nom=10/N。
+本轮仅解释并更新记录，无论文修改或新运行。
+
+## 154. 2026-09-29：按用户决定保留boost文字，仅修正1.401的变量笔误
+
+**作者：Codex；用户明确保留现有4.3.2表述，只授权修正1.401对应变量。**
+在本地chapter4.tex中仅将该句的density error改为velocity error，数值和其余文字不变。
+用户决定不额外加入h=10/N，不将Galilean invariance改为approximate，保留edge flip
+可能影响误差的猜测，也不加入lab/comoving frame说明。Comoving frame目前是优化手段，
+不作为默认或必需选项；是否必要仍待研究，Gresho boost10已经在lab frame运行。
+用户解释省略static boost10/t3曲线是因为t1已经耗散，不需为此另画结果；此为其文字
+解释，不记作新增t3计算证据。上述编辑决定取代§152–153的相应修改建议。
+核对thesis差异仅一个词；未编译PDF、运行模拟或commit/push，仍待正常GitHub/Overleaf同步。
+
+## 155. 2026-09-29：解释equal timestep、CFL和二进制步长上限
+
+**作者：Codex；用户询问为何此前使用1/xxx步长而不直接由CFL计算。** 核对原参数、
+COSMA导入的prepare脚本、Gresho冻结Config及当前timestep.c：CFL仍计算，MaxSizeTimestep
+只是额外上限；FORCE_EQUAL_TIMESTEPS取全节点及MPI最小候选值，并向下分到二进制timebin。
+Equal指同一轮全节点共用步长，不要求各轮步长恒定。此前vortex对照有意使用共同小上限，
+让static/moving及不同boost的实际时间步序列匹配；Yee随N翻倍将上限减半，依次1/1024至
+1/8192，CourantFac=.2。Gresho cap1/4096、CourantFac=.3、TimeMax3，向下分档后实际
+3/16384，五条展示曲线时间序列相同。移动Gresho冻结Config保留RD_ALE_CFL_TIMESTEP。
+这种选择用于控制比较中的时间离散差异，不是equal-step算法要求，也不是最优运行效率
+测试。满足CFL不自动证明时间误差可忽略；完整时间步独立性需对应配置的减半对照。
+本轮解释现有设置，不修改论文、参数、solver或运行新模拟。
+
+## 156. 2026-09-29：首次moving Sedov试跑及区域注入/CFL/一阶对照
+
+**作者：Codex；用户要求参考本地SWIFT SedovBlast_2D尝试moving mesh，并核实Morton
+区域注入的动机。** Morton§5.2.3主要为避免单点沿少数连边传播造成方向不对称，且明确
+报告LDA不稳定；不把它改述为单点必然求解失败。SWIFT采用最近21粒子、glass128²、
+单位周期盒、gamma5/3、rho1、P0=1e-6、E1、t.05。RD按实际median-dual质量归一化
+热区能量，SciPy周期Delaunay面积与native初始质量核对，避免照搬等质量SPH归一化。
+
+复用经production源码hash核对的四份Gresho冻结N/Roe/lumped RK2及LDA/Gauss3/F1
+static/moving二进制，并补冻结static first-order N。保持lab、mesh regularization、
+equal adaptive CFL、moving RD谱限制，CFL.1/cap.01；不修改solver、limiter、floor或
+assert。五个128² uniform gate通过，最大8.88e-16。每runner最多2worker，重叠诊断
+最多4solver，全部单rank、OMP/BLAS1。18次native尝试全部结束，无活动进程。
+
+21点(rmax.01959655)：static N/RK2在t.00672073 predictor负压，moving N在.00226440
+corrector后负质量；LDA两个mesh在2步左右负压。扩大r=.05到130点后static N完成t.05，
+moving N仍在.00828857负质量，LDA两mesh仍早期负压。21点CFL减半后static/moving N
+分别在.00672493/.00296021失败；一阶static N在.00663452负质量。因此不能仅归因RK2，
+也未证明扩大注入区域或减小CFL即可得到稳定moving强激波结果。
+
+130点static N最终rho_min .04377381、rho_max2.42160966、p_min1e-6，质量/能量漂移
+0/-2.22e-16；激波扩散且中心径向速度散点较大。Moving在共同存盘t.00500488时激波
+更尖，但能量漂移-.650671%、质量+3.00169e-6；失败前后账本还显示变化，未把图像
+清晰等同守恒或稳定。其predictor末rho_min7.94e-4仍正，corrector后出现负质量。
+所记录midpoint CFL比值始终>1，根因仍未隔离，不据此修改数学或放宽正性要求。
+
+使用SWIFT二维圆柱解析函数(nu2，R∝t^.5)，t.05激波半径.2579946124，能量积分与
+shock jump核查。保留有限注入半径的早期瞬态限制，不使用球对称t^.4参考。
+新增`examples/Sedov_2d/`准备/分析入口；完整设置、失败点、预览与限制见
+[报告](RD_SEDOV_MOVING_PILOT_20260929.md)。档案`../local_runs/sedov_2d_20260929_v1/`
+保留所有源/二进制/Config/IC/参数hash、失败日志、快照、summary和verification。
+早期static/moving密度图明确标注before failure；仅static完整结果画t.05解析对照。
+未编译新solver、改论文、commit/push或操作COSMA。
+
+## 157. 2026-09-29：Sedov的LDA可行性与改进次序
+
+**作者：Codex；用户询问LDA是否可以完成、如何改进。** 复核§156日志：两种注入和
+两种mesh的纯LDA/Gauss3/F1均在早期predictor恢复压力时失败，130点moving为第3步
+t3.66211e-5、p=-2.1355e-8，相对冷背景1e-6已非机器舍入尺度。这里只定位触发检查
+在predictor，不排除前几步corrector累积影响；不能据此把全部原因归于F1或edge flip。
+
+读现有guard确认RD_RK2_SPLIT_STAGES仅接受N/LDA，不能将B_SCHEME作为当前路径的
+一键修复。旧RD_ALE_APOSTERIORI_FALLBACK是B-engine诊断，§17.5已撤回其production
+正性策略地位；局部N重算本身曾失败，本次Sedov N也会负质量，故无保证的N/LDA
+混合不能自动获得Euler正性。Rank-deficient F1 lumping和Gauss3均不是正性limiter。
+
+建议先固定130点、CFL.1原IC，以完成的static N作基线定位moving负质量及几何转换
+守恒缺陷；逐阶段区分临时Q更新、modified coefficient转换和endpoint Q。之后构造
+或验证具有适用ALE/CFL正性性质的保守低阶后备，再对LDA高阶修正进行保守限制，
+覆盖predictor/corrector及必要的几何转移。Graph viscosity/LLF-type是候选而非现成
+保证，必须在实际ALE系数和时间更新下重推/验证。初值平滑和较低压差只能作敏感性
+对照，不等于修复原强Sedov；不能靠硬截断rho/p给出守恒已解决的结论。
+
+核对文献：Morton2023§5.2.3报告LDA1/LDA2不稳定；Guermond et al.
+https://arxiv.org/abs/1710.00417 以正性低阶graph-viscosity更新和convex limiting构造
+高阶Euler方案；Bacigaluppi/Abgrall/Tokareva https://arxiv.org/abs/1902.07773 给出
+RD的MOOD型后验限制策略。这些支持研究方向，不证明当前移动实现可直接使用。
+本轮为代码/日志/文献审核与建议，无新运行、solver或thesis修改。
+
+## 158. 2026-09-29：RD Sedov保正文献与Rusanov低阶原生改造
+
+**作者：Codex；用户要求查阅以往RD求解Sedov的方法，并改造RD增加正性。** 核对
+Morton2023§5.2.3（N/强N混合成功，LDA不稳定）、Abgrall/Lipnikov/Morgan/Tokareva
+2020§8.3（Lagrangian staggered-grid RD + MARS完成Sedov）、Bacigaluppi/Abgrall/
+Tokareva2023（MOOD最终后备为Rusanov，并非无条件信任N）、Guermond等2018/2020/
+2023（graph viscosity + convex limiting；ALE Euler明确固定connectivity）。SGH变量
+布局和时间离散与本代码不同，ALE论文也不是现成edge-flip解决方案。原文链接、
+适用范围、保正推导与后续LDA限制设计见
+[完整报告](RD_SEDOV_POSITIVITY_20260929.md)。
+
+新增显式实验开关RD_RUSANOV_LOW_ORDER；保留N宏选择lumped RK2时间项，但完全绕过
+Roe矩阵，用trapezoidal Euler/ALE通量与scalar Rusanov耗散构造新的空间分布。
+这不是原N、不是Gauss3 LDA，也不是高阶limiter。alpha取全部顶点/方向的声学速度
+上界；由LF pair-bar凸组合导出dt/S_i sum_T(4alpha_T/3)<=1。当前网格选择步长，
+两个实际stage再次检查CFL、bar state、rho及内能；ALE lumped corrector另检查
+b_i=1.5-Mmid_i/Smodified_i在(0,1]及CFL*/(2b_i)<=1。Endpoint正面积缩放保留U的正性，
+但未修复一般非均匀ALE总量。只支持单rank、periodic、equal-step hydro原型。无新增
+rho/p floor或assert放宽，无默认Config或论文修改。
+
+新增C kernel及5000组编译核随机状态/三角形验证；flux一致性/局部守恒最大归一化
+误差1.764e-16，Euler步正性与uniform均通过。全部5个make check_rd通过。
+v1因header guard未加入defines_extra产生build配置失败，原样保留；修正后v2冻结
+源码并建3份独立binary，9次native运行全部完成，共45独立快照。3个uniform gate
+最大误差1.11e-15；关闭新开关的static N t.001与原存档binary的5快照按ID逐点bitwise
+相同。生产源码hash仍与v2一致，无活动solver。新文档/runner补充不改变已测binary。
+
+同原128² glass、gamma5/3、rho1、Pbg1e-6、Ehot1、CFL.1/cap.01、lab设置：
+21点及r.05/130点的static/moving Rusanov四组均完成t.05，分别3051/3118/2780/2762
+步（依次21-static/21-moving/130-static/130-moving）。全部23422个science stage
+rho和内能严格为正，内能密度最小约1.5e-6，actual CFL最大.105566<1，moving b最小
+.497315。原moving N在.00226440/.00828857失败，故同IC下原生鲁棒性改善已证实。
+
+Static质量能量守恒至3.33e-16；moving两组质量漂移-.2397%/-.2358%，能量漂移
+-2.4147%/-1.3154%，因此仍不是完整守恒的Sedov验证。不能把漂移全部归因edge flip。
+Rusanov moving峰值rho约2.63，static约2.00，解析跳跃4；旧static N/130点峰值2.42，
+说明低阶后备的代价是更强耗散。21点最终剖面和二维密度图已视觉检查。
+
+档案`../local_runs/sedov_positivity_20260929_v2/`；入口`examples/Sedov_2d/run_positivity.py`
+与analyze_positivity.py，显式Config_Rusanov_static/moving.sh。下一步高阶方案应限制
+成对反对称的保守修正（含F1时间修正）并覆盖两个stage；trapezoid与Gauss3总残差
+不同，不能任意局部混合。报告给出共享Phi_G的admissible element inflow候选与CFL，
+以及physical endpoint Q一致/保守保正remap的前提。这部分尚未实现，不恢复旧§17.5
+已经搁置的LDA→N MOOD诊断为production策略。无commit/push、COSMA或thesis操作。
+
+## 159. 2026-09-29：Sedov 复用旧 connectivity repair 的守恒收益与负压失败
+
+**作者：Codex；用户追问能否像以前一样做 connectivity repair。** 复核§21–23
+及当前C代码，允许实验Rusanov与已有RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC组合。
+旧support-patch修正公式完全保留；只在此新组合中，从修正后U恢复predictor原始变量，
+使残差输入与RK起点一致，沿用§21.4指出的同步要求。区间mesh velocity不改变，
+不调用带floor副作用的通用recovery。普通N/LDA和无repair分支保持原行为。
+
+冻结一次独立原生build后，uniform及两组相同IC的Sedov完成尝试。uniform误差
+1.11e−15；21点在t.00546875的repair产生p_min=−.01900419，130点在t.0015991211
+首次非零repair产生p=−.0003433578，均在物理stage之前终止。21点此前成功213个
+非零repair步（不是flip计数），全局remap守恒审计最大4.44e−16；两组已接受788/130步，
+1836个science stage正性/CFL/b检查全部通过，最大CFL.104797，最小b.497598。
+
+在共同到达的21点时刻t.00545654296875，无repair/有repair相对质量漂移分别
+−1.75028022e−4/−1.97228878e−9，能量漂移−1.24978715e−2/−1.04590062e−6。
+因此旧修正确实明显改善早期守恒，但下一次remap破坏正性，不能宣称已完成t.05。
+130点首次repair之前两组总量至舍入一致。剩余小漂移可能涉及已有Arpaia endpoint
+conversion缺口，本轮未独立闭合该项，不把全部误差确定归因于它。
+
+独立square-diagonal flip反例验证：旧修正U_i^H=U_i−D_P/ΣŜ，虽然总量守恒，
+却可把热冷对比下的冷点内能减为负数。后续应在各自守恒的Q^L和Q^H间使用同patch
+theta凸混合，而不是仅缩小−w_iD_P（后者留下守恒缺口）。简单patch均值low保正但
+耗散，历史CR low+limited high更值得接回；当前强Sedov尚未验证该fallback。
+本轮未实现新limiter。详见[报告](RD_SEDOV_TOPOLOGY_REPAIR_20260929.md)。
+
+档案`../local_runs/sedov_topology_repair_20260929_v1/`保留源码/Config/header/binary/
+linkage/参数/输入/所有失败日志；成功build binary SHA256
+bbba3d6878bd65d9a04991c74caaf6e79948b901239f16b8470dfee362afd852。
+analyze_topology_repair.py核验双方存档hash、快照及逐stage检查，输出完整JSON和
+守恒时间曲线，已视觉检查。make check_rd首次误用缺numpy的系统Python；显式项目
+Python重跑5项全部通过。全部3次native尝试已结束，无活动solver，无thesis、COSMA、
+commit/push或默认Config变更。
+
+## 160. 2026-09-29：Sedov 更少注入点及 SWIFT 21粒子初值核实
+
+**作者：Codex；用户要求尝试更少注入点，并问SWIFT是否只加热一个粒子。** 本机
+SedovBlast_2D/makeIC.py与官方上游逐字节相同，明确N_inject=21，按到中心距离选
+最近21粒子并分配总热能1；单数注释不能代表实际选择。未运行SWIFT hydro。
+
+同128² glass、pbg1e−6、Ehot1、gamma5/3、lab、CFL.1/cap.01、moving Rusanov/lumped
+RK2，新增1点和7点；RD比内能按实际median-dual热区总质量归一化。复用两套已冻结
+binary，保留有/无旧repair对照，没有修改solver或编译。两uniform gate均1.11e−15。
+
+无repair两组均完成t.05，3189/3142步，峰值rho2.61579/2.64780，质量变化
+−.237630%/−.239931%，能量变化−2.576317%/−2.665694%。与既有21点峰值2.63044、
+能量−2.414700%相比，径向均线基本重合，减少注入点没有明显改善激波展宽。
+单点位置略偏离中心，三组均以初始注入超额能量质心作径向坐标后比较；不是任意
+平移最终数据。密度图接近圆形但有环向起伏，不宣称严格对称或已完成角向误差审计。
+
+旧repair仍分别在t.00506591796875/.0054443359375失败，最低p−.02073846/−.01911174，
+均为IDs7932/7977，与21点失败相同。在此之前的物理stage均正性通过，失败明确在
+topology map内。全部science已接受stage共16156，最大CFL.109499<1，最小b.497257。
+6次native尝试已结束（4成功含2uniform，2数值失败），22新快照均审计。详细表格、
+输入/软件出处及限制见[报告](RD_SEDOV_FEWER_INJECTION_POINTS_20260929.md)。
+
+档案`../local_runs/sedov_injection_sweep_20260929_v1/`含分方法source.tar、binary/
+Config/header/linkage、IC/参数/日志和脚本hash，输出径向图、二维密度及守恒曲线，
+均已视觉检查。分析最初用uniform速度直接bitwise比IC而触发1ulp差异，改成按native
+实际(m*v)/m初始化round trip核对后逐值完全相同；保留初版及错误说明，无物理数据
+或solver断言变化。结束无活动solver，无thesis、默认Config、commit/push或COSMA操作。
+
+## 161. 2026-09-29：Sedov 中心偏差、Morton尺度和SWIFT时间核实
+
+**作者：Codex；用户要求解释r<.15偏高并比较Morton box10及SWIFT输出时刻。** 只读
+审计既有4组Rusanov快照，未新跑hydro。t.05单点moving在r<.05/.1仅1/7节点，
+static21有130/516；中心平均sqrt(S) .0624/.00781。静态守恒至舍入也有明显中心
+密度过高，所以低阶耗散和moving核心采样稀疏是有证据的解释；不可把全部局部偏差
+归为connectivity损失。pressure/velocity的分项机制尚未独立隔离。中心analytic
+rho/vr趋零而p有限1.604968；能量−2.5763%单独按相似律只令R−.65%、中心p−1.30%，
+不足以解释moving中心p约+11%。既有repair匹配时刻对照仍支持全局守恒损失主要源自
+connectivity change，但该repair不保正。
+
+Morton原代码检出工作目录有本地修改，故冻结commit ba336488的main/setup/template
+作依据：L10,rho1,pbg100,rinj.25,t.01,CFL.2。新发现main在构网后将热区能量归一到
+3e5；旧pilot只看setup的p1e6不完整，已附加更正。二维以L,rho,E归一，t.01→.0547723，
+pbg100→.0333333。当前L1/E1/t.05接近其时刻，但pbg1e−6更冷，不能仅凭box rescale
+称为完全相同初值。同N的h/L不因box缩小而变差。SWIFT终止t.05匹配实际最终快照；
+配置输出间隔.01而RD为.0125。没有SWIFT数值模拟结果，图中线是其公式算的解析解。
+
+旧analytic等距v采样首个正半径.03447，细化v_min附近采样后消除中心插值粗糙，
+能量积分1.000000024、shock rho4、shock半径变化7.27e−8，原偏差依然存在。
+新增audit_reference_scales.py，档案`../local_runs/sedov_core_reference_audit_20260929_v1/`
+保留冻结参考文件/hash/JSON/脚本和中心3变量+节点数图，已视觉检查。详细比较与
+推断限制见[报告](RD_SEDOV_CORE_REFERENCE_AUDIT_20260929.md)。无solver、默认Config、
+thesis、commit/push或COSMA修改。
+
+## 162. 2026-09-29：SWIFT、当前RD与Morton初值三方对照
+
+**作者：Codex；用户要求单列SWIFT条件比较。** 重新读本地及上游makeIC/sedov.yml/
+run.sh，扩充§161报告。SWIFT明确二维、周期、L1/rho1/gamma5/3/pbg1e−6/Ehot1、
+glass128²、最近21粒子、初速0、终止t.05、CFL.1、dtmax.01、输出间隔.01。
+当前RD21物理参数相同，增加的1/7点版本只改变注入选择及对应热状态。
+
+源glass实际缓存在local_runs/swift_glass，不在SWIFT示例目录；初次读取后者报缺失，
+由原runner确认缓存路径后完成检查。RD坐标与源glass按周期mod1逐值相同（原文件有7个
+坐标分量稍越界），受热21点ID相同。SWIFT等质量热区质量21/16384，名义phot520.126984；
+RD实际dual质量.001279853512，phot520.892946，相差.147%，两者热区能量均归一到1。
+SPH实际核密度与目标rho0可有差异，不把名义phot当作已运行SWIFT的测量压力。
+
+Morton归一化后pbg.0333333/rinj.025/t.0547723，与SWIFT/RD的冷背景存在明显差别。
+SWIFT脚本启用--limiter是timestep limiter，不是RD topology positivity repair；具体
+SPH formulation/kernel需查编译配置，未凭YAML指定。只补充[对照报告](RD_SEDOV_CORE_REFERENCE_AUDIT_20260929.md)
+及context，无新hydro、solver、thesis、commit/push或COSMA操作。
+
+## 163. 2026-09-29：本地运行SWIFT默认Sedov 2D并对比RD
+
+**作者：Codex；用户明确要求用SWIFT默认设置本地运行。** 旧build-localmac/swift自报
+7fbba7e0-dirty，与当前干净源码8dc43c3c不符，因此冻结git archive另行编译；不修改
+原SWIFT目录。按既有Mac编译选项使用默认SPHENIX、2D、cubic M4，禁手写vectorization，
+串行1thread，OMP/BLAS1。stock makeIC.py/sedov.yml及--hydro --limiter --threads=1
+保持不变。原glass128²最近21粒子、Ehot1/pbg1e−6/t.05/CFL.1。全流程成功：构建20.89s，
+native2.189s，396 evolution steps，6个快照达到0,.01,.02,.03,.04,.05。
+
+运行metadata确认eta1.2348在2D仅15.14285目标邻居，不能引用YAML的48注释。
+SWIFT最终rho_min/max=.0368658/3.60417，明显优于当前RD中心rho约.196和峰值2.63；
+但中心压力显著过冲/欠冲，vr散点包含负值。r<.05/.1粒子数7/21，当前RD21为3/12。
+这是不同空间方法、时间积分和密度估计的整体对照，不能唯一归因为某一个算子。
+未调整SPH邻居数或人工粘性/扩散参数；未新跑RD。
+
+SWIFT质量严格不变。最终E=1.000402051；输入IC E=1.000001517，因此误差+.0400534%。
+注意savedt0 E=1.00153113，其u与IC相同但输出速度非零（最大分量1.82056）；io和statistics
+都用leapfrog速度外推convert_part_vel，不能把首次快照当作原始静止IC。相对首次快照
+误差−.112735%，statistics独立核对一致。当前预算图统一按input IC归一，保留t0输出偏移。
+未对初始fake-step/output生命周期做更深入的代码缺陷判断。
+
+全部6状态有限、rho/p/u正、IDs/逐粒子mass保持，实际时间匹配；不声称审核了每个内部
+stage。native只运行1次且成功，无活动solver。新增run_swift_default.py和
+analyze_swift_default.py，档案`../local_runs/swift_sedov_default_20260929_v1/`含源码/
+配置/二进制/链接/输入/日志/hash/JSON。binary SHA256
+e7787bed22deacfff7634c250085d05cd80a97b4f4b078c6d8c7ad5b678a907d。
+全区+中心3变量图及预算图已视觉检查，初版截轴/首次输出归一图保留analysis_initial，
+当前版本展示所有中心异常值并使用IC预算。详见[报告](RD_SEDOV_SWIFT_DEFAULT_20260929.md)。
+无AREPO solver、默认Config、原SWIFT源码、thesis、COSMA或commit/push修改。
+
+## 164. 2026-09-29：AREPO MMFV Sedov及moving/static RD对照
+
+**作者：Codex；用户要求本地MMFV并与RD moving/static比较。** 新增显式
+Config_MMFV_moving.sh，冻结当前源码另行编译，关闭RD，使用AREPO原生Voronoi FV、
+exact Euler Riemann、原有重构/限制器和常规mesh regularization，无refinement。
+全局equal adaptive CFL.1/cap.01与RD匹配，1rank、OMP/BLAS1。相同glass128²和最近21
+受热ID，Ehot1/pbg1e−6/rho1/gamma5/3/t.05，按native Voronoi热区面积.001279857918
+归一化，phot520.89115与RD520.89295仅差.000344%。
+
+uniform成功1.315s，恒态最大缺陷2.054e−13。初始wrapper额外设置1e−14初始rho断言，
+实际几何重构舍入6.239e−14导致其在成功native之后停止。独立确认rho=mass/Volume逐值
+相同、总volume/mass=1，统一使用项目既有1e−12恒态判据后从冻结gate续跑；未改变
+solver、未重跑该native，旧wrapper保留source.tar，续跑脚本和说明归档。
+
+science完成1179步/179.293s，最终rho_min/max=.0284307/3.97057；r<.05仅4cell但均压
+1.59613（解析1.60505）。全部5science快照最大M/E相对误差2.22e−16/6.66e−16。
+移动Rusanov RD原21点峰值2.6304、中心最低.1960、能量−2.4147%；静态峰值2.0022、
+最低.1248、守恒至舍入。MMFV整体剖面更接近解析，moving RD比static更好保留激波峰值，
+但中心/守恒仍待改善。MMFV稀疏中心仍较准确，不能仅以中心点数少解释RD偏差；不同
+空间方法的对照未唯一隔离耗散与ALE更新贡献。未运行ENZO。
+
+复用现有RD static/moving与SWIFT21（hash核验），四组均21点注入。MMFV cell-average
+按cell centroid绘制，RD按node，SWIFT按particle；径向原点为各自初始能量质心。
+记录raw峰值与binwidth.005的均线峰值，MMFV分别3.9706/3.3024，避免混淆。
+全部10新快照rho/p/u/mass正且有限，EOS最大相对误差4.42e−16；2358 flux记录无mass
+flux reduction或negative-state诊断（不代表空间重构limiter没工作）。2 native尝试均
+成功，已结束。档案`../local_runs/sedov_mmfv_20260929_v1/`，binary SHA256
+198b64f36c0fbed9454493a4798513a320a72334ea81f3cb7c56a2b880bed915。
+新增run_mmfv.py/analyze_mmfv.py，完整剖面+中心放大与预算图已视觉检查。详见
+[报告](RD_SEDOV_MMFV_COMPARISON_20260929.md)。无生产solver、默认Config、thesis、COSMA、
+commit/push变更。
+
+## 165. 2026-09-29：核实Rusanov/Sedov文献并评估LDA混合
+
+**作者：Codex；用户要求追溯文献实际做法，并问LDA+N或LDA+Rusanov是否可行。**
+逐段核查SGH RD、MOOD RD、convex limiting及Morton正文，与当前C kernel和B分支对照。
+纠正来源关系：当前实现是本地构造的低阶Rusanov原型，并非成功SGH RD/MARS Sedov的
+复现；MOOD文章没有Sedov测试。详细原文定位与算法差异见
+[文献及blending报告](RD_SEDOV_RUSANOV_LITERATURE_AUDIT_20260929.md)。
+
+LDA+N已是现有B，但当前强Sedov的N失败意味着不能以N作可靠保正终点。建议下一步
+研究LDA+Rusanov的守恒保正混合，限制完整守恒变量更新而不是只调残差传感器；需要
+处理Gauss3/trapezoidal总残差差异及F1/lumped时间项。正性不自动消除正值过冲，
+恢复二阶也需平滑问题验证。connectivity repair仍需独立的守恒保正remap。
+补充原positivity报告的来源澄清与local context；没有新solver改动、hydro运行、
+thesis修改、commit/push或COSMA操作，未将建议标为已验证实现。
+
+## 166. 2026-09-29：SGH RD的物质网格与当前准拉格朗日ALE对照
+
+**作者：Codex；用户追问staggered Lagrangian RD如何移动网格及与当前差别。**
+核对原文§§2–3、Eq.35c、§8.2：位置/速度共享连续运动学基函数，dx/dt=u，几何用
+二阶段推进，rho J=rho0；热力学使用单元局部空间。§3明确要求映射一一对应，
+remapping不在本文范围，不能作为AREPO Delaunay edge flip的解决方案。
+
+核对本地set_vertex_velocities.c及当前moving Sedov Config：网格生成点速度包含
+流速、压力加速度半步预测和centroid/face-angle regularization，随后按区间速度漂移。
+因此当前配置是准拉格朗日，不能简写成严格w=u。我们还保留同位守恒变量、median-dual
+质量定义及随Delaunay重连变化的邻接关系；即使去掉regularization，重连后的dual
+也不自动成为物质单元。附录式对照已加入[来源报告](RD_SEDOV_RUSANOV_LITERATURE_AUDIT_20260929.md)。
+无solver、配置、实验输出、thesis或Git历史修改。
+
+## 167. 2026-09-29：LDA/F1 + common-Gauss Rusanov保正混合原型
+
+**作者：Codex；用户要求针对现有代码研究LDA+Rusanov。** 新增显式
+RD_LDA_RUSANOV_BLEND=1（保正混合）/0（同Gauss3低阶对照），限定static/periodic/
+1rank/equal timestep，RK两阶段同call。低阶构造Uin=Ubar-Phi_G/(3alpha)，增大alpha
+直到admissible；dt sumalpha/S<=1。两支同总残差，完整F1/lumped时间修正共同受限。
+每三角形使用同一标量限制所有节点/分量，按节点incident degree构造凸组合保正，
+局部修正零和保持守恒。不裁剪rho/p/E；默认LDA/N和moving原型不改。
+
+2000 compiled随机核/patch检查通过，原5项make check_rd通过。首次make用了缺NumPy
+的system Python，在import失败；指定既有21cmfast Python后通过，属于环境问题。
+冻结dirty源码+配置，独立构建mixed、low、flag-absent LDA，全部12个native运行完成，
+60个新快照全部正/有限/静态位置不变，EOS一致，3个恒态缺陷5.55e-16。
+
+相同glass128²/nearest21/Ehot1/pbg1e-6/gamma5/3/CFL.1/cap.01，最终t.05：
+mixed4689步/705.06s，rho_min/max=.0191126/3.79111，径向均值峰2.79825，dE/E=-2.22e-16；
+low2476步/388.58s，rho_min/max=.124614/2.00629，均值峰1.96123，dE/E=6.66e-16。
+原梯形Rusanov几乎等同low。r<.05的mixed均压1.60741（解析1.60510），均rho.027686
+（解析.004353，low.135722）。中心/耗散改善，但前沿外侧meanrho欠冲到约.6，vr散点
+显著增加且有负值；pmin5.03e-12，K=p/rho^gamma最小仅初始下界的3.47e-5，527点
+违反该下界。不是最终无振荡Sedov方案，下一步需要entropy/oscillation constraints。
+
+全部9378 mixed+4952 low science stage检查通过，实际CFL最大.100857/.099992<1，
+mixed correction预算最大缺陷8.44e-15。平均全域1.12%元素受限，主要在corrector。
+独立平滑density-advection16²/32²/64²阶数2.1166/2.0327，mixed与LDA最大差2.45e-14；
+这不是Yee/glass普遍二阶证明。完整剖面、中心细节和预算/limiter图已视觉检查。
+档案`../local_runs/sedov_lda_rusanov_20260929_v1/`；详见
+[报告](RD_LDA_RUSANOV_BLEND_20260929.md)。无运行中solver，无moving、thesis、COSMA
+或commit/push操作。源码保留为可选实验，未提交。
+
+## 168. 2026-09-29：区分LDA/Rusanov Sedov径向展宽与真实角向散点
+
+**作者：Codex；用户追问为什么LDA scatter明显大于Rusanov。** 对既有static混合与
+common-Gauss低阶最终快照作只读后处理，hash、IDs、坐标和dual面积核验通过；图中
+蓝色是LDA/F1+保正混合，不是pure LDA。按dual面积加权，在dr=.005内去掉径向线性
+趋势。.05<=r<.10远离激波，386点：径向速度RMS .158645/.00460087（34.48倍），
+切向速度RMS .0655025/.00374668（17.48倍），径向均值.468728/.476766。改用box中心
+仍有同样结论；更大内部区间也显著。故不能把散点全解释成更尖激波的径向投影。
+
+低耗散保留/产生的非单调扰动与仅保正限制器相容；Rusanov显式黏性压制动量差异。
+混合内区rho更低使v=m/rho对误差更敏感，但动量本身散布也增加，不能全归于除rho。
+静态图不涉及edge flip。glass/离散注入、F1各自贡献尚未隔离；entropy bound缺失
+不等于加上就必定消除速度散点。未改solver或运行新hydro。详见
+[报告follow-up](RD_LDA_RUSANOV_BLEND_20260929.md)，可重现分析与JSON在原档案
+`../local_runs/sedov_lda_rusanov_20260929_v1/analysis/scatter_audit.{py,json}`。
+
+## 169. 2026-09-29：设计混合修正的熵下界与局部振荡约束
+
+**作者：Codex；用户问如何增加约束并检查熵下界。** 对照现有kernel及Guermond等
+§§4.1/4.6/4.7，给出保持triangle公共ell和完整F1修正的凸限制设计。熵用
+Psi=E-|m|²/(2rho)-Kmin rho^gamma/(gamma-1)>=0；当前传入extensive Q，必须除以S，
+或在M^gamma项加入S^(1-gamma)。先把common-Gauss Uin的要求从保正扩展到熵下界，
+同步alpha/CFL，才能证明低阶起点可用；不能只凭以前的low输出未违规作保证。
+
+密度/速度界取低阶凸分解的源状态和Uin辅助状态，corrector纳入U^n；不能只取旧
+邻点极值，否则Sedov从rho=1、v=0开始会阻止膨胀与压力加速。速度界是另加的数值
+约束，并非Euler maximum principle。光滑区需研究几何适配的O(h²)松弛；严格熵
+下界和二阶兼容性不能直接声称成立。每阶段分开审计low/high/accepted，熵最小值
+不等价于完整entropy stability。
+
+复查既有快照hash：527个全局K<1e-6违规点全部位于r=.277602–.312356，中心r<.1的
+K_min=89.371。因此全局熵floor不直接约束中心scatter，需局部熵/振荡约束对照。
+完整[设计](RD_LDA_RUSANOV_CONSTRAINT_DESIGN_20260929.md)。本次为推导与只读诊断，
+未实现新solver、未运行hydro、未修改thesis或提交Git。
+
+## 170. 2026-09-29：试验RD文献的B/Bmax残差比值修正
+
+**作者：Codex；用户要求优先尝试已用于RD的方法。** 核实Morton2023§2.2.3与
+Ricchiuto–Abgrall2010§5.2，移植传统B/Bmax残差比值规则，以现有common-Gauss Rusanov
+替代N低阶分支，外层保留已验证的守恒保正限制。新增显式B_SENSOR=1/2，仅限既有
+static研究路径；没有自行加入熵或局部速度界，非RPJ/MOOD复现。
+
+v1只把原修正乘1-theta，遗漏corrector替换旧predictor残差，contact阶1.3166/1.1066
+暴露问题；两项Sedov在212s主动终止，returncode-15，完整档案与说明保留。v2保存
+old LDA/Rusanov/accepted三分布，混合完整旧新RK残差，再相对SSP低阶候选作守恒修正。
+2000原kernel/patch+1000sensor+1000独立full-RK对照通过，原5项make check_rd通过。
+
+v2全部10native完成，50新快照正/有限/EOS一致/静态坐标不变，恒态误差5.55e-16；
+contact16/32/64阶1.74527/1.85625（两方案相同），仍比原LDA误差大，不宣称Yee/glass
+一般二阶。相同glass128²/21点/E1/pbg1e-6/gamma5/3/CFL.1/t.05：B3102步/458.08s，
+Bmax2559步/378.64s。B raw rho_max10.0045而均线峰2.3794，有严重离群；Bmax raw2.1786，
+均线峰2.1471（pureRusa1.9612，原混合2.7983）。内区.05<=r<.1去趋势vr RMS：
+原混合.158645，B.0920415，Bmax.00387403，Rusa.00460087。Bmax减少散点约41倍，但耗散
+仍强；core r<.05均压1.54876介于pureRusa1.44343与解析1.60510之间。
+
+Bmax Kmin/Kinitial=.999770，47点超过1e-8阈值，最大熵下界欠缺.023%，不是严格保熵；
+B为.0688545/56点。两组保存质量/能量误差到舍入，全stage正性/CFL通过。档案
+`../local_runs/sedov_rd_bsensor_20260929_v2/`，四方案完整散点图及Bmax聚焦图已检查。
+详见[报告](RD_SEDOV_B_SENSOR_20260929.md)。所有solver结束；无moving、thesis、COSMA、
+commit/push操作。默认Config未改，新代码未提交。
+
+## 171. 2026-09-29：LDA/Rusanov与B/Bmax改进的总开发记录
+
+**作者：Codex；按用户要求汇总本轮改进。** 本节是 §§165–170 的统一交接摘要；
+保留各节的推导、失败记录和验证细节。当前成果是 static RD 的可选实验路径，
+尚未推广到 moving mesh、connectivity repair 或 hierarchical timestep。
+
+### 已实现的改进及其适用范围
+
+1. **统一高低阶总残差。** LDA/Gauss3/F1 与 Rusanov 使用相同的 Gauss contour
+   residual。低阶辅助状态为 `Uin=Ubar-Phi_G/(3 alpha_T)`，增大 `alpha_T` 直到
+   密度与内能可接受，并检查实际阶段 `dt sum_T(alpha_T)/S_i <= 1`。
+2. **守恒且耦合保正的混合。** 限制完整空间/时间修正，每个三角形对全部节点和
+   Euler 分量使用同一标量因子。修正逐元素零和；节点按 incident degree 形成
+   可接受状态的凸组合。不通过裁剪密度、压力或能量维持正性。
+3. **移植 RD 文献的 B/Bmax 残差比值。** `theta_k=|sum_i D^L_ki|/sum_i|D^L_ki|`，
+   B 分量分别混合，Bmax 使用所有分量的最大值；外层继续保留上述保正限制。
+   文献低阶 N 在本实验中替换为 common-Gauss Rusanov，采用守恒分量形式，未做
+   characteristic projection，因此不能称为原文算法、RPJ 或 MOOD 的完整复现。
+4. **修正完整 RK 混合。** v1 仅将既有修正乘以 `1-theta`，遗漏 corrector 中
+   旧 predictor 分布的替换，导致 contact 收敛阶约 1.32/1.11。v2 保存旧 LDA、
+   旧 Rusanov 和实际接受的 predictor 三组残差，按新的 theta 混合完整旧/新
+   RK residual，再相对 SSP 低阶候选作修正。独立完整 RK 恒等式检查通过。
+   v1 两项 Sedov 为主动终止（returncode -15），不是 hydro 崩溃；失败源码、
+   输出及原因保留，未作为完成的科学对照。
+
+编译选项：`RD_LDA_RUSANOV_BLEND=0` 为同 Gauss 低阶对照，`=1` 为保正混合；
+在 `BLEND=1` 下，`RD_LDA_RUSANOV_B_SENSOR=1/2` 分别选 B/Bmax，不设则沿用
+仅保正混合。当前限定 static、periodic、全网格 equal timestep、单 MPI rank、
+同一次调用内完成的两阶段 RK、无源 hydro。默认 Config 未启用这些选项。
+实现位于 `src/hydro/rd_lda_rusanov.h`、`src/hydro/residual_distribution_solver.c`
+及 `defines_extra`；检查与运行入口为 `tests/rd/test_lda_rusanov.py` 和
+`examples/Sedov_2d/run_blend.py`，分析入口为 `examples/Sedov_2d/analyze_bsensor.py`。
+
+### 匹配 Sedov 对照的主要结果
+
+四种方法使用相同 glass 128²、单位周期盒、初始 rho=1/v=0、gamma=5/3、背景
+p=1e-6、最近 21 点注入热能 1（按 RD dual mass 归一化），演化到 t=.05。
+CFL=.1、步长上限 .01，由 CFL 自适应选择全局共同二进制步长，实际步数不同。
+径向原点取初始注入能量质心 `(0.5006033127941537, 0.4999065173644349)`。
+
+| 方法 | 密度径向均值峰 | 原始密度最大值 | 内区径向速度散点 RMS | 中心均压 | 最小 K / 初始 K_min |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 原仅保正 LDA/Rusanov | 2.79825 | 3.79111 | .158645 | 1.60741 | 3.47320e-5 |
+| 分量 B | 2.37938 | 10.0045 | .0920415 | 1.57331 | .0688545 |
+| 标量 Bmax | 2.14706 | 2.17861 | .00387403 | 1.54876 | .999770 |
+| common-Gauss Rusanov | 1.96123 | 2.00629 | .00460087 | 1.44343 | 1 |
+
+密度均值峰采用 dr=.005 的不加权分箱均值；速度 RMS 在 `.05<=r<.1` 的相同
+386 个节点上按 dual area 加权，并逐径向 bin 去掉线性趋势。中心均压为 r<.05
+的 130 点不加权平均，同节点解析均压为 1.60510。`K=p/rho^gamma`，初始下界
+为 1e-6。原混合的内区散点是真实角向扰动，不能全归于尖锐激波的径向投影。
+
+Bmax 将该内区径向散点降低约 41 倍，中心压力比纯低阶更接近解析值，但激波
+仍明显耗散；分量 B 的密度离群值达到约 10，当前不适合作为 Sedov 候选。
+Bmax 的 K 下界仍有最大 .0230% 欠缺，47 点超过相对 1e-8 的判据，不能当作
+舍入误差或严格保熵结果。正性、全局熵最小值和完整离散熵不等式是不同性质。
+
+### 已完成的验证与保留问题
+
+- 原保正混合完成 12 个 native runs / 60 个新快照；v2 B/Bmax 完成 10 个
+  native runs / 50 个新快照。保存状态有限且正、EOS 一致、静态坐标及 IDs
+  不变；恒态缺陷 5.55e-16。B/Bmax 全部阶段的正性/CFL 检查通过，保存的
+  质量/能量误差在舍入量级（最大绝对能量漂移分别 1.11e-15 / 2.22e-16）。
+- 4000 个 compiled cases 覆盖低阶辅助状态/保正 patch、B 比值/共同总残差/
+  单位缩放、完整旧新 RK 恒等式；原有 5 项 `make check_rd` 在最终源码通过。
+- 独立规则网格 contact：rho=1+.2 sin(2pi(x+y))、v=(.37,-.21)、p=1、
+  gamma=5/3、单位周期盒，16²/32²/64²，t=.1，步长上限 1/8192。
+  原保正混合的 density L1 阶为 2.1166/2.0327，场值与 LDA 相差不超过
+  2.45e-14；B/Bmax 阶为 1.7453/1.8563，误差更大，仅显示趋近二阶，不能
+  外推为 Yee、glass 或 moving mesh 的一般二阶结论。
+- 熵下界和局部振荡约束目前只是 §169 的设计，尚未实现。若继续，应分别
+  研究 characteristic limiting、Rusanov-PSI/stabilization 或 RD-MOOD，
+  同时保留光滑精度检查；现有结果不代表已解决 moving topology 的守恒与保正。
+
+详细资料：[保正混合](RD_LDA_RUSANOV_BLEND_20260929.md)、
+[熵与振荡约束设计](RD_LDA_RUSANOV_CONSTRAINT_DESIGN_20260929.md)、
+[B/Bmax 文献、RK 公式及完整结果](RD_SEDOV_B_SENSOR_20260929.md)。
+冻结档案位于工作区 `local_runs/sedov_lda_rusanov_20260929_v1/`、
+`local_runs/sedov_rd_bsensor_20260929_v1/`（失败尝试）及
+`local_runs/sedov_rd_bsensor_20260929_v2/`（修正后完成）。
+[完整四方法图](../../local_runs/sedov_rd_bsensor_20260929_v2/analysis/rd_bsensor_profiles.png)
+保留 B 的所有离群点；[Bmax 对照图](../../local_runs/sedov_rd_bsensor_20260929_v2/analysis/rd_bmax_comparison.png)
+展示 Bmax、原混合和低阶。
+
+本次仅整理总日志及 context 导航，没有新增运行或修改 solver/thesis。
+全部 native solver 已结束；开发源码仍未提交，未执行 commit/push。
+
+## 172. 2026-09-29：4.3.3 Ongoing work本地草稿与审核PDF
+
+**作者：Codex；用户明确要求暂不写Sedov结果，先起草edge flip守恒问题与moving
+hierarchical timestep进展。** 论文仓库已在上一轮快进至GitHub `1bb457f`，保留本地
+1.401对应velocity error的更正。本轮仅编辑Chapter4：在4.3.2之后加入正式编号的
+4.3.3 Ongoing work（四段），将4.3.1已落实的红字TODO换为该节交叉引用。
+原Sod/Yee/Gresho正文、其他章节、bibliography及末尾红色备选材料保留。
+
+草稿依据本日志 §§10–11、35、122、159及已有红色数学草稿，分别陈述：保持节点U
+跨flip并不保证积分总量守恒；局部守恒修正的负压风险；modified coefficient到
+endpoint area的另一项守恒误差；粗时间区间被flip截断与新三角形缺少历史的问题；
+按实际triangle birth/last-integrated time闭合完整old incident stars、守恒转移、
+重启区间并限制predictor实际区间兼容性的尝试。明确独立Euler实验的舍入级守恒
+不等于native AREPO已完成集成，也不保证正性、精度或动态bin/MPI适用性。
+未加入Sedov数据、图或结果段落，论文当前数值结果仍说明采用global equal steps。
+
+在隔离目录用XeLaTeX编译全论文（251页）。首次构建读到论文目录的旧bbl，随后
+在隔离目录重新运行BibTeX并优先读取新bbl，再完成两次XeLaTeX；最终没有未定义
+引用/文献或缺字警告。已有其他页的排版警告未作越界修改。摘出物理页191–192，
+即印刷页169–170（4.3.3起始页也包含前一节Sod讨论），逐页渲染检查通过。
+提取检查最初按固定换行匹配结尾字符串失败，核实文本完整后改为规范化空白再检查；
+不是编译或正文缺失。
+
+审核文件：[chapter4_3_3_ongoing_work_review.pdf](../../output/pdf/chapter4_3_3_ongoing_work_review.pdf)。
+完整编译、草稿快照、diff、来源信息与渲染在工作区
+`local_runs/thesis_ongoing_work_20260929_v1/`。
+本地草稿待用户审核，未commit/push或同步Overleaf；未修改solver、未运行hydro。
+
+## 173. 2026-09-29：详述basis change导致的守恒变化，明确repair仍为实验功能
+
+**作者：Codex；用户要求把4.3.3的物理/数学原因写清楚，并说明正在尝试repair。**
+扩充该节开头：用沿用的P1基函数psi_i写出old/new两组U_h展开，明确比较的是同一
+物理时刻、相同节点位置下的两种connectivity。节点U不变，但basis的support与
+gradient改变，故三角形内部重构不同。利用积分psi_i等于median dual area，加入
+Delta Q_basis = integral(U_h_new-U_h_old) = sum_i(Snew_i-Sold_i)U_i，并说明总面积
+不变只保证uniform cancellation，不能保证一般非均匀状态的总量守恒。
+
+新增repair的具体含义：比较受影响patch的新旧basis-weighted总量，再向节点分配
+补偿修正以恢复该patch的守恒。显式写明这是正在测试的experimental feature，
+未在4.3.2展示的数值测试中启用；保留unrestricted repair的负压风险和独立的
+modified-coefficient/endpoint转换误差。hierarchical段落原文保留。
+
+继续采用本地草稿、不加Sedov结果的范围。档案更新为工作区
+`local_runs/thesis_ongoing_work_20260929_v2/`；v1原审核PDF已另存为
+`local_runs/thesis_ongoing_work_20260929_v1/review_v1.pdf`。
+复用已核验且引用内容未变的bibliography，隔离XeLaTeX编译；新增两组公式编号
+4.50/4.51。当前审核PDF扩为印刷页169–171；仅在4.3.3局部设置widow penalty，
+避免段落结尾孤行跨页。未改其他章节或solver，未commit/push。
+最终全论文252页，无未定义引用或缺字警告；三张最终审核页已逐页检查，公式无
+越界，源码与归档hash一致。审核PDF仍使用上一节的固定链接，内容已更新。
+
+
+## 174. 2026-09-29：拉取thesis远端Lay Summary并合并本地4.3.3提交
+
+**作者：Zhenyu Wu 与 Codex（GPT-6）；用户明确要求拉取GitHub/Overleaf更新并与
+本地4.3.3 Ongoing work提交合并。** 论文仓库main原为`c3aa858`，跟踪文件干净；
+fetch origin得到`9e428fd`（write Lay Summary），共同基点`1bb457f`。远端只改
+`zhenyu_thesis/thesis-frontmatter/abstract.tex`，本地提交只改Chapter4，无冲突。
+用fetch+merge完成pull的获取与合并，生成本地merge commit `b6786ed`，保留两个
+原始提交及其历史；没有rebase、force push或直接操作Overleaf。
+
+核验最终tree等于预计算merge tree；Chapter4与`c3aa858`逐字节一致，摘要与
+`9e428fd`逐字节一致，其余跟踪文件不变。30个未跟踪文件的SHA256及两个既有stash
+全部保持不变。diff --check仅报远端摘要第5行既有行尾空格，保留原文未清理。
+本地main现在比origin/main领先2个提交（本地草稿+merge），落后0；跟踪工作树干净。
+按本次Git同步范围未重新编译PDF，未push；现有PDF仍为之前的构建。
+
+保留分支`backup/pre-thesis-merge-20260929-c3aa858`，状态、两侧patch及核验记录在
+`../local_runs/thesis_merge_20260929_214454/`。AREPO源码与已有未提交研究工作未改；
+本轮仅追加此日志并更新context的thesis同步状态。
+
+
+## 175. 2026-09-29：轻度润色Lay Summary，保留原叙述语气
+
+**作者：Codex（GPT-6）；用户提供三篇既有示例，明确要求稍作润色且不大改语言
+风格。** 在论文main `b6786ed`上，仅修改`thesis-frontmatter/abstract.tex`中
+Lay Summary部分。保留原开头、观测/理论对照、第一人称叙述，以及早期黑洞与
+动力摩擦加热→RD/AREPO的研究顺序；修正语法和搭配，将原长首段拆开。用简短
+wake解释gaseous dynamical friction；为Lyman–Werner、baryonic matter及bulk
+velocity换用/补充浅白说明。将almost all galaxies等过强表述收敛，保留主要
+定量信息；没有新增研究结果。纯文本改写，未作新的文献审查。
+
+源文按空白分词约482→528词（含标题/TeX），主要增加来自术语解释。正式Abstract
+从章节命令起逐字节保留；全部其他跟踪论文文件hash不变，4.3.3保持原样。
+未stage、commit、push或操作Overleaf；后续仍需按正常流程同步。
+
+复用论文preamble/customisations，在隔离目录用XeLaTeX编译Lay Summary两页；
+无LaTeX/引用/缺字/overfull/underfull警告，两页已渲染并检查。完整master.pdf未
+重编译。审核PDF：[lay_summary_review.pdf](../../output/pdf/lay_summary_review.pdf)。
+原文、修改后全文、diff、构建和检查记录在
+`../local_runs/thesis_lay_summary_polish_20260929_v1/`。
+
+
+## 176. 2026-09-29：Chapter4结构定型，删除章末红字草稿
+
+**作者：Codex（GPT-6）；用户确认Chapter4整体结构已定型，4.3.2后续可能补充
+Sedov等数值结果，connectivity change只作为ongoing work简述，不再保留红字
+层次的详细推导。** 当前论文main/origin-main均为`8cfb119`（用户已提交同步
+Lay Summary），起始跟踪工作树干净。在Chapter4章末删除整个431行红字块及前导
+空行：Implementation details retained for revision与Alternative implementations
+(to delete)。删除的25个label未被保留论文TeX正文引用。4.3.3及其之前正文逐字节
+保留（仅规范文件末尾空行）；所有其他跟踪/未跟踪论文文件hash与两个stash保持不变。
+原始红字同时保留在Git历史及本次档案`chapter4_removed_red_draft.tex`中。
+
+4.3.1与4.3.3已经说明当前equal-step/one-rank范围、basis-change守恒误差、独立
+endpoint-weight误差、repair实验状态及moving hierarchy待完成内容。删除详细草稿
+不等于这些问题已解决；不增加Sedov结果，也不将备选方案迁回正文。根据本次用户
+决定，更新AGENTS.md和context.md，替换旧的“Chapter4仅为数学工作草稿”定位，
+详细研究继续留在开发记录；explicit thesis-edit授权边界不变。
+
+从当前tracked源码冻结独立完整工程，使用LaTeX编译技能的XeLaTeX/latexmk重建全
+论文及bibliography。成功输出242页，零未定义引用/文献和缺字警告；保留未编辑
+正文中的11处既有overfull hbox报告，未越界修改排版。Chapter4为物理页161–194，
+印刷页138–171，共34页；末尾169–171及Chapter5起始172已逐页渲染检查，衔接正常。
+审核PDF：[chapter4_clean_review.pdf](../../output/pdf/chapter4_clean_review.pdf)。
+完整PDF、源码快照、删除备份、diff及核验在
+`../local_runs/thesis_ch4_remove_red_20260929_v1/`。论文目录原master.pdf未覆盖。
+本轮修改未stage/commit/push，未操作Overleaf或运行hydro。
+
+
+## 177. 2026-09-29：讨论Chapter5的双主题总结与future work结构
+
+**作者：Codex（GPT-6）；用户提供约三页的结论章示例，提出按gaseous dynamical
+friction与RD hydro solver两部分，各自写research summary和future work。** 本轮
+只读示例、当前Chapter2/3结论、Chapter4实现/结果及Ben Morton结论章；Chapter5
+仍只有标题，未起草或修改论文。Ben的Chapter6确实以Dynamical Friction和RD Solver
+分节，并在各主题中接续future directions。建议本论文采用同样主题组织，篇幅先
+控制约3–4页，再按实际模板调整。
+
+用户提出的DF后续方向：在宇宙学背景下模拟subhalo与gas的动力摩擦，加入gas
+self-gravity、chemistry与cooling，检验解析模型的适用范围。讨论建议将检验指标
+具体化为轨道能量损失、实际加热及空间沉积、H2生成/冷却、塌缩与碎裂，允许wake
+压缩促进冷却而改变净效应；不预设模拟必定证实DF抑制恒星形成。
+
+用户提出的RD后续方向：moving-mesh hierarchical timesteps与MPI、进一步3D
+测试、适用于不同流态的通用blended scheme（尤其shock识别与spurious oscillation
+控制），远期耦合引力和其它astrophysics modules。写作时区分已完成的static
+hierarchy/MPI与待完成的moving扩展；区分既有standalone3D框架与AREPO-RD的3D
+扩展/验证；保留connectivity conservation作为moving扩展的前置问题，但不重复
+4.3.3的推导。RD尚未用于完成Chapter2的宇宙学DF数值验证，两条路线的结合是展望。
+这些是用户拟议方向与本轮结构建议，尚未写入正式Chapter5正文。
+
+
+## 178. 2026-09-29：通读当前论文并在对话中起草Chapter5
+
+**作者：Codex（GPT-6）；用户要求通读全篇，按双主题结构写Chapter5草稿，明确
+要求仅在对话输出、暂不加入thesis。** 阅读当前master引用的Lay Summary/Abstract、
+Chapters1--4全文和Appendix1，并复核用户提供的结论章示例。草稿以gaseous
+dynamical friction与RD hydrodynamics为两节，各含research summary和future
+work；只总结现有正文结果，不纳入尚未加入论文的Sedov开发结果。
+
+DF部分涵盖TNG50 evolved SHMF、主要贡献的较大质量比subhaloes、约两数量级的
+加热散布、低红移大质量halo与高红移H2冷却比较、径向分布的限制。下一步为宇宙学
+subhalo--gas模拟，加入self-gravity/chemistry/cooling，检验实际能量传递、热化和
+空间沉积及冷却/塌缩响应，不预设一定产生DCBH或抑制恒星形成。
+
+RD部分区分既有standalone框架与本人的测试/AREPO实现，概括静态LDA/N/B、
+hierarchy/MPI及移动网格初步测试。移动connectivity与endpoint-weight守恒问题
+只简述；moving hierarchy/MPI、3D扩展验证、shock识别与振荡控制的通用blend、
+引力和其它物理模块耦合均保留为future work。Chapter1末尾提及已完成Chapter4
+DF-with-cooling的旧outline不作为结果依据；正文未改。
+
+本轮未修改任何论文文件、未编译、未commit/push；Chapter5仍只有既有标题。
+保留上一轮Chapter4删除红字的工作树修改以及所有无关代码/文档工作。
+
+
+## 179. 2026-09-29：讨论Overleaf connectivity段落的逻辑与措辞
+
+**作者：Codex（GPT-6）；用户保留Chapter5草稿不动，提供Overleaf新版ongoing
+work，询问need not cancel及uniform-flow结尾的含义。** 仅提供对话中的解释与
+替换文字，未拉取/修改thesis。说明need not cancel表示“不一定抵消”，并非“不
+需要抵消”；建议以非均匀场跨flip保留节点值仍可能改变积分总量为主线，去掉结尾
+突兀的uniform-flow/implementation conversion回指。四点不同不意味着必然出错：
+若各守恒分量来自同一个affine场，两种P1插值仍相同，因此保留generally/may。
+
+median dual area等于basis函数积分，故面积权重跳变与basis change为同一机制；
+重新计算面积不等于已完成守恒转移。核对Springel2010原文，Voronoi邻接关系也会
+改变，但旧面收缩至零、几何连续；对比应限定为当前Delaunay-RD与Voronoi-FV。
+按用户意图可将此段聚焦edge flip，不再展开midpoint问题。复核本日志§159：
+repair显著降低早期Sedov质量/能量漂移，支持该阶段connectivity贡献重要；§128
+等测试未单独归因，不将其推广为所有算例的误差主次，也不据此断言Arpaia形式
+天然无须考虑其它守恒误差。未运行新的数值试验。
+
+
+## 180. 2026-09-30：在本地润色Chapter4 connectivity ongoing work
+
+**作者：Codex（GPT-6）；用户授权将上一轮讨论的措辞应用到本地论文。** 本地
+仍为较早版本，故以用户贴出的Overleaf段落及§179讨论为依据，只更新Chapter4
+4.3.3的connectivity部分。补入四点共圆的flip事件及Delaunay-RD/Voronoi-FV的
+几何对比，引用已有Springel2010；明确重算median dual areas本身不保证守恒。
+将need-not-cancel及uniform-flow回指改为非均匀P1场跨flip后积分可能改变的直接
+说明，保留generally/may限定。按用户的范围取舍，删除此段独立midpoint/endpoint
+误差讨论；4.3.1已有的一般守恒限制说明未改，也未宣称其它误差已经消失。
+
+两组公式与label、repair的实验状态/负压限制、之后的hierarchical timestep
+正文均保留。以编辑前tracked-file SHA256核验，只有Chapter4变化；前文及hierarchy
+逐字节一致。此前删除章末红字的未提交修改保持不变；Chapter5及其它章节未动。
+
+冻结当前tracked源码，使用LaTeX编译技能在隔离目录以XeLaTeX/latexmk重建完整
+242页论文，引用/文献全部解析，无缺字；11处既有overfull报告与上一版数量一致。
+用PDF检查流程逐页查看物理页192--194（印刷169--171），公式、分页、引用正常。
+原论文目录master.pdf未覆盖，未stage/commit/push或访问Overleaf；未运行hydro。
+源文备份、hash、此次diff、冻结工程、编译记录及页面PNG位于工作区
+`local_runs/thesis_connectivity_polish_20260930_v1/`。
+
+
+## 181. 2026-09-30：简化moving hierarchical timestep的ongoing-work叙述
+
+**作者：Codex（GPT-6）；用户认为无图/公式的两段实现说明过于技术化，要求突出
+问题和可能思路。** 在本地Chapter4 §4.3.3只替换hierarchy两段：不同三角形更新
+时间不同，flip可能在原时间步结束前替换三角形，不一致的续接可能遗漏/重复演化；
+候选思路为受影响区域先推进至flip时刻，再守恒转移到新三角剖分并从该时刻继续。
+去掉timebin规则、triangle birth/last-integrated time、incident stars、predictor
+区间兼容性及独立Euler实验的细节，保留AREPO集成/验证与并行仍待完成，以及
+本章moving测试所有节点使用同一时间步的范围。未把候选方案写成完成的算法。
+
+本轮开始时用户已提交章末红字删除，thesis HEAD为`beb977d`，领先origin/main一个
+提交；前轮connectivity润色仍为工作树修改。本轮未stage/commit/push，只改指定
+两段，前文与章尾逐字节保留，其它tracked论文文件hash未变，diff --check通过。
+纯文字修改未重新编译，§180的PDF对应上一次文本；未改Chapter5或solver。
+备份、hash和本次diff在工作区`local_runs/thesis_hierarchy_prose_20260930_v1/`。
+
+
+## 182. 2026-09-30：将4.3.1末段改为数值测试与ongoing work的简短过渡
+
+**作者：Codex（GPT-6）；用户要求4.3.1末段edge-flip说明更自然，与已有4.3.3
+衔接。** 删除该段old-area/new-connectivity重标定细节，改为三句：下一节展示
+当前实现的数值测试；connectivity change的守恒处理仍需完善；该问题及hierarchical
+timestep扩展统一指向4.3.3。保留未完成守恒处理的范围说明，不再在overview
+重复ongoing-work机制。其它正文、公式和4.3.3均未改。
+
+本轮开始时用户已将前两轮4.3.3润色提交/同步为`12e9451`，thesis跟踪工作树干净。
+git diff确认本轮仅替换4.3.1末段，diff --check通过。纯文字调整未重编译，未
+stage/commit/push，未操作Overleaf或solver；修改前版本保存在既有Git提交中。
+
+
+## 183. 2026-09-30：全文公式句末标点检查与修正
+
+**作者：Codex（GPT-6）；用户明确授权全文处理SK提出的公式缺少句末标点问题。**
+本轮thesis已由用户提交/同步为`99df79a`（main/origin-main），包含此前Chapter4
+润色与Chapter5；跟踪工作树起始干净。遍查master包含的前置页、Chapters1--5和
+Appendix1，排除注释中的旧公式，共248个有效陈列公式块。结合前后文判断句末
+句号、where/with/and等衔接逗号及多行独立等式的分隔，不在一个跨行等式中
+机械插入标点，也不把`\right.`的不可见定界符误认作句号。
+
+修改93个公式块：Chapter1 66、Chapter2 20、Chapter3 5、Chapter4 1、Appendix1 1。
+大部分为补漏，另纠正少量句号/逗号与后文不匹配处；Chapter3线性平流示例补
+逗号后，将接续的The改为the。Chapter3两个公式分别继续接in 2D和for限定
+条件，保留不加句末标点的连续写法。数学内容、labels、环境/编号及全部sk/zw
+批注保留，包括本次已处理的SK原批注。仅清理本次改动行的末尾空格，其它正文、
+Chapter5、参考文献及图均逐字节保持。diff --check及全tracked-file SHA256核验通过。
+
+按LaTeX编译技能冻结源码后，以XeLaTeX/latexmk隔离编译完整245页论文，退出码0，
+无未定义引用/文献、无缺字。编译仍报告11处既有overfull hbox，与前次完整编译的
+位置相同；其中Chapter1式1.25/1.26补句号后宽度分别从5.86183/12.58615pt增至
+8.47292/15.19724pt，未借此扩展到重排长公式。逐页查看物理页39、40、44、51、55、
+72、83、141、142、184、204、205，新增标点、嵌套方程/分段函数与文字衔接正常，
+无新增裁切或重叠。原论文目录master.pdf未覆盖，未stage/commit/push/操作Overleaf，
+未运行hydro。备份、248块清单、修改明细、diff、hash、编译记录和PNG保存在工作区
+`local_runs/thesis_equation_punctuation_20260930_v1/`。
+
+## 184. 2026-09-30：Sedov激波的RD文献处理与moving RD优化方向，一阶MMFV诊断
+
+**作者：Claude Code（Opus 5.5）；用户认为现有RD Sedov不如MMFV/SWIFT，要求查找
+RD文献对shock/Sedov的处理并评估优化空间；用户补充Morton2023 static LDA也不行，
+MMFV单cell注入也能跑。** 先澄清：现有moving RD Sedov是纯一阶
+`RD_RUSANOV_LOW_ORDER`+lumped RK2；LDA/Rusanov混合与B/Bmax只在static上运行过。
+
+文献（原文核对）：Deconinck–Ricchiuto综述用LDA/N blending或limited(PSI)格式，
+系统按特征分解；Abgrall–Bacigaluppi–Tokareva 2019用特征变量Rusanov-PSI+Θ混合
++Burman jump稳定化，测试W–C blast、Mach3台阶等，无Sedov；Paardekooper2017在Noh上
+指出较低耗散的blend会失败或需N后备，柱面blast中N≈HLL、B误差更大；Morton2023
+Sedov中LDA不稳定、blend退化为N；Campoli等2017 ALE RD捕获激波时LDA/LDAN下游
+不光滑；SGH RD+MARS完成Sedov但结构不可移植；与我们P1 ALE最接近的是
+Guermond–Popov–Saavedra2020：边局部graph viscosity+密度/比熵局部界的convex
+limiting（Noh、W–C等，固定connectivity）。综述§3.6.1给出中位对偶FV配任意守恒
+通量即为RD（元素总残差为梯形Φ_T），因此Riemann通量可作RD低阶格式。
+Ricchiuto–Abgrall2010及Arpaia ALE报告全文本机无法下载，未声称其细节。
+
+机制：MMFV单cell稳定来自逐面精确Riemann问题（一阶Godunov保正）、负ρ/p时丢弃
+face外推（finite_volume_solver.c:1330）及0.9上游质量的通量限制；Roe型线性化
+（N/LDA）近真空不保正（Einfeldt1991）。Rusanov恢复保正，但α≈cℓ/2对ρ/m/E同等
+施加，在准拉格朗日网格上质量扩散由声速而非|u−w|决定，且随膨胀核心单元变大。
+
+新增诊断（非生产配置）：`Config_MMFV_moving_first_order{,_hllc}.sh`=原MMFV Config
++DISABLE_SPATIAL/TIME_EXTRAPOLATION(+RIEMANN_HLLC)；`run_mmfv_first_order.py`冻结
+HEAD2858d43+工作树patch+untracked文件，独立BUILD_DIR，复用二阶MMFV的hash核验IC和
+参数（仅改路径）。uniform缺陷2.05e−13；science 970/961步、126/118s，全部快照正/
+有限，质量能量守恒至舍入。t=.05结果：一阶exact/HLLC raw ρmax3.434/3.427，
+均线峰3.099/3.070，r<.05面积平均ρ .0276/.0280（3–4样本），中心p1.670/1.687；
+二阶MMFV 3.971/3.302/.0300/1.596；moving Rusanov RD 2.630/2.428/.1977/1.721
+（核心同为3样本）。故一阶到一阶，RD→MMFV使均线峰2.43→3.1、核心密度降7倍；
+MMFV一阶→二阶仅3.10→3.30。主要缺陷是低阶耗散形式，而非缺二阶或核心采样稀疏；
+HLLC与exact一阶几乎相同。限制：Voronoi与median dual、前向Euler与RK2、重连守恒
+差异未隔离，结论为推断。
+
+建议（未实现）：①在w_T坐标系用边中位对偶HLLC通量替换Rusanov低阶（总残差与现有
+梯形ALE Φ_T相同，RK2/b_i检查可沿用；需保证波速上界与失败即停的星态检查）；
+②再将static凸限制LDA/F1修正移植到ALE，并加局部ρ界与比熵下界（参照GPS2020及
+§169设计），仅保正不足；③独立处理重连的守恒保正remap。单调B/Bmax/Bx调参、以N为
+保正终点、扩大注入或裁剪不推荐。完整对照表、公式与来源见
+[报告](RD_SEDOV_SHOCK_LITERATURE_OPTIMIZATION_20260930.md)。档案
+`../local_runs/sedov_mmfv_first_order_20260930_v1/`（source/binary/Config/header/
+linkage/IC/参数/日志/verification.json/剖面图，图已目视检查）。未改RD solver、默认
+Config或thesis，未commit/push；2次native build与4次run均完成，无活动solver。
+
+
+## 185. 2026-09-30：按用户十点意见处理Chapter1及Abstract红字
+
+**作者：Codex（GPT-6）；用户明确授权逐项修改，要求保留本地git diff供检查。**
+thesis起始HEAD为`447c9a0`（用户已提交§183标点修改，main领先origin/main一个
+提交），跟踪工作树干净。本轮论文仓库仅修改Chapter1、formal Abstract和
+`chapter1bib-cosmology.bib`，没有修改其它章节或Lay Summary。
+
+1. Abstract明确将gaseous DF heating表述为可能延迟PopIII形成、与LW背景共同
+   有利于DCBH种子形成的新机制，仍以analytic model结果为基础，未声称完成形成模拟。
+2. decaying mode改为标准结构增长计算通常保留growing mode，其相对贡献在物质
+   主导时期衰减；没有称其unphysical，也没有声称模拟初始条件的transients永无影响。
+3. 按要求采用Gaussian with only slight deviations措辞，限定于primordial density
+   field，并将给出的Gaussian联合分布及two-point完整描述限定为Gaussian近似。
+4. 删除missing-satellite问题的孤立句及该处引用，保留subhalos/satellites/HOD背景。
+5. 直接引入Hubble sequence，新增Hubble1926，ApJ64,321--369，DOI10.1086/143018。
+6. 椭圆星系允许有序旋转和随机运动，形态不独自决定动力学支撑；新增Cappellari
+   et al.2011 ATLAS3D I与Emsellem et al.2011 III，后者直接支持许多形态椭圆星系
+   是fast rotators。正文不增加样本比例或详细分类标准。
+7. 删除已经解决的公式句末标点SK批注，保留上一轮全部公式修正。
+8. 保留式1.82，明确观测KS law为面密度关系、模拟需要局部体积率；补充竖直结构/
+   有效EOS假设，以及Schaye & Dalla Vecchia2008通过压力处方复现输入KS law的
+   slope/normalization/threshold。复用已有BibTeX条目。
+9. DF理论段落增加which will be presented in Chapter2，使用已有chapter_2 label。
+10. Outline更新为当前DF analytic model/散布与空间profile、本人static RD测试、
+    AREPO静态hierarchy/MPI及moving初步测试/ongoing work；删除“Chapter4已做含
+    Grackle cooling的DF模拟”旧计划。保留Ben Morton原代码与本人测试的归属，
+    Chapter5对应两条研究线的总结与展望。
+
+核对了Hubble1926原文、ATLAS3D I/III和Schaye2008原论文，以及Planck2018/Crocce2006
+相关论述；三条新增文献的作者、卷页、DOI经Crossref/ADS/出版页核验。公开来源URL
+与Crossref元数据存于档案。已处理的10条sk/zw批注全部移除，其它章节批注不动。
+
+全tracked-file hash检查仅上述3文件变化；所有Chapter1陈列公式及labels逐字节
+保留，Lay Summary/Abstract其余段落和其它章节不变。新增cite keys无重复，
+git diff --check通过。冻结源文以XeLaTeX/latexmk隔离编译完整246页，退出码0，
+无未定义引用/文献、无缺字。overfull hbox从11降为10（删除含长URL的SK批注），
+保留原有zwicky1933die空journal警告。检查物理页4、5、28、31、61--63、69、70、
+215、219、223，文字、公式和新增文献排版正常。未重排原有Abstract/章末余页，
+未覆盖根目录master.pdf，未stage/commit/push或操作Overleaf，未修改solver/运行hydro。
+备份、hash、diff、资料、冻结源码、编译记录与PNG在
+`../local_runs/thesis_ch1_comments_20260930_v1/`。保留并行写入的§184及其context条目。
+
+## 186. 2026-09-30：阅读thesis与删除红字，实现边HLLC低阶RD并完成Sedov原生测试
+
+**作者：Claude Code（Opus 5.5）；用户要求先读MyThesis（含两个delete red text提交）
+和代码，判断§184第一步是否与现有AREPO相容，可行则测试。** 读thesis main`447c9a0`
+的Chapter4全文、Chapter5及Chapter3分布格式/时间步部分，逐行读`e4fcd84`（§4.2
+备选：element co-moving frame与Galilean矩阵G(b)、守恒/Arpaia残差差、Campoli端点
+质量）与`beb977d`（章末实现细节：Q=mU与D_i账本、重连rebase与端点换算两项缺陷、
+RD CFL、Voronoi-cell、true predictor、拓扑算子、moving hierarchy）。结论：HLLC核
+保持Arpaia残差的同一元素总量½ΣG_j·n_j（w=σ̄_T），在核内用G(σ̄_T)做Galilean变换；
+不改D_i/账本/重连，故不能消除端点与重连缺陷；在Chapter3分类中属FV-RD而非MU。
+
+相容性：`RD_RUSANOV_LOW_ORDER`已提供ALE几何、lumped RK2、阶段CFL/b_i/正性检查与
+时间步钩子，只需替换单元核与每顶点系数。新增`src/hydro/rd_hllc.h`与显式选项
+`RD_LOW_ORDER_HLLC`（必须配合RD_RUSANOV_LOW_ORDER）；solver仅改include/guard及
+时间步选择和阶段装配两处调用；defines_extra加两宏。中位对偶面ν_ij=(n_j−n_i)/6
+（i→j），φ_i=Σ_j[H(U_i,U_j;ν_ij)−G(U_i)·ν_ij]，H为w_T坐标系HLLC（Einfeldt/Batten+
+Davis波速，Toro星态，星态不可接受即中止）；每对只算一次，右侧为跳量减左侧，
+阶段系数Σ|ν_ij|s_ij。A3断言保证内法向，核另拒绝顺时针输入。
+
+核测试`tests/rd/test_hllc_positivity.py`（4000例，ρ1e−3–1e3、p1e−6–1e3、|v|,|w|~3）：
+守恒3.8e−16，对独立Python HLLC2.7e−13，Galilean协变4.3e−12，系数限内前向步恒正，
+均匀态与相对w静止的接触间断残差为零，顺时针拒绝；原5项make check_rd通过。测试
+框架两处设置错误已修正（-Werror误报未用Rusanov函数；取负法向无法由法向判定）。
+
+原生`../local_runs/sedov_hllc_20260930_v1/`：冻结HEAD2858d43+patch+untracked，
+HLLC_static/moving与无flag Rusanov_moving三独立binary；IC与参数与既有Rusanov存档
+逐字节一致。uniform缺陷5.55e−16/6.66e−16/1.11e−15；无flag Rusanov重放与存档五个
+快照**逐位相同**。7次运行全部返回0，8850/4884/5716个science stage全部通过正性/
+CFL(最大.110)/b(最小.4947)检查。t=.05（21点）moving HLLC：raw ρmax3.413、均线峰
+2.980、r<.05面积平均ρ .0276、中心p1.714；moving Rusanov 2.630/2.428/.1977/1.721；
+一阶MMFV 3.434/3.099/.0276/1.670；二阶MMFV 3.971/3.302/.0300/1.596。static HLLC
+2.461/2.328/.0309/1.531（Rusanov static 2.002/1.957/.1360/1.444），守恒至舍入。
+单个热点moving HLLC无repair/floor完成t.05，均线峰2.999。
+
+结论：边HLLC把moving RD核心密度降至与一阶MMFV相同，峰值接近一阶MMFV，证实主要
+缺陷是Rusanov耗散形式。未解决：空间一阶（离二阶MMFV峰3.30与中心p仍有差距）；
+moving预算仍漂移（21点质量−.329%、能量+.698%；1点−.335%/−1.606%，能量非单调），
+来自未改动的重连与端点换算项，不归因于核，也不声称一般更小；仅5个快照采样；
+无MPI/hierarchy/repair；未测平滑精度与Sod接触。静态运行步数4425>Rusanov3051。
+详见[报告](RD_SEDOV_HLLC_LOW_ORDER_20260930.md)，图已目视检查。下一步：ALE上凸限制
+LDA修正（Gauss3−梯形边修正、局部ρ/比熵界），再做守恒保正重连remap。未改thesis、
+默认Config，未commit/push；无活动solver。
+
+**§186补充（用户追问“HLLC-RD是哪篇论文、是否仍是RD”）：** 未找到提出“HLLC-RD”
+的论文，该名称只是本次构造的简称。依据是Deconinck–Ricchiuto综述§3.6.1（中位对偶
+一阶FV配任意守恒通量即为FS/RD格式，元素总残差为梯形Φ_T）及Abgrall2017的RD–通量
+等价；HLLC出自Toro等1994，波速取Einfeldt1988/Batten1997。结构上是RD：元素残差在
+单元内沿三条中位对偶线段按HLLC涨落A⁻ΔU/A⁺ΔU拆分且和为Φ_T，即一维Roe涨落分裂的
+多维类比；但它不是MU/LP格式，属一阶FV-RD，与Rusanov/LxF地位相同。论文应称为
+“涨落分裂形式的一阶保正后备格式”，RD的多维特征需由第二步限制后的LDA修正提供。
+报告§5.5已补充。无代码或运行变更。
+
+**§186再补充（用户要求用thesis Figure 4.2解释代码实际做法）：** 当前Figure 4.2为
+“Node timebins and triangle residual scheduling”（节点A–E、三角形T1–T3）。新增示意
+脚本`examples/Sedov_2d/plot_hllc_schematic.py`，输出存档`analysis/hllc_rd_schematic.png`
+（沿用该图节点布局，几何仅示意）：代码按Delaunay三角形循环，不使用Voronoi面；
+每个三角形先算Φ_T，再在单元内三条中位对偶线段上各解一个一阶HLLC，把A⁻ΔU/A⁺ΔU
+分给两端节点，三份之和为Φ_T，即图中箭头；节点再汇总并除以Arpaia面积。MMFV则按
+Voronoi面循环，每条Delaunay边一个Riemann问题（面O₂O₃，重构后的面状态）；RD每条边
+由相邻两三角形各解半个面（G₂–m_CD–G₃，各自w_T），两者仅在重心与外心重合时相同。
+报告§5.5已补充，无代码或运行变更。
+
+**§186再补充（用户问C–D是否在T2、T3各算一次）：** 是，每条内部Delaunay边解两次，
+但各按半面长度|ν^T|加权，两半合成一个中位对偶面，并非重复计数。两次解的节点状态
+相同，法向与w_T不同；中心通量对ν线性，与一条直面相同，仅耗散满足Σ|ν^T|s^T≥|Σν^T|s。
+新增只读审计`analysis/halfface_audit.py/.txt`，共49152条边：glass t=0时Σ|ν|/|Σν|
+中位/99%为1.000/1.027，弯折角中位/99%为0.4°/26°；moving HLLC t=.05时为1.000/1.138、
+0.8°/57°。半面总长/Voronoi面长中位约0.999，近共圆边上Voronoi面趋零（翻转前）而
+中位对偶面有限。每步Riemann解数约为MMFV的4倍。按元素保留是为了元素守恒、第二步
+限制、Figure4.2三角形调度及MPI三角形归属；按边合并耗散只是后续可选优化，未推导ALE。
+报告已补充；无solver或hydro运行变更。
+
+**§186再补充（第二步路线，用户决定）：** 不采用MUSCL式把HLLC外推到面上求二阶
+（那会变成二阶顶点型FV，取代LDA）；采用类似blended scheme的逐元素、逐RK2阶段组合：
+φ=φ^L+ℓ_T(φ^LDA−φ^L)，ℓ_T由可接受性与局部ρ/比熵界决定而非残差比传感器，限制对象
+含corrector的F1−lumped时间差。**用户决定LDA的Gauss3暂不改动。** 总量匹配放在低阶
+一侧：Φ_G=Φ_trap+ΣΔΦ_e，ΔΦ_e取自`rd_contour_gauss_correction`的逐边项（只依赖边端
+状态与中点法向，相邻三角形互为相反数，ALE网格项两种积分都精确）；每边½ΔΦ_e分给两
+端点后，元素低阶总量等于Φ_G、修正元素零和，而节点低阶更新在舍入内不变，正性论证
+保留。备选（未选用，留作以后）：LDA改用梯形节点通量围道使总量天然一致（e4fcd84
+红字对照）。设计写入报告§5.6；尚未实现。
+
+## 187. 2026-09-30：实验性moving LDA/F1+边HLLC限制混合，Sedov 21点与单点注入
+
+**作者：Claude Code（Opus 5.5）；用户要求实验LDA+HLLC，先跑Sedov（21点与单点注入）；
+thesis中LDA的Gauss3不改，实验内可自由选择。** 新增显式子选项（沿用`RD_LDA_RUSANOV_BLEND`
+框架，默认与静态混合不变）：`RD_BLEND_LOW_HLLC`（仅equal-step ALE LDA/F1/Gauss3；
+低阶端点为边HLLC+`rd_hllc_gauss_edge_split`逐边½ΔΦ_e，元素总量等于LDA的Φ_G并逐元素
+检查；低阶阶段按ALE权重a_i、b_i=3/2−a_i检查凸性与CFL/(2b)）；`RD_BLEND_LOCAL_BOUNDS`
+（限制器额外要求ρ在元素模板[min,max]、K=p/ρ^γ不低于模板最小值，模板取U^n、校正阶段
+U*及低阶状态，Zalesak型、未对光滑极值放宽；二分后按舍入回退确保返回ℓ满足界）。
+ℓ_T逐元素共用，修正零和、凸平均保证守恒与可接受性，不裁剪、不加floor。
+
+新测试`tests/rd/test_lda_hllc_blend.py`：60个抖动周期网格上元素总量与独立Gauss3 ALE
+围道一致3.2e−16、边项节点抵消1.2e−16；3000例界限制器ℓ合法且极大。HLLC核测试与全部
+5项make check_rd通过。档案`../local_runs/sedov_lda_hllc_20260930_v1/`：冻结源码，四个
+独立binary；uniform缺陷6.66e−16/5.55e−16；无新子选项的静态LDA/Rusanov混合在其16²
+contact存档上重放五快照**逐位相同**。ℓ=0对照经LDA路径重现单独HLLC运行至≤6.1e−12，
+步数2443与预算相同，确认边项在整次moving运行中节点抵消、ALE检查接线正确。
+
+t=.05（21点）bounds：raw ρmax3.797、均线峰2.889、r<.05面积平均ρ.0293、中心p1.653、
+v_r去趋势RMS.0846、v_t RMS.0656、ΔM−.452%、ΔE−.963%；HLLC低阶3.413/2.980/.0276/
+1.714/.0287/.0309；一阶MMFV3.434/3.099/.0276/1.670/.0180/.0121；二阶MMFV3.971/3.302/
+.0300/1.596/.0487/.0277。单点bounds：raw3.861、均线峰2.925、中心单样本ρ.0044（解析
+面积均值.0043）、中心p1.595，但ΔE−6.40%（HLLC−1.61%）。所有阶段可接受；限制元素平均
+预测.7%、校正4.7%。无激波前欠冲，无K低于初始最小值。结论：LDA修正使激波更尖、中心
+压力更接近解析，但速度/角向散点约为HLLC的3倍、二阶MMFV的1.7倍（v_r），因此均线峰
+未超过HLLC；局部界是必要的。
+
+仅保正（无局部界）对照：t=.025时ρ_min.0015、T=p/ρ最大2059、411个节点K低于初始最小值、
+v_t RMS.355（bounds.105，HLLC.064），时间步塌缩至6.1e−6；首段在AREPO的0.85×TimeLimitCPU
+=1530s处停于t=.0235/.0171（设置限制，非数值失败），已用restart（TimeLimitCPU14400）续跑，
+续跑动作单独记录。守恒：按RD-ALE-FINISH分项，几乎全部漂移在步开始的temporary/connectivity
+rebase项（端点换算≤.016%）；bounds在t≤.0125时21点/单点能量−2.69%/−7.49%（HLLC−.25%/
+−2.54%），剖面越尖重连损失越大，因此第三步守恒保正重连remap已成为主要瓶颈。限制：界
+未放宽、未做光滑精度测试、单次运行、5个快照、无MPI/层级/repair。详见
+[报告](RD_SEDOV_LDA_HLLC_BLEND_20260930.md)。未改thesis/默认Config，未commit/push。
+
+**§187补充（仅保正对照续跑完成）：** 两个仅保正运行经restart续跑后均到t=.05（21点共
+8156步，单点9951步），全部阶段可接受但阶段最小密度约5e−5（近真空）。21点/单点：raw ρmax
+4.809/5.349（超过解析跳跃4），均线峰2.683/2.618，中心p1.562/1.571，v_r/v_t散点.194/.162
+与.164/.142（约HLLC的5倍，核心v_r出现负值），分别有503/528个节点K低于初始最小值（最低
+1.4e−5/2.6e−6倍），ΔE+1.46%/+2.81%。限制器仅约2%的corrector元素起作用，LDA几乎未受
+限制。结论不变：局部界是必须的。分析脚本已纳入续跑日志，最终图在档案`analysis/`
+（`analysis_preliminary_bounds_only/`保留为中间版本），报告§3.4已补充。
+
+
+## 188. 2026-09-30：按用户反馈收简Chapter1措辞并恢复outline原文
+
+**作者：Codex（GPT-6）；用户授权Chapter1定点修订。** 在§185未提交改动上，
+将decaying-mode句子替换为用户给出的negligible with time原句；Gaussian段落恢复
+The current开头及原结构，仅替换mostly Gaussian并保留评论删除；椭圆星系改为
+支持显著旋转的简短表述，ATLAS3D仅留引用；Schaye与Dalla Vecchia扩写缩为一句
+压力处方及观测定律再现，保留面密度/体密度区别。Outline的Chapter2段落恢复HEAD
+原文，Ben Morton贡献句逐字恢复，其余已获认可的改动保留。
+
+核实正式Abstract修改一直在thesis-frontmatter/abstract.tex第12行的unstaged diff中，
+本轮未再改动Abstract或bib。本轮源码仅Chapter1变化；此前三文件改动均未stage/commit/push。
+隔离完整XeLaTeX编译成功，245页，无未解析引用或缺字；已有10处overfull hbox保留。
+目视检查物理页28、31、61、62、69、70。未覆盖thesis根目录master.pdf。存档：
+`../local_runs/thesis_ch1_followup_20260930_v1/`，含前后源码hash、diff、冻结源码、
+编译记录、PDF和页面预览。未改solver或其他thesis章节。
+
+**§187再补充（用户问散点来源；决定论文倾向仅用HLLC）：** 只读审计
+`analysis/scatter_origin_audit.py/.txt`：切向速度RMS在激波带最大，t=.0125/.025/.05时
+HLLC .161/.101/.062、bounds .212/.128/.094、仅保正.292/.280/.214、二阶MMFV .084/.055/.028；
+内区bounds约为HLLC的2倍，仅保正早期达1.07（近真空热核）。36扇区峰值半径标准差：HLLC
+.0025、bounds .0041、仅保正.0049、MMFV2 .0011，LDA使激波前沿角向起皱，因而均线峰下降。
+推断机制：线性二阶LDA在捕获激波处不单调并带几何依赖的非径向扰动，且去掉HLLC的耗散；
+界只约束ρ、K且模板宽松，速度无约束，逐元素ℓ切换也会引入粗糙；HLLC前沿噪声仍约为MMFV2
+的2倍，glass/median dual/翻转提供基底。**用户决定：LDA/HLLC混合尚不成熟，论文倾向只用
+HLLC结果；混合保留为实验记录。** 报告§4已补充；无solver或hydro运行变更。
+
+## 189. 2026-09-30：HLLC Sedov论文预览图、N scheme匹配对比与文字草稿
+
+**作者：Claude Code（Opus 5.5）；用户要求先不动论文，预览结果图并在对话中审核HLLC-RD文字，
+补充N scheme结果（可仅static）。** 新增`plot_hllc_thesis_preview.py`：21点HLLC moving/static、
+二阶MMFV、SWIFT与解析解（坐标轴包含全部样本，避免遮住SWIFT核心离群点），输出
+`sedov_hllc_20260930_v1/analysis/thesis_preview/`。21点N在两种网格都失败（§156），唯一完成
+的是130点(r=.05)注入的static N/RK2；因此用冻结HLLC binary（hash核验、不重编译）在同一IC上
+补跑static/moving（`run_hllc_disk005.py`，档案`sedov_hllc_disk005_20260930_v1/`，均返回0）。
+t=.05：static N/HLLC均线峰2.300/2.324、中心ρ .0851/.0857、中心p1.559/1.552几乎相同，但N的
+v_r/v_t散点.191/.088，HLLC仅.024/.006，N内区ρ可达.65；moving HLLC峰2.943、ΔE+2.10%，
+moving N在此注入下失败。中心平台来自注入气体的绝热膨胀：ρ_c≈(p_c/K_inj)^{1/γ}，21点估计
+.031（MMFV2 .030、HLLC .028），130点.097（HLLC moving .090），单点.005（.003），说明
+MMFV/HLLC的中心平台不是数值扩散，而Rusanov的~.2是数值混合。文字草稿
+[RD_SEDOV_HLLC_THESIS_TEXT_DRAFT_20260930.md](RD_SEDOV_HLLC_THESIS_TEXT_DRAFT_20260930.md)，
+报告§7已补充。未改thesis、默认Config，未commit/push。
+
+
+## 190. 2026-09-30：拉取GitHub/Overleaf的Chapter4/5批注并合并本地thesis
+
+**作者：Codex（GPT-6）；用户要求拉取并与本地合并。** 本地main为6e02014，
+其与447c9a0分别保存Chapter1/Abstract修订及公式标点，tracked工作区干净。
+Fetch获得origin/main的04dcc4a（Sadegh Chapter4/5批注和少量文字修改，另含Lay Summary
+centre→center）。三方合并无冲突，产生68399ec，父提交为6e02014与04dcc4a。
+核对Chapter1完整保留、Chapter5与远端完全一致；Chapter4相对远端仅保留本地公式
+句号修订，Abstract完整保留新的DF机制表述。30个未跟踪文件hash全部不变。
+远端Chapter5两处行末空格原样保留。未处理批注内容，未重新编译或覆盖PDF，未push。
+当前main领先origin/main三个提交，tracked工作区干净。证据：
+`../local_runs/thesis_github_merge_20260930_v1/`（refs、双向diff、文件hash、验证）。
+
+**§189补充（用户问两张图moving HLLC在r<.15为何不同；Morton风格二维图；单点注入）：**
+差异来自注入质量而非方法：21点/130点注入质量.00128/.00793；moving网格上被加热的生成点
+t=.05位于r≤.106（ρ≈.030）/r≤.160（ρ≈.098），点源解析解在r=.103/.148内才包含同样质量且那里
+密度已升到.096/.296，故较大的130点热泡明显低于解析曲线；static网格把热泡与周围混合。
+新增`plot_sedov_maps.py`（plasma线性0–4、全盒、共用色标；RD按P1插值，MMFV按Voronoi最近
+生成点），输出`sedov_hllc_20260930_v1/analysis/maps_preview_v1/`：static HLLC壳圆但厚，MMFV圆
+且薄（有glass条纹），**moving HLLC壳薄但呈多边形**：前沿半径傅里叶模m=5–6为主、幅值约.0018
+（R的.7%），MMFV≤.0008，static HLLC≤.0007；单点moving同样多边形，推测为离散注入与近六边形
+连接的印记被低耗散moving网格保留（Morton分散注入的理由相同），原因未隔离。单点moving
+HLLC完成t=.05（峰3.00，中心.0033，ΔE−1.61%）；static单点已用冻结binary启动
+（`run_hllc_reuse.py`，`sedov_hllc_nearest1_static_20260930_v1/`），因孤立热点时间步≈3e−6，
+耗时较长。报告§8已补充；未改thesis。
+
+## 191. 2026-10-01：static单点HLLC-RD、AREPO单cell对照与moving RD前沿多边形的诊断
+
+**作者：Claude Code（Opus 5.5）；用户问static能否单点注入，以及为何AREPO单点/少量点也很圆。**
+static单点HLLC-RD完成t=.05（11120步、764s，22240阶段全部可接受，守恒至舍入，峰2.33、中心
+ρ.024），只是孤立热点使时间步约3–6e−6。用冻结二阶MMFV binary与同一热点ID、按Voronoi面积
+归一化跑单cell（`run_mmfv_single.py`，`sedov_mmfv_single_20261001_v1/`，1204步、145s）：峰3.31、
+中心p1.59、守恒至舍入，前沿很圆。前沿半径傅里叶最大模/R（t=.0125→.05）：moving HLLC单点
+1.63→.71%、21点2.03→.77%、130点1.10→.79%（不衰减）；static HLLC 21点.80→.29%；MMFV二阶21点
+.94→.32%、一阶21点1.14→.35%、二阶单cell .38→.17%，主模m=6/5。结论：多边形只出现在moving
+RD，与注入大小、空间阶数无关；中位对偶与Voronoi面法向差异中位仅1.25°（注入边界≤2.8°），
+不足以单独解释。主要推测：moving RD在翻转时中位对偶面积与P1基跳变并做非守恒rebase，
+在受压剪切的壳层反复发生且随局部网格取向，而MMFV的Voronoi面连续变化且通量交换严格守恒；
+需用守恒保正翻转remap（第三步）验证，原因尚未隔离。另：两个核测试原先用相反符号的法向
+（等价于点反射三角形，代数检查有效），已改为solver公式n_0=(y1−y2,x2−x1)并全部通过。
+新图`sedov_hllc_20260930_v1/analysis/maps_preview_v2/`；报告§9。未改thesis/solver，未commit。
+
+
+## 192. 2026-10-01：只读检查thesis前言至Chapter2末尾
+
+用户要求检查剩余红字及需修改之处。审阅thesis `68399ec`（现已与origin/main相同）
+的frontmatter、Chapter1和Chapter2；未改论文。正文无活跃红字，PDF图目录xx页仍有
+Figures4.6--4.8的3条SK批注，源于Chapter4完整图注；Chapter2三处旧批注已用%关闭。
+
+发现明确公式/符号问题：Chapter1比能与能量密度混用、共动动量通量多一个v、
+Boltzmann碰撞不变量误用宏观v、HLL星区速度加减号、DF横向冲量漏倒数、球塌缩Lambda
+项漏c²、Press--Schechter密度误写p及Poisson分布函数定义不一致；Chapter2质量加权
+H2积分的上限与dr不匹配。Maxwellian速度弥散约定应明确。Chapter2 SHMF的ln/lg和冷却
+率nH²归一化需对照分析代码，不能仅凭论文写法判定数值结果有误。Figure1.4图注错误、
+Abstract完成范围、Morton对比适用条件、分辨率措辞及重复bib/作者名也列入报告。
+核对Springel2010、Morton2025和Wu2026出版信息等一手来源；Springel原文Eq116本身
+似也有同一多余v排印问题，修正依据是量纲和本章后续推导。
+
+冻结全部跟踪源码，XeLaTeX/latexmk隔离编译246页，引用解析正常；红字提取及11页
+目视检查完成。原thesis master.pdf未覆盖。末尾复核所有跟踪文件hash不变、Git跟踪
+工作树干净，30个既有未跟踪文件保留。完整review.txt、源文件manifest、编译PDF/日志、
+预览和verification.json：`../local_runs/thesis_front_ch2_review_20261001_v1/`。
+未运行或修改solver，未commit/push。
+
+**§191补充（SWIFT默认21点与单点注入）：** SWIFT默认即stock makeIC的N_inject=21。新增
+`run_swift_single.py`复用冻结默认binary/stock yml/glass（hash核验），仅把N_inject改为1（存diff），
+热粒子ID8256与RD/MMFV单点一致，2.4s完成：ρmax4.27（超解析4）、均线峰2.84、中心单粒子p≈11.8、
+v_t RMS .241（默认.176）。前沿最大模/R（早期→t=.05）：SWIFT 21点3.73%→.58%、单点5.61%→1.87%；
+HLLC static .80/.64%→.29%；HLLC moving 2.03/1.63%→.77/.71%；MMFV .94/.38%→.32/.17%。新2×4
+Morton风格图`sedov_hllc_20260930_v1/analysis/maps_preview_v3/sedov_maps_grid.png`。修正解释：没有
+网格翻转的SWIFT同样多边形且单点更明显，故翻转并非唯一原因；MMFV最圆，moving HLLC介于MMFV与
+SWIFT之间；翻转非守恒rebase仍是可能的RD特有贡献，原因未隔离。报告§10。未改thesis/solver。
+
+
+## 193. 2026-10-01：按用户确认修改Chapter1公式、图注及thesis参考文献
+
+在原Chapter1.tex中落实确认项：PS的rho与mass-function措辞、Poisson加m及d³v、
+Cartesian能量rhoE、微观碰撞不变量、HLL星区速度加号、DF横向冲量倒数、
+X=v/(sqrt2 sigma)并定义一维速度弥散，Figure1.4图注改为用户指定的comparison。
+用户明确保留球塌缩Lambda项、Chapter2积分上限和SHMF/cooling归一化；此前c²
+问题应限定为符号约定一致性，不能直接判定教材漏项。用户已考虑ln/lg且t_cool
+遵循Grackle计算，本轮不据文字推断数值有误。Springel arXivv3 Eq116确实也有
+多余v；共动方程、Morton措辞和Abstract仅回答/提供建议，暂未改。
+
+审计7个bib库367条，合并Bond1991/Lacey1993/Bryan2014三组重复，剩364条；
+对应Chapter2和Appendix1仅替换引用键。修正Kennicutt/Spitzer/Ford/Gott后缀、
+Zwicky姓名与缺失出版信息、Peacock出版社及若干卷页/文章号；补Ferland完整
+作者列表和页码，去掉Boylan-Kolchin标题重复的running title。Wu2026已更新
+为MNRAS551(2),stag1461,DOI10.1093/mnras/stag1461。来源见归档notes.txt和
+Crossref响应。BibTeX使用实际bst验证全部364条，无警告；344个活跃引用键均
+解析，git diff --check通过。未逐条重新核查每篇论文的全部元数据。
+
+遵守用户当前编辑器要求，原位编辑并两次调用内置编译；章节片段在line3的
+\chapter处因缺master前导而失败，未另建文档、PDF或切换标签。本轮完整PDF
+未验证。仅7个thesis跟踪文件变化，既有未跟踪文件列表不变；未commit/push，
+未改solver。归档：`../local_runs/thesis_confirmed_fixes_20261001_v1/`，含前快照、
+diff、bib审计/验证、原生编译诊断和用户保留项记录。
+
+
+## 194. 2026-10-01：确认共动方程与Abstract修改，保留Morton表述
+
+用户确认：Chapter2研究精确到量级，Morton相关差异不足以影响本研究，保持现有
+比较措辞。按授权修正Chapter1 Eq1.52共动动量通量，去掉额外v，明确三条方程
+通量的散度及能量重力源的点积。Abstract Chapter4段采用上一轮建议原文：
+集成AREPO并扩展moving mesh、Galilean测试、未来应用framework；删去connectivity
+与hierarchical/MPI展开，static hierarchy/MPI已在Chapter4开头交代。
+
+本轮仅两文件变化，Chapter1差异严格限于共动方程；早先公式/bib修改保留，
+Morton文字未改。diff --check通过。内置编译按用户要求检查当前chapter1.tex，
+仍因章节片段缺master前导在line3的\chapter失败；未另建文档/PDF或切换标签，
+未验证完整PDF。未commit/push。归档：
+`../local_runs/thesis_comoving_abstract_20261001_v1/`。
+
+**§191再补充（8个运行的一维质量加权平均剖面）：** 新增`plot_sedov_profiles_mw.py`，输出
+`sedov_hllc_20260930_v1/analysis/profiles_mass_weighted_v1/`：两行（21点/单点）×三列（ρ、v_r、p），
+每条曲线为宽.005径向bin内Σm q/Σm，半径取各自初始注入能量质心，空bin留空、孤立bin以点标出。
+质量加权密度峰：HLLC static 2.328/2.329、HLLC moving 2.982/3.000、MMFV 3.289/3.296、SWIFT
+2.995/2.840（21点/单点）；r<.05质量加权压强：1.53/1.53、1.71/1.65、1.60/1.59、2.38/11.8
+（解析1.605）。HLLC-RD与MMFV几乎不随注入点数变化，SWIFT单点明显退化。报告§11。
+
+
+## 195. 2026-10-01：只读讨论Chapter3 SK批注与Galilean invariance归属
+
+用户要求先不改thesis，倾向最小修改Chapter3，稍后说明C++→C重写接入AREPO
+和inverse-K处理修正。读取全部Chapter3 SK批注：重点为个人贡献、相较Ben新增
+内容、3D与时间积分来源、测试归属和其他求解器比较。现有§distribution schemes
+已说明S⁻=sum K_j⁻的对角扰动破坏守恒及伪逆处理；Gresho已比较AREPO/Enzo/
+SWIFT/GIZMO。建议在章首/对应段落/结论明确这些贡献，区分2023论文时贡献和
+之后移植修正，说明3D/时间积分已有工作来源，不必扩写新理论或测试章节。
+
+Galilean不变性区分连续Euler方程、固定网格离散误差、随boost一致变换的ALE
+格式。Chapter3当前固定网格RD一般有bulk-velocity相关耗散，不应声称严格
+离散Galilean不变；但moving mesh不是唯一可实现该性质的方法（SPH/MFM/MFV
+也可）。Moving mesh也需网格运动/离散更新满足变换一致性。Chapter4已有
+boosted Yee/Gresho数值验证；测试重合不是完整数学证明。若增加推导，放Chapter4
+ALE部分，Chapter3只需过渡引用即可。核对Springel2010和Hopkins2015原始论文：
+https://arxiv.org/abs/0901.4107 ; https://arxiv.org/pdf/1409.7395 。
+
+本轮thesis HEAD `090740b`（用户已提交前轮修改）；前后跟踪工作树均干净。
+未编辑thesis、未编译/开新标签、未改solver或运行实验，未commit/push。
+
+
+## 196. 2026-10-01：Chapter3零速度逆矩阵零空间证明长度讨论
+
+Author: Codex. 用户已自行修改Chapter3，3D沿用Ben的标准实现，不拟扩写；本轮只读
+核对新inverse matrix implementation段落和既有报告
+`RD_THESIS_42_ZERO_VELOCITY_DERIVATION_20260926.md` §§2–4。
+
+建议将零Roe平均速度情形的证明压缩为约半页（3–4个公式）：非退化二维三角形，
+h=Hbar>0，c²=(gamma−1)h，L=sum|n_i|，G=sum n_i n_i^T/|n_i|。
+G正定，S⁻z=−c/4 [(L/h)z_E, G z_m, L z_E]^T，所以ker S⁻=span(e_rho)。
+Ki e_rho=0，谱分裂也给Ki⁺ e_rho=0，因此分配残差与零空间分量无关。
+论证依赖精确零Roe平均速度、共同Roe状态和标准正负特征值分裂；近零速度的
+数值秩判定另属浮点实现问题。正文不必引入一般流速下的共同对称化矩阵证明。
+
+同时指出：伪逆为精确解还需要右端相容；此情形条件为b_E=h b_rho，Chapter3
+所述Roe N/LDA右端满足。不能仅由矩阵奇异推出必有无穷多解。
+未编辑thesis、未编译/新开标签、未改solver或运行hydro测试，未commit/push。
+
+
+## 197. 2026-10-01：按用户确认补入Chapter3秩条件及简短零空间计算
+
+Author: Codex. 用户要求用rank([S⁻|b])=rank(S⁻)<n表达有无穷多解的条件，
+不另写相容性讨论；用零速度下的直接代入计算替换“It can be shown”。仅修改
+`chapter3/chapter3.tex`的inverse matrix implementation段落：明确零Roe平均速度，
+定义n（二维4），给出S⁻z的L/G块表达式，利用非退化三角形G正定得到z=z_rho e_rho，
+再明确写Ki⁺z=z_rho Ri Lambda_i⁺ Ri⁻¹ e_rho=0。因此中间解虽不唯一，分配残差
+不受自由参数影响。保留用户其余文字与3D内容。
+
+thesis仅此一份跟踪文件变化，git diff --check通过。内置编译检查保存后的chapter3.tex，
+在第一行的chapter命令失败，因为章节片段缺主文档前导；未向章节添加前导或创建
+替代文档/PDF，未切换当前编辑器标签。本轮完整PDF未验证。未改solver、未运行
+hydro测试、未commit/push。
+
+
+## 198. 2026-10-01：Chapter4加入已完成的高分辨率Sod图
+
+Author: Codex. 查看用户最新e3ef001（Chapter4批注清理、章首强调hierarchical能量
+守恒、no→on等）；Chapter4源码无sk/zw或显式红字标记。按用户要求小改，暂不
+添加vortex/boost的标准AREPO对比。
+
+从`../local_runs/Sod_2d_Morton/20260928_main_comparison_v3/output/pdf/`的两页
+主比较PDF无损提取第一页作为`chapter4/figures/sod_glass_Nx128_t02_profiles.pdf`。
+源SHA256验证与归档一致，PDF内容流/文字保持原样；第二页正是现有Nx64图的来源。
+高分辨率effective Nx128，全2×2周期盒256²=65536点，t=.2，gamma5/3；N/LDA左右列，
+静态一阶、静态RK2、moving RK2，与现有图相同图例/布局。没有新hydro运行。
+
+Caption采用“Same as Figure [原图引用], but with a higher effective initial resolution
+of Nx=128.”，另有简短LoF标题。正文加新图引用，说明间断处更锐利而整体行为类似；
+删除仅展示低分辨率for clarity的句子。只改Chapter4.tex并新增一张图，其他内容保留。
+PDF提取后重新渲染并目视检查通过，git diff --check通过。内置章节编译仍在line1的
+chapter因缺master前导失败；未另编全文PDF、未切换编辑器标签。未commit/push。
+归档：`../local_runs/thesis_ch4_sod_highres_20261001_v1/`，含图来源、diff、验证与PNG。
+
+## 199. 2026-10-01：HLLC-RD完整开发记录（思路来源、数学、代码、实验与结论）
+
+**作者：Claude Code（Opus 5.5）；用户要求把HLLC-RD的思路来源、数学与代码实现细节、实验列表
+及图链接、主要结论写入开发日志。** 完整内容见
+[RD_HLLC_RD_SUMMARY_20261001.md](RD_HLLC_RD_SUMMARY_20261001.md)，本节为摘要。
+
+思路来源：审计发现原moving Sedov实为纯一阶Rusanov（LDA/Rusanov与Bmax仅static）；Rusanov耗散
+α_T≈(|u−w|+c)ℓ/2对密度同样作用，在准拉格朗日网格上质量以声速扩散，且随膨胀核心单元增大，解释
+中心密度moving .198>static .125>MMFV .028；文献中Deconinck–Ricchiuto§3.6.1指出中位对偶一阶FV配
+任意守恒通量即为FS/RD格式；一阶MMFV对照（峰3.10、中心.028）证明主要缺陷是耗散形式而非阶数，
+HLLC与exact一阶几乎相同，故选HLLC。
+
+数学：沿用Arpaia残差Φ=½ΣG_j·n_j（G=F−U⊗σ̄_T，中点内法向）；单元内中位对偶线段ν_ij=(n_j−n_i)/6
+（i→j，Σ_{j≠i}ν_ij=−n_i/2）；φ_i=Σ_j[H(U_i,U_j;ν_ij)−G(U_i)·ν_ij]，守恒通量成对抵消使Σφ_i=Φ；
+每对一次HLLC（σ̄_T系，Einfeldt/Batten+Davis波速，Toro星态并检查可接受），左/右涨落A⁻ΔU/A⁺ΔU分给
+两端，经G(−σ̄_T)变回实验室系；单侧HLLC扇平均给出正性条件(dt/S_i)Σ|ν_ij|s_ij≤1，ALE校正另需
+0<b_i≤1与CFL/(2b_i)≤1；相对网格静止的接触间断残差为零；结构上是RD（元素守恒拆分、一维即Roe
+涨落分裂），但非MU、一阶；与MMFV区别：按三角形循环、每边两半面（各自σ̄_T）、面过重心而非外心、
+节点一阶状态、元素残差拆分而非Voronoi单元间通量交换。
+
+代码：新`src/hydro/rd_hllc.h`（rd_hllc_pair、rd_hllc_residual，另有供混合实验的
+rd_hllc_gauss_edge_split）；solver中`RD_LOW_ORDER_HLLC`挂在`RD_RUSANOV_LOW_ORDER`路径下，仅改
+时间步选择与阶段装配两处（每顶点系数、守恒检查），沿用ALE几何、lumped RK2与全部阶段检查；
+defines_extra两宏；Config_HLLC_{static,moving}.sh；测试tests/rd/test_hllc_positivity.py（4000例，
+已改用solver法向公式）。仅单rank、等步长、周期、hydro、lab frame。
+
+实验（档案与图链接见总结§4）：一阶MMFV诊断；HLLC static/moving 21点与moving单点及Rusanov
+逐位回归；论文风格预览；130点注入与唯一完成的static N匹配对比；static单点HLLC；MMFV单cell与
+SWIFT单粒子（同ID8256）；Morton风格2×4密度图；8个运行的质量加权剖面；半面几何审计与示意图；
+实验性LDA/HLLC限制混合。
+
+主要结论：moving HLLC-RD（21点）raw ρmax3.41、峰2.98、中心ρ.028、中心p1.71、ΔM−.33%/ΔE+.70%，
+达到一阶MMFV水平（3.43/3.10/.028/1.67），远优于原Rusanov（2.63/2.43/.198）；static HLLC峰2.33且
+守恒至舍入；单点注入在两种网格都可完成；static下N与HLLC均值相同但N噪声约8倍且moving N失败；
+中心平台为注入气体的绝热膨胀；剩余问题为一阶精度、来自重连rebase的预算漂移，以及前沿约
+.7–.8%R的多边形（MMFV最圆，SWIFT亦多边形，原因未隔离）；LDA/HLLC混合尚不成熟，用户决定论文
+优先采用HLLC-RD。未改thesis，源码未提交。
+
+
+## 200. 2026-10-01：独立审查Claude的HLLC-RD Sedov结果与方法归属
+
+Author: Codex. 用户认为HLLC较Rusanov明显改善，但可能不是典型RD。审查Claude
+最新汇总、低阶实现、调用分支、草稿、归档和原始快照；不修改thesis或solver。
+报告：`RD_HLLC_RD_REVIEW_20261001.md`；审查归档：
+`../local_runs/hllc_rd_review_20261001_v1/`。
+
+40个快照hash及重新计算的8组统计通过；核对HLLC campaign源码tar、3个binary/config、
+IC/参数hash。冻结真实归档低阶header，用修正法向后的现有测试重跑4000例通过：
+守恒1.64e−16，独立HLLC1.06e−12，boost协变2.93e−12（相对flux scale）。增加编译
+单元反例：静态直角三角形rho=(1,1,3)、v=(1,0)、p=1，总残差0，但节点密度分配
+(0,−1/3,+1/3)，显示横向耗散，不具该配置的N/LDA多维迎风分配。未运行新hydro。
+
+moving21点：普通径向bin峰2.428→2.980，r<.05面积均密度.1977→.02764，但质量
+−.329%、能量+.698%；moving1点能量−1.606%。改进可靠，不能声称守恒已修复或
+N/LDA已通过Sedov。实际HLLC分支绕过K分配；可称median-dual FV residual distribution
+嵌入ALE-RD框架。Abgrall2017§4.1明确给出FV→RD构造：
+https://arxiv.org/html/1708.03108v3#S4.SS1 。
+
+主要措辞问题：不能将相对MMFV2的差距全部归因空间阶数；原表bin均值与后来
+mass-weighted曲线需区分（core_rows的docstring也误称mass weighted）；一维HLLC
+不是Roe求解器；失败LDA使用Gauss3/F1而非Roe残差；temporary_change同时包含准备
+和stage更新，不能把这一列直接当作翻转误差测量；contact zero需共同fluid v=w_T，
+不只是各点跟随各自流速；faceting原因尚未隔离。完整说明及建议定位见报告。
+保留所有既有修改，未commit/push。环境h5py缺失/旧Python file_digest不支持仅为
+审查脚本启动问题，使用已有21cmfast环境和通用hash写法后通过。
+
+
+## 201. 2026-10-01：Riemann通量构造RD的原始文献与几何示意图
+
+Author: Codex. 用户要求找HLLC或其它Riemann solver进入RD的历史依据，并仿照
+thesis Figure3.2画图。报告：`RD_RIEMANN_FLUX_RD_LITERATURE_20261001.md`。
+核对2017版Deconinck–Ricchiuto原文：应引用§4.1、式(55)–(59)，不是旧稿§3.6.1；
+明确给出median-dual FV→FS/RD。Abgrall2018（2017预印本）§4.1式(23)–(24)
+给一般构造。新增Hu–Li–Tang2010 JCP229,1681–1697：§2式(5)后确实使用HLLC，
+但为cell-centred steady high-order RD-type，不是当前moving vertex-centred实现。
+
+独立新图用双三角形展示内部median-dual段、Riemann flux、减去端点物理通量得到
+两个fluctuation，以及各点residual与元素总残差。强调总残差对应插值nodal flux，
+不等同于非线性F(U_h)精确积分；该空间恒等式不能证明完整ALE/flip守恒或N/LDA的
+多维迎风性。代码/公式对应见报告。保留上一轮审查和Claude记录。
+
+图、PDF/SVG/PNG与绘图源码：`../local_runs/riemann_rd_schematic_20261001_v1/`。
+法向方向/长度/垂直性、几何恒等式及任意vector flux的守恒和式通过（误差8.88e-16）；
+PDF重渲染后目视检查通过。不改thesis/solver，不跑新hydro，无commit/push。
+
+§201 follow-up (Codex): clarified H versus F_i.nu: both contain interface
+length; H is a two-state Riemann numerical flux, not quadrature of the original
+continuous P1 field. Added the HLLC wave-fan formula D_i/j=ell sum S^-/+ W,
+static nodal Euler assembly, and scalar upwind example to the focused report.
+Changing the solver changes the distribution even though the element total
+is unchanged. Full ALE/RK2 update distinguished from this spatial illustration.
+No thesis/solver changes or new runs.
+
+§201 citation-scope follow-up (Codex): compared verified2017 §4.1 directly
+with rd_hllc.h:133–191 and the native caller. Static spatial construction is
+an instance of the review's median-dual FV–RD rewriting. HLLC is a flux choice;
+Euler-system algebra is allowed by the review, while its scalar stability
+results do not automatically prove Euler positivity/entropy properties.
+Current ALE velocity, geometric weights, RK2 and edge flips require separate
+justification. Detailed mapping and a short optional English paragraph added
+to the focused report; no thesis edits, solver edits or new runs.
+
+
+## 202. 2026-10-01：对 Claude 的 HLLC FV–RD 工作的综合评论与示意图归档
+
+**作者：Codex；按用户要求整理。** 用户接受当前方法属于 FV–RD、不同于 N/LDA
+的 multidimensional upwinding，认为它对 Sedov 等强激波问题具有价值，并将其
+moving-mesh 后续发展视为值得继续研究的方向。这是对方法定位和研究方向的确认，
+不表示完整 moving-mesh 守恒、正性或高阶混合已完成验证。本轮未修改 thesis 或 solver，
+未运行新模拟，未 commit/push；保留 Claude 的原始记录及此前审查结果。
+
+### 对已有工作的评价
+
+1. **Sedov 改进有实证支持。** 此前独立审查已重算 40 个快照、核对 8 组实验，并对
+   归档 C kernel 重跑 4000 例测试。HLLC 相比 Rusanov 明显改善峰值密度和中心过度
+   混合，说明已有 RD 框架可以容纳适合强激波的另一种低阶空间分配。它的价值无需
+   依赖 N/LDA 的多维迎风性质；这些 Sedov 结果应归属于实际运行的 HLLC FV–RD 分支。
+2. **方法归属应明确。** 建议称为 “HLLC-based finite-volume residual distribution
+   on the median dual mesh, incorporated into the ALE-RD framework”。当前实现对
+   内部 median-dual 界面求两状态 Riemann 问题，并将 fluctuation 分配给两端顶点；
+   它绕过 N/LDA 的 K-matrix 分配，空间仍为一阶。配置中的 N_SCHEME 或采用 RK2
+   都不能据此声称该空间算子具有 N/LDA 的多维迎风性质或二阶空间精度。
+3. **有直接的理论来源。** [Deconinck & Ricchiuto (2017)](https://team.inria.fr/cardamom/files/2019/10/deconinck-ricchiuto2017.pdf)
+   第 4.1 节、式 (55) 后的一般通量表达式及式 (57) 后的求和关系，可以作为空间
+   FV–RD 构造的主要依据。静态极限下，代码采用相同的 median-dual 几何、物理通量
+   扣除和元素残差组装。HLLC 是我们选择的 numerical flux；Euler 方程组延拓保留该
+   代数关系。综述在这一节对标量迎风格式给出的稳定性结论不自动证明完整 Euler/ALE
+   实现的正性或熵稳定性。2017 版节号是 4.1，旧文本的 3.6.1 不宜混用。
+4. **当前结论仍需保持边界。** 元素内 sum(phi_i)=Phi 不等于完整 moving run 的预算
+   守恒。在此前 128² 初始节点、21 热节点、t=.05 的归档 moving HLLC 实验中，
+   质量和总能量变化仍分别约为 −0.329% 和 +0.698%。不要把这些缺陷说成已经由 HLLC
+   修复；现有 temporary_change 记录也没有单独隔离 edge-flip 的贡献。中心密度
+   样本数较少，不能把与参考结果数值接近表述为高精度的连续解验证。
+5. **原叙述中应修正的点保留在详细审查中。** HLLC 的一维 fluctuation 形式不能
+   等同于 Roe solver；普通径向 bin 均值、质量加权均值和面积加权中心密度需区分；
+   相对 MMFV 的差距未被证明全部来自空间阶数；failed LDA 的 Gauss3/F1 配置应准确
+   标识；当前接触保持和正性结论有相应状态/CFL 条件；shock-front faceting 的成因
+   尚未隔离。这些限定不否定已有 Sedov 改进。
+
+### 后续研究定位
+
+当前已有 moving-mesh 初步结果。下一步有意义的工作是进一步区分空间通量、时间与
+几何更新、connectivity change 对守恒和解质量的影响，并验证相应修正的正性、精度
+与鲁棒性。与高阶 RD 的受限混合也是后续方向，现有实验性 LDA/HLLC 混合不应被写成
+已完成的方法。本文现阶段可以用 HLLC FV–RD 的强激波测试体现框架的可扩展性；
+N/LDA 的多维迎风优势仍由其自己的 vortex 等测试支持。
+
+详细材料：
+
+- [对 Claude 结果和论述的独立审查](RD_HLLC_RD_REVIEW_20261001.md)。
+- [原始文献、与综述的逐项对应、flux-to-fluctuation 推导及顶点更新](RD_RIEMANN_FLUX_RD_LITERATURE_20261001.md)。
+- [Claude 的原始汇总（保留原文）](RD_HLLC_RD_SUMMARY_20261001.md)。
+
+### 几何示意图
+
+下图是此前按 thesis Figure 3.2 的几何说明方式绘制的原始示意图。本轮将已经验证的
+PDF/PNG/SVG、绘图脚本和几何检查结果按字节复制到仓库内，方便日志随 Git 一起保存；
+未重新生成或修改图片。源归档及 SHA256 记录见
+[provenance.json](figures/riemann_flux_to_rd/provenance.json)。
+
+![Riemann numerical flux to median-dual residual distribution](figures/riemann_flux_to_rd/output/pdf/riemann_flux_to_rd.png)
+
+左图：沿重心与边中点之间的内部界面求 Riemann 通量；右图：扣除相应顶点的物理
+通量后，将两个 fluctuation 分给两端。所有界面贡献在顶点组装，三个顶点 residual
+之和等于元素总 residual。图中箭头表示分配方向，不表示 fluctuation 的正负。
+图展示静态空间构造，总 residual 采用线性插值的 nodal flux；完整 ALE 更新还需
+单独处理时间、几何和拓扑变化。
+
+文件：[矢量 PDF](figures/riemann_flux_to_rd/output/pdf/riemann_flux_to_rd.pdf)、
+[PNG](figures/riemann_flux_to_rd/output/pdf/riemann_flux_to_rd.png)、
+[可编辑 SVG](figures/riemann_flux_to_rd/output/pdf/riemann_flux_to_rd.svg)、
+[绘图脚本](figures/riemann_flux_to_rd/plot_riemann_to_rd.py)。
+
+## 203. 2026-10-01：审阅Codex评论；Chapter4新增HLLC FV-RD小节与示意图
+
+**作者：Claude Code（Opus 5.5）；用户明确要求在thesis Chapter4 "Distribution schemes"
+之后新增subsubsection写出HLLC/FV-RD数学，并可仿DR2017 Figure 2作图。**
+
+审阅Codex §§200–202：方法归属（median-dual HLLC FV-RD嵌入ALE-RD，非N/LDA多维迎风、
+非LP、一阶）、2017版应引§4.1式(55)–(59)、HLLC不等同Roe、接触保持需共同v=σ̄_T、
+正性有条件、全局预算未修复（temporary_change非仅翻转项）、bin均值/质量加权标签需区分、
+与MMFV2差距不能全归因阶数、faceting原因未隔离——均同意，并已体现在新thesis文字中
+（只陈述空间构造与有条件性质，不写Sedov结论）。我此前汇总中的§3.6.1已改为2017版§4.1。
+核对存档2017原文（`../local_runs/riemann_rd_schematic_20261001_v1/sources/`）：§4.1
+的中位对偶几何、式(55)恒等式、减去同态通量的RD形式及(57)后元素求和，与
+`rd_hllc.h`静态极限逐项一致，故DR2017可作空间构造的主要理论依据；HLLC本身引
+Toro1994/2009，波传播形式引LeVeque2002，ALE时间推进沿用Arpaia。DR2017的标量稳定性
+结论不自动给出Euler正性，正性另由HLLC扇平均凸组合论证（条件：中间态可接受、C_i≤1、
+0<b_i≤1、C_i(U*)≤2b_i），实现中逐阶段检查。
+
+Thesis改动（仅Chapter4，基于5feca22，未commit）：在"Distribution schemes"后、
+§4.3前新增`\subsubsection{HLLC finite-volume residual distribution}`
+（label `section:ALE_RD_HLLC_FVRD`），内容：动机与DR2017§4.1归属；ν_ij=(n_j−n_i)/6
+及闭合恒等式；中位对偶FV式→RD式φ_i=Σ[H−F_i·ν]与元素和=线性插值通量残差（梯形）；
+成对涨落D^(i),D^(j)；ALE相对通量G_T及与Arpaia残差/G3式的关系、RK2用N的lumped质量；
+运动系HLLC（变换M(w)R、波速、λ_*与星态、W_p、D=|ν|MRΣλ^∓W）；接触保持、扇平均正性、
+校正步凸组合式；与N/LDA及AREPO Voronoi FV的区别；实现与时间步/检查。新图
+`chapter4/figures/rd_hllc_fvrd_schematic.pdf`（Figure 4.6）：(a)相邻中位对偶单元与两段
+界面（虚线为Voronoi面），(b)单三角形S_i∩T法向闭合，(c)HLLC波扇与涨落分配；(a)(b)沿用
+DR2017 Fig.2几何，图为原创绘制并在caption致谢，未从PDF抽取。图几何恒等式数值验证
+（误差8.9e−16）。整本master在scratch副本用latexmk/xelatex编译通过：无未定义引用，
+新文字无overfull，印刷页164–170目视检查。归档：
+`../local_runs/thesis_ch4_hllc_fvrd_20261001_v1/`（绘图脚本、geometry_check、PDF/PNG、
+thesis diff、审阅页PDF、provenance）。未改solver、未运行新模拟、未commit/push。
+
+
+## 204. 2026-10-01：仅编译 Chapter4 新增 FV–RD 小节供用户预览
+
+Author: Codex. 用户将整篇编译请求收窄为只编译新增内容对应页面。读取本地
+Chapter4，SHA256 与 Claude §203 的已验证版本一致；未 git pull、未修改论文。
+在独立临时目录中使用原 master 前导、customisations 和原始小节文字（保留起始页
+前一段），只编译该片段。外部引用编号按同一 source hash 的既有整篇编译预览核对，
+引用作者年份由已有 natbib 标签提供；公式从4.46、图从4.6、页码从164开始。
+没有重新编译整篇或其它章节，预览中的跨章节超链接关闭。
+
+LaTeX 编译技能调用已有 TeX Live/latexmk/XeLaTeX 完成，产出7页（164–170）。
+临时 wrapper 的标签载入位置首次触发 preamble-only 错误，移至前导后编译成功；
+没有修改 thesis 正文来解决预览工具问题。最终无未定义引用/文献或 overfull，
+7页均渲染目视检查；所有已跟踪 thesis 文件 hash 保持不变。仅做编译排版检查，
+不在本轮展开用户稍后要做的内容审查或润色。按用户查看请求调用右侧PDF打开工具，
+界面返回 queued；原章节源编辑器保留。无commit/push。
+
+预览：[Chapter4 FV–RD, pages164–170](../../local_runs/thesis_ch4_fvrd_preview_20261001_v1/output/pdf/chapter4_fvrd_preview.pdf)。
+编译日志、临时源、引用快照和验证：`../../local_runs/thesis_ch4_fvrd_preview_20261001_v1/`。
+
+## 205. 2026-10-01：文献检索——以FV作为RD的已有结果
+
+**作者：Claude Code（Opus 5.5）；用户要求检索以往把FV用作RD的格式及其结果。**
+报告：[RD_FV_AS_RD_LITERATURE_20261001.md](RD_FV_AS_RD_LITERATURE_20261001.md)。
+结论：FV⇔RD等价在理论上成熟（Roe1982一维；Paillère1995与DR2017§4.1中位对偶；
+Abgrall2018§4.1；Barsukow–Ciallella–Ricchiuto–Torlo2025 Prop.6角通量FV≡RD）。
+真正以FV通量作RD分配并给出数值结果的很少：Paillère的upwind FV-RD（标量，正、非LP、
+一阶，DR2017称其耗散与Δt限制均劣于N）；Barsukow等2025有Euler结果（含圆形Sod、KH）
+但为Cartesian网格、多维角通量、着重稳态保持。未找到三角形中位对偶HLLC/近似Riemann
+FV-RD用于Euler、运动网格或Sedov的已发表结果（检索结论，非证明不存在）。
+Hu–Li–Tang2010自述仅在最后一步不同——用Newton求解而非残差分配，实为单元中心重构
+格式，故§201称其为"genuine HLLC+RD precedent"偏强。RD与独立FV代码的比较较多：
+Paardekooper2017圆柱爆炸N与HLL几乎相同、Noh中低耗散blend需N备份；DR2017 LN优于二阶
+Roe FV；Guzik–Groth2008标量RD远优于FV。建议论文可补引Paillère1995、Barsukow2025，
+新颖性表述为"应用"（HLLC中位对偶FV-RD嵌入Arpaia ALE-RD并用于重连运动网格Sedov），
+不称新格式族。未改thesis/solver，未运行模拟。
+
+## 206. 2026-10-01：Chapter4 FV–RD 符号统一及 moving-frame/ALE 说明
+
+Author: Codex. 用户明确要求把新增小节和示意图的 D 改成 phi、nu_ij 改成
+n_ij，并说明 moving-frame 通量与 Phi 中 moving-mesh 项的关系，再局部编译。
+仅修改本地 thesis Chapter4 的 HLLC finite-volume residual distribution 小节：
+成对 fluctuation 用 `\phi_{ij}^{(i/j)}`，中位对偶界面长度加权法向用
+`\mathbf n_{ij}^T`，单位法向相应调整；caption、正文、公式和图一致。
+以 `\Phi_{\mathrm{HLLC}}^T` 指代线性插值 Euler 通量的元素残差，明确它与
+ALE 总残差使用同一 midpoint geometry 和 nodal states；后者增加的项为
+`-\int_T\boldsymbol\sigma_h\cdot\nabla\mathbf U_h\,\mathrm dA`。
+说明 moving frame 中求 Riemann flux 再映射回 laboratory conserved variables
+已经得到 relative flux G_T，不能再重复加 mesh 项；相对速度还改变波速及分配。
+
+在新归档中复制 Claude §203 的原绘图脚本，只更新显示符号并稍移右星态标签以
+避免与波线重叠；保留旧归档。几何闭合检查最大误差 8.9e-16。新版矢量 PDF
+写回 thesis 的 `chapter4/figures/rd_hllc_fvrd_schematic.pdf`。
+内置 editor compiler 对裸 Chapter4 在首行 chapter 命令失败（缺 master 前导，
+多文件工程限制），未为此改写论文章节。沿用 §204 的 master 前导、引用编号
+快照及原排版，用已有 TeX Live/XeLaTeX 只编译本小节，成功生成7页（164–170）。
+最终无未定义引用/文献、无 overfull；7页全部渲染目视检查。前后 hash 验证：
+已跟踪 thesis 文件只有 Chapter4.tex 变化，且变化范围仅该小节，另有上述新图。
+未改 solver、未运行模拟、未 git pull/commit/push。
+
+新版预览：[Chapter4 FV–RD, pages164–170](../../local_runs/thesis_ch4_fvrd_notation_20261001_v1/output/pdf/chapter4_fvrd_preview.pdf)。
+修改前备份、精确 diff、绘图脚本、编译片段、日志与验证记录：
+`../../local_runs/thesis_ch4_fvrd_notation_20261001_v1/`。
+
+## 207. 2026-10-02：HLLC moving-frame 矩阵与 Springel2010 的对照验算
+
+Author: Codex. 用户要求在对话中详细验算，不修改 thesis。核对 Springel2010
+原文 arXiv:0901.4107v3 §3.3–3.4，Eqs35、38–45：M(w) 是其 Eq45 boost
+作用于守恒变量的二维矩阵表示；R 是 Eq39 旋转的逆方向（normal/tangent→x/y），
+不是 Eq38 的 primitive-variable PDE Jacobian。Springel 先把 Riemann 状态变回
+lab 再用 Eq42 的 F−U⊗w；当前写法把 moving-frame 通量用 MR 映回，二者代数等价。
+逐分量展开能量通量得到 (E+p)v_n−Ew_n，包括由动量通量变换贡献的 p w_n。
+仅变换状态与直接变换通量应区分；后者无需重复减去 U w_n。
+
+对固定时刻/几何/节点状态，令 w=mean(sigma_i)，F_h=Σpsi_i F(U_i)。
+H_ij 反对称、Σ_j n_ij=−n_i/2 给出 Σ_i phi_i=½Σ_i(F_i−U_i⊗w)·n_i。
+P1 梯度 grad U_h=Σ_i U_i⊗n_i/(2|T|) 为常数，因此
+∫sigma_h·grad U_h=½Σ_i(w·n_i)U_i，严格得到目标等式。
+这里的 Phi 是 nodal-flux/trapezoid 总残差，不自动等于 G3 或 Roe 的总残差。
+元素平均速度通常不是实际中位对偶面的运动速度；用真实 sigma_h 作边界通量时，
+其散度还包含 U_h div(sigma_h)。Arpaia 空间残差等于该边界通量加
+∫U_h div(sigma_h)，几何贡献由其时间/面积处理。此恒等式不证明完整 moving
+solver 的全局守恒或 connectivity transfer。
+
+独立 NumPy 代数检查1000组随机状态、旋转、非退化三角形与非均匀节点网格速度：
+状态变换、通量变换、P1网格积分、任意反对称 pair flux 抵消、目标残差等式的
+最大归一化误差分别为 1.58e-15、1.76e-15、1.39e-15、2.00e-15、2.66e-15。
+仅检查代数与几何，非新的 HLLC/正性/时间积分/完整水动力验证。脚本及结果：
+`../../local_runs/hllc_ale_matrix_check_20261002_v1/`。未修改 thesis 或 solver，
+未运行新模拟、未 commit/push。
+
+## 208. 2026-10-02：Chapter3 插入 FV–RD 几何图
+
+Author: Codex. 用户已自行精简旧内容并开始 Chapter3 的 FV–RD 介绍，本轮只要求
+插入 `geometry_FV_RD_scheme`。现有 PNG 位于 Chapter3 figures，正文有空的
+Figure ref。仅在该段后加入标准 figure 环境、简短两面板 caption 和
+`fig:RD_FV_geometry`，补上正文引用；本图为 Figure3.3。caption 标明取自
+Deconinck & Ricchiuto Figure2，已与本地 review PDF 第14页核对。没有改写
+用户仍在编辑的其余段落或增加推导，没有改 Chapter4。
+
+内置编译器无法独立编译缺少 master 前导的 Chapter3；使用当前 master 前导及
+已有引用编号在临时目录只编译本小节，XeLaTeX 成功生成1页，无未定义引用或
+overfull，图片、caption、正文引用目视检查通过。精确 diff、源备份及局部检查：
+`../../local_runs/thesis_ch3_fvrd_figure_20261002_v1/`。只修改本地 Chapter3.tex，
+原 PNG 保持不变；未 pull/commit/push，待用户按通常流程同步 Overleaf。
+
+## 209. 2026-10-02：Chapter3 补入静态 FV–RD 推导并统一符号
+
+Author: Codex. 用户要求把之前内容到 ALE 部分加入 Chapter3、完善已有符号，并
+保留 taken-from Deconinck & Ricchiuto 的图。按已告知的解释，将旧稿 ALE form
+小节之前的静态内容整理进 `section:FV_RD_schemes`；未恢复长篇 HLLC/ALE 实现。
+来源为 §206 归档的 Chapter4 旧稿及已核对的2017 review §4.1 Eqs55–59。
+
+补全三角形、重心、边中点和 median-dual segment 的数学记号，沿用 n_ij^T、
+phi_i^T 和 pair fluctuation phi_ij^(i/j)。加入五个编号公式：内部法向与闭合关系、
+FV 更新、FV→RD 转换、元素总和以及 pair fluctuation。明确 H 已乘界面长度，
+说明一致性、成对守恒、闭合 hull 上零项的减去，以及与一维 Roe 分裂的联系。
+总残差使用 Chapter3 的小写 phi_FV^T，区分线性插值节点通量 F_h 与非线性
+F(U_h)，不声称梯形总量等于 Roe 线性化总量。简要指出可以换用 HLLC，且分配
+仍来自一维法向 Riemann 问题。保留原图文件、figure 环境、caption 和来源不变。
+
+内置 compiler 对裸 Chapter3 仍因缺 master 前导失败；以原 master 前导只局部
+编译本小节，TeX Live/XeLaTeX 成功，3页全部渲染检查，无未定义引用或 overfull。
+新公式编号3.44–3.48，图仍3.3。diff --check 通过；前后 hash 验证仅已跟踪的
+Chapter3.tex 改变，且范围仅该小节，图及其 caption 字节不变。未改 Chapter4、
+solver 或 bibliography，未运行模拟、未 pull/commit/push。备份、精确 diff、
+验证记录与局部编译：`../../local_runs/thesis_ch3_fvrd_text_20261002_v1/`。
+
+## 210. 2026-10-02：恢复 Chapter3 FV–RD 原文并去掉段内硬换行
+
+Author: Codex. 用户明确要求保留自己原有语句，只修正数学符号。本轮从 §209
+编辑前备份恢复 FV–RD 开头两段的原文、引用方式与 Chapter4 引用，仅把几何
+变量排为数学符号；保留 §209 新增推导。该小节正文段落及 caption 各合并为
+单行，保留段落空行与多行公式环境。核对公式环境及小节外源码字节不变。
+内置 compiler 因裸 chapter 缺少 master 前导失败；使用 master 前导局部
+XeLaTeX 编译成功，3页目视检查通过，无未定义引用或 overfull。diff --check
+通过。未改图、solver 或其它章节，未同步或提交。备份及本轮精确 diff：
+`../../local_runs/thesis_ch3_fvrd_prose_restore_20261002_v1/`。
+
+## 211. 2026-10-02：Sedov 8组质量加权剖面叠加全部样本点；解析压力两行相同
+
+**作者：Claude Code（Opus 5.5）；用户要求在质量加权一维剖面上用淡色点叠加全部数据点，
+并询问右列解析压力为何单点与21点不同。** 新脚本
+`examples/Sedov_2d/plot_sedov_profiles_mw_points.py`（复用v1的load_all/mass_weighted，
+不改v1）；输出 `../local_runs/sedov_hllc_20260930_v1/analysis/profiles_mass_weighted_points_v1/`。
+每个RD顶点、MMFV单元质心、SWIFT粒子为淡点（alpha .12，PDF中栅格化），质量加权线在上；
+y轴按列在两行共享（ρ[−.15,4.45]、v_r[−.5,2.3]、p[−.25,5.6]）。
+解析解：两行完全相同（同一点源相似解，E=1、t=.05，激波半径.258，峰压4.99，中心压1.605）。
+v1中单点行压力面板看似不同，仅因自动纵轴被SWIFT单个热粒子（r=.0042，p=11.8，
+两行中唯一p>6的样本）拉到12；新图在面板顶边以三角标记并注明，元数据列出该越界样本。
+未改thesis/solver，未运行新模拟。
+
+§211 follow-up (Claude, 2026-10-02): user asked whether to average only r>.1 and to
+remove the off-scale text. Bin counts (width .005): moving HLLC-RD, MMFV and SWIFT have
+only 17–25 samples in r<.1 (0–8 per bin, still 0–25 per bin in .10–.14); static HLLC-RD
+has ~515 (2–50 per bin). A fixed r>.1 cut is therefore too strict for the static run and
+too loose for the mass-following methods. Instead, `--min-count 5`: each mean line starts
+at the innermost radius beyond which every bin of that run has ≥5 samples (same rule for
+all methods; faint points still all shown). Start radii: static .005–.010; MMFV .110–.115;
+SWIFT .105–.115; moving HLLC-RD .130–.135. Off-scale text removed (triangle marker kept;
+sample listed in metadata). Output `profiles_mass_weighted_points_v2/` (v1 kept). The
+remaining low SWIFT values at r≈.11–.15 are many particles, not a few outliers.
+
+§211 second follow-up (Claude, 2026-10-02): user chose a fixed start radius r=.05 for all
+mean lines (`--rmin 0.05`, no min-count). Output `profiles_mass_weighted_points_v3/`
+(v1, v2 kept). Sparse bins in .05–.13 (0–8 samples per bin for moving HLLC-RD, MMFV, SWIFT)
+remain visible, e.g. the SWIFT 21-point pressure segment up to ~3.2 near r≈.08.
+
+## 212. 2026-10-02：将最新 Sedov 二维密度图与一维剖面复制到 thesis Chapter4 图目录
+
+**作者：Claude Code（Opus 5.5）；用户要求。** 仅复制文件，未改任何 .tex，未 commit。
+`chapter4/figures/sedov_glass128_t005_density_maps.pdf` ← `maps_preview_v3/sedov_maps_grid.pdf`
+（2×4 密度图，21点/单点 × HLLC-RD静态/运动、AREPO MMFV、SWIFT，色标截断[0,4]，14.2×7.0 in）；
+`chapter4/figures/sedov_glass128_t005_profiles.pdf` ← `profiles_mass_weighted_points_v3/...points.pdf`
+（淡点+质量加权均值，r≥.05起画，按列共享y轴，越界SWIFT热粒子以三角标记，12.8×7.2 in）。
+SHA256 一致（6168…03ed、8bb1…6ae2）；thesis HEAD 5d957e8。来源与哈希：
+`../local_runs/thesis_ch4_sedov_figures_20261002_v1/provenance.json`。均为预览图尺寸，
+插入正文时以 \textwidth 缩放；尚无 Sedov 正文/caption。
+
+## 213. 2026-10-02：审阅 thesis 中 FV–RD 与 Sedov 文字；Chapter4 插入 Sedov 两图
+
+**作者：Claude Code（Opus 5.5）；用户要求检查 Chapter3/4 中 FV–RD 与 Sedov 文字，并把两图加入
+Chapter4。** 只改 Chapter4（基于 a376fb1，未 commit）：Sedov 设置段后加一句引用两图与对照
+（AREPO MMFV、SWIFT SPHENIX，同 glass、同加热粒子），并插入 Figure 4.11
+（`sedov_glass128_t005_density_maps.pdf`，label `fig:ALE_RD_sedov_maps`）与 Figure 4.12
+（`sedov_glass128_t005_profiles.pdf`，label `fig:ALE_RD_sedov_profiles`）及事实性 caption；
+用户原文未改。scratch 副本整本 xelatex 编译：无未定义引用，新文字无 overfull。
+diff 与审阅页：`../local_runs/thesis_ch4_sedov_figures_20261002_v1/`。
+审阅要点（仅报告，未改用户文字）：
+(1) Ch4 Sedov段"directly use the HLLC solver in AREPO"不准确——RD用自写`rd_hllc.h`
+（Toro星态，Davis+Roe平均波速，σ̄_T系），AREPO `riemann_hllc.c`只用Davis估计，且MMFV对照用exact；
+(2) Ch4 FV-RD 运动网格段"the only difference ... Voronoi face geometry with w"过强：还有半面几何
+（每条Delaunay边两段过重心，各用本三角形σ̄_T）、帧速度定义、一阶节点态vs MUSCL-Hancock、Arpaia
+RK2/修正对偶面积vs Voronoi体积；所引Springel(2010)"equation 33 and 42"在arXiv版为梯度估计式，
+移动面通量为式(27)，请对照MNRAS版核实；
+(3) Ch3 由φ_i去掉ΣF·n_ij需闭合壳恒等式Σ_{T∋i}n_i=0（DR2017式55第二式，内点/周期）；
+(4) Ch4"N需要多点注入"应写明为本工作测试：21/1点失败，仅130点(r<.05)静态完成，运动网格亦失败；
+(5) Ch3 FV-RD 节宜补一句性质：一阶、合适通量下CFL正性、非MU非LP；
+(6) FS术语源自Roe(1982)对Roe(1981)的再解释；"Section 4.1 of \citep"宜用\citet；
+另有语法小处。图内字体在\textwidth下约4–4.5 pt，建议按5.7 in重绘（未做，待用户决定）。
+
+## 214. 2026-10-02：按用户确认修改 Chapter3/4 中 FV–RD 与 Sedov 文字
+
+**作者：Claude Code（Opus 5.5）；用户接受§213第1、2点并指定第3点改法，另要求改小的措辞问题。**
+基于 a376fb1，未 commit。Chapter4：(1) Sedov 段改为"We use the HLLC approximate Riemann solver
+(Toro1994), evaluated in the frame moving with σ̄_T, and refer to the scheme as HLLC-RD."；(2) FV–RD
+运动网格段"the only difference…（equation 33 and 42）…replace their w"两句改为"The Riemann problem is
+solved in the rest frame of the interface as in the MMFV method of AREPO (Springel 2010), but with the
+frame velocity σ̄_T and the median-dual interfaces instead of the Voronoi faces."；该段相对通量的
+\mathcal{F} 改为粗体；"supernova explosion"→"explosions"；Sod 段"whlie"→"while"。Chapter3（获授权，
+仅此几处）：(3) "Using Equation (dual normals)"→"Using Equation (dual normals) and Σ_{T∋i} n_i = 0"
+（保留对式的引用，因两者都需要）；"which remains"→"remain"；"experiments … finds"→"find"；
+"It's"→"It is"。未改 \citep/\citet、FS 归属、N 注入说明与 FV-RD 性质句（未获要求）。scratch
+副本整本编译：无未定义引用，被改行无 overfull。累计 diff：
+`../local_runs/thesis_ch4_sedov_figures_20261002_v1/thesis_review_fixes_cumulative.diff`。
+
+§214 follow-up (Claude, 2026-10-02): user asked to rotate the two Sedov figure pages like the
+AREPO flowchart. Both figures now use `\begin{landscape}` + `figure[p]`, wrapped together in
+`\afterpage{...}` as in the Chapter3 Rayleigh–Taylor pair, so page 173 fills with text first.
+Maps at `width=\linewidth`; profiles at `0.88\linewidth` (0.92 overflowed by 14 pt with its
+4-line caption). Full scratch build: no undefined refs, no float-too-large; printed pages 174/175
+are rotated (/Rotate 90), text resumes on 176. Diff and pages:
+`../local_runs/thesis_ch4_sedov_figures_20261002_v1/` (thesis_landscape_cumulative.diff,
+review/chapter4_sedov_landscape_pages_173_176.pdf). Uncommitted.
+
+## 215. 2026-10-02：thesis 全文终检——红字/批注、Ch1/3/4 参考文献、Ch3/4 科学问题（只读）
+
+**作者：Claude Code（Opus 5.5）；用户要求检查剩余红字与批注、Ch1/3/4 参考文献真实性与重复、
+Ch3/4 主要科学问题。** thesis HEAD d93eb77，未改 thesis。
+红字/批注：正文无生效的 \sk/\zw/\red/\adg；仅 Chapter2 注释行（18、271、504）内残留，PDF 不显示。
+scratch 全新编译：无未定义/重复标签与引用，BibTeX 无警告，共 345 条文献。
+文献：Ch1/3/4 引用 206 条，逐条经 DOI（Crossref）、arXiv ID 或标题检索核对；无重复（近似对均为
+不同论文：Planck 2015/2018、Hafen 2019/2020、AGORA I/II、Morton 论文/学位论文等）；无仅 arXiv 文献。
+需改：Bromm & Loeb 2003 DOI 应为 10.1086/377529（现指向他文）；Begelman+2006 DOI 应为
+10.1111/j.1365-2966.2006.10467.x（现指向他文）；arpaia2015mesh 为 Inria 研究报告 RR-8666
+（hal-01102124），bib 误作 @phdthesis。其余标记为无 DOI 的经典/书籍或网络首发年差异，已确认真实。
+科学：Ch3 未见主要问题（Roe 参数代数、K 矩阵与特征值、N/LDA/B、RK2 质量矩阵守恒与 Heun、CFL、
+Yee/Gresho/RT、FV-RD 推导均核对）。Ch4 主要问题：(1) Sedov 段称 DR2017"uses FV-RD and LN scheme
+for shock-shock interaction"不符——原文为 LN 对比二阶单元中心 FV（Barth–Jespersen）；(2) 对
+Abgrall et al. 2020"cannot be applied to astrophysics simulations"表述过强，宜写为固定连接的 Lagrangian
+交错网格；(3) Sedov 结果未报告运动网格守恒漂移（21点 ΔM −0.33%、ΔE +0.70%；单点 ΔE −1.6%；静态
+舍入级）及一阶导致峰值低于 MMFV；(4) Ch4 引言"significantly increase the performance"无计时依据；
+另：剖面图 caption 删减后三角标记未解释。核对脚本与结果：
+`../local_runs/thesis_review_refs_science_20261002_v1/`。
+
+§215 follow-up (Claude, 2026-10-02): user-requested fixes on thesis HEAD 1873f1d, uncommitted.
+(0) Bibliography: Bromm_Formation_2003 DOI → 10.1086/377529; Begelman_Formation_2006 DOI →
+10.1111/j.1365-2966.2006.10467.x (chapter1bib-cosmology.bib); arpaia2015mesh @phdthesis →
+@techreport (Research Report RR-8666, Inria Bordeaux Sud-Ouest, HAL hal-01102124). (1) Chapter4
+Sedov: "apply the FV-RD and LN scheme" → "apply the FV and LN schemes" (DR2017's FV is a
+second-order cell-centred Roe/Barth–Jespersen scheme, not median-dual FV-RD). (2)–(4) unchanged by
+user decision. (5) Profile figure re-rendered without the off-scale triangle
+(`--no-offscale-marker`, new script option; otherwise identical to v3, same line starts and
+limits) → `profiles_mass_weighted_points_v4/`, copied over
+`chapter4/figures/sedov_glass128_t005_profiles.pdf` (sha 5dd98e3c…). Full scratch build: no
+undefined refs, no BibTeX warnings. Noted new active SK comments from commit 1873f1d (Ch4 l.1075,
+Ch5 l.4) left untouched. Diff: `../local_runs/thesis_review_refs_science_20261002_v1/fixes_after_review.diff`.
+
+§215 second follow-up (Claude, 2026-10-02): per user, Chapter4 Sedov paragraph adopts SK's sentence as
+"Given the limited exploration of the Sedov blast test with RD, we here present initial first-order
+FV-RD results and discuss this scheme (see …) as a temporary solution." ("intial"→"initial"; undefined
+"ST" written as "Sedov blast test"). Chapter5 l.4: "that achieve numerical convergence quickly" adopted
+(placed after "hydrodynamic solvers" so it modifies the solvers); SK's DF-test note deleted (user: DF
+tested with MMFV, not yet RD). SK's "To this end … novel developments" left in place pending the
+user's choice (it duplicates "As a first step …"). Build clean. Diff:
+`../local_runs/thesis_review_refs_science_20261002_v1/sk_comments_resolution.diff`. Uncommitted.
+
+§215 third follow-up (Claude, 2026-10-02): user asked to set the local Chapter5 first paragraph to
+the current Overleaf text. Line 4 replaced verbatim (all three \sk comments restored); chapter5.tex
+is now identical to HEAD 1873f1d, i.e. the earlier Ch5 convergence-phrase edit and DF-note deletion
+are reverted. Remaining uncommitted thesis changes: the two DOI fixes, arpaia2015mesh @techreport,
+the Chapter4 FV/LN and SK-sentence edits, and the triangle-free profile figure.
+
+## 216. 2026-10-02：独立复查 thesis 最终版本（Codex，只读）
+
+用户要求检查 Chapter 3/4 重大科学问题、Chapter 1/3/4 参考文献及全文红字/批注。
+审查 thesis HEAD 5d31697（finalize Chapter 5），已跟踪文件干净，未修改论文、同步或提交。
+详见 [独立审查报告](RD_THESIS_FINAL_AUDIT_20261002.md)；脚本、来源清单、元数据与反例：
+../local_runs/thesis_final_audit_codex_20261002_v1/。
+
+新的重点发现：(1) Ch4 G3(P1 U) residual 配 Roe beta，在 S^- 奇异时原始伪逆只分配
+S^- (S^-)† Phi；其 RHS 不必在值域内，不能无条件声明逐元素守恒。正密度/压力三节点反例
+得到 Phi_E − Hbar Phi_rho = −0.2。Ch3 对相容 Roe RHS 的零空间证明不受此反例否定；
+F1 temporal lumped fallback 也不修复 spatial residual。当前原生源码的空间 range completion
+仅在 opt-in common-beta 路径，不能当成默认实现。本次是独立代数检查，不是新原生 hydro run。
+(2) Ch4 l.300 对 Arpaia et al. 2015 的概括不实：原文 §6/§6.1 已有完整 perfect-gas Euler
+方程、矩阵分裂和测试；Colombo & Re 2022 的 collapse/expansion 是局部 patch 且包含 connectivity
+changes。(3) Ch3 结论的无条件时间二阶声明应区分 lumped N/Heun 与默认 LDA/F1；
+既有 fixed-h 时间一阶证据和 hierarchy leading-operator 差异仍适用。Boost 测试只能支持已测范围
+内的低 advection error/近似 boost independence，不能单凭图证明严格离散 GI。
+
+参考文献：365 存储条目、345 全文引用、206 个 Ch1/3/4 引用；无重复 key/title/DOI/eprint/ISBN、
+缺失引用或发现的虚构文献。遗留小错：Campoli2017 页码应113–129；van2006upwind 混用
+2003 AIAA conference 和 2006 CiCP journal 信息；Lumina arXiv 已称 Accepted by MNRAS，
+本地 Submitted 过时（正式卷期未核实，不补猜测值）；Abgrall-Barth 年份2002/2003涉及版权/期刊日期口径。
+Wu2026 的 MNRAS551(2),stag1461 信息已正确，Morton thesis 经 DataCite 确认。
+这修正§215旧记录中“no arXiv-only references”的概括。
+
+全文无生效的红字/批注；Chapter2 l.18/271/504仅有被百分号注释的旧评论。源文件扫描无未定义引用、
+重复label或空引用。全部已记录源文件hash不变；本次未新编译整本论文。
+
+§216 follow-up (Codex, 2026-10-02): 用户仅授权修改 Campoli_ShockFitting_2017 和
+van2006upwind；其余数学问题留到后续最终版本处理。已在本地 thesis 将 Campoli 页码改为
+113–129；van2006upwind 保留 key 和 2006 年，改为 @article，期刊 Communications in
+Computational Physics，1(2),192–206，删除混入的会议字段。只修改这两个 bib 条目，
+正文及其余文献不变。检查 diff 与空白格式；未重新编译整本，未 commit/push。

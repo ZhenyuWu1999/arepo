@@ -158,5 +158,5 @@
   ],
   "reported_gates": 12,
   "validation_scope": "Verified copied-file hashes, JSON consistency and fits from recorded errors only. Raw snapshots, binaries, Configs, job logs and gate outputs were not copied, so no native-run revalidation was performed.",
-  "git_integration": "Pending location of COSMA commits; GitHub develop_pureC_RD was 94cd37a on initial fetch."
+  "git_integration": "Deferred by user on 2026-09-27 after confirming COSMA work was not yet committed; continue locally without that merge."
 }

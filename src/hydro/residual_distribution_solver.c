@@ -52,6 +52,93 @@ static lapack_int solve_system(int n, double *A, double *b);
 
 #ifdef RESIDUAL_DISTRIBUTION
 
+#if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
+#include "rd_rusanov.h"
+#ifdef RD_RUSANOV_LOW_ORDER
+#if !defined(N_SCHEME) || !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(FORCE_EQUAL_TIMESTEPS) || \
+    !defined(CREATE_FULL_MESH) || !defined(TREE_BASED_TIMESTEPS)
+#error "RD_RUSANOV_LOW_ORDER requires full-mesh, equal-step N/lumped RK2 and tree timesteps."
+#endif
+#if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_ELEMENT_COMOVING_FRAME) || defined(RD_ALE_CONTOUR_RESIDUAL) || \
+    defined(RD_ALE_CAMPOLI_MASS) || defined(RD_DIAG_NO_KICK) || \
+    defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
+    defined(PASSIVE_SCALARS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || \
+    defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
+#error "RD_RUSANOV_LOW_ORDER is periodic, hydro-only, lab-frame static/Arpaia ALE."
+#endif
+#ifdef RD_LOW_ORDER_HLLC
+/* Replaces only the element kernel and its per-vertex stage coefficient;
+ * geometry, lumped RK2 stages and all stage checks are the Rusanov path's. */
+#include "rd_hllc.h"
+#endif
+#endif
+#if defined(RD_LOW_ORDER_HLLC) && !defined(RD_RUSANOV_LOW_ORDER)
+#error "RD_LOW_ORDER_HLLC is a kernel option of RD_RUSANOV_LOW_ORDER."
+#endif
+
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+#if !defined(RD_LDA_RUSANOV_BLEND) || RD_LDA_RUSANOV_BLEND != 1
+#error "RD_LDA_RUSANOV_B_SENSOR requires the static positive blend, RD_LDA_RUSANOV_BLEND=1."
+#endif
+#if RD_LDA_RUSANOV_B_SENSOR != 1 && RD_LDA_RUSANOV_B_SENSOR != 2
+#error "Use B_SENSOR=1 for component ratios or 2 for scalar Bmax."
+#endif
+#endif
+
+#ifdef RD_LDA_RUSANOV_BLEND
+#include "rd_lda_rusanov.h"
+#ifdef RD_BLEND_LOW_HLLC
+/* Moving-mesh variant: the low-order endpoint is the edge-HLLC kernel plus
+ * the half-split Gauss3 edge terms, so its element total is LDA's Gauss3
+ * contour.  Equal-step ALE runs both RK sweeps in one call, hence SPLIT. */
+#include "rd_hllc.h"
+#if !defined(RD_ALE_EQUALSTEP) || !defined(RD_ALE_CONTOUR_RESIDUAL) || !defined(LDA_SCHEME) || \
+    !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(RD_RK2_SPLIT_STAGES) || !defined(FORCE_EQUAL_TIMESTEPS) || \
+    !defined(CREATE_FULL_MESH) || !defined(TREE_BASED_TIMESTEPS) || !defined(RD_ALE_CONTOUR_GAUSS) || \
+    RD_ALE_CONTOUR_GAUSS != 3
+#error "LDA/HLLC blend requires equal-step ALE LDA/F1 with the Gauss3 contour residual."
+#endif
+#if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_B_SENSOR) || defined(RD_HIERARCHICAL_TIMESTEPS) || \
+    defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_ELEMENT_COMOVING_FRAME) || defined(RD_ALE_CAMPOLI_MASS) || \
+    defined(RD_ALE_SPLIT_MESH_VELOCITY) || defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_DIAG_NO_KICK) || \
+    defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
+    defined(PASSIVE_SCALARS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || \
+    defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
+#error "LDA/HLLC blend supports lab-frame periodic source-free equal-step ALE hydro only."
+#endif
+#else
+#if !defined(VORONOI_STATIC_MESH) || !defined(LDA_SCHEME) || !defined(RD_RK2_TOTAL_RESIDUAL) || \
+    !defined(FORCE_EQUAL_TIMESTEPS) || !defined(CREATE_FULL_MESH) || !defined(TREE_BASED_TIMESTEPS) || \
+    !defined(RD_ALE_CONTOUR_GAUSS) || RD_ALE_CONTOUR_GAUSS != 3
+#error "LDA/Rusanov research requires static full-mesh equal-step LDA/F1/Gauss3 and tree timesteps."
+#endif
+#if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_RK2_SPLIT_STAGES) || defined(RD_HIERARCHICAL_TIMESTEPS) || \
+    defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_ELEMENT_COMOVING_FRAME) || defined(RD_DIAG_NO_KICK) || \
+    defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
+    defined(PASSIVE_SCALARS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || \
+    defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
+#error "LDA/Rusanov research supports unsplit static periodic source-free hydro only."
+#endif
+#endif /* RD_BLEND_LOW_HLLC */
+#if RD_LDA_RUSANOV_BLEND != 0 && RD_LDA_RUSANOV_BLEND != 1
+#error "Use RD_LDA_RUSANOV_BLEND=0 for the low-order control, or 1 for limiting."
+#endif
+#endif
+#if(defined(RD_BLEND_LOW_HLLC) || defined(RD_BLEND_LOCAL_BOUNDS)) && !defined(RD_LDA_RUSANOV_BLEND)
+#error "RD_BLEND_LOW_HLLC and RD_BLEND_LOCAL_BOUNDS are options of RD_LDA_RUSANOV_BLEND."
+#endif
+
+static int rd_rusanov_local_index(const point *dp)
+{
+  int index = dp->index;
+  if(index >= NumGas)
+    index -= NumGas;
+  if(NTask != 1 || dp->task != ThisTask || index < 0 || index >= NumGas)
+    terminate_program("RD_RUSANOV_LOW_ORDER v1 requires one MPI rank and local gas vertices");
+  return index;
+}
+#endif
+
 /* Standard static LDA/F1 retains its mixed-stage baseline. A common
  * interval-opening distribution is an explicit comparison option only.
  * Moving geometry, N/B, and four-pass rate-Heun have separate definitions. */
@@ -2670,6 +2757,24 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
     }
 #ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
   rd_ale_apply_topology_repair(T, set);
+#ifdef RD_RUSANOV_LOW_ORDER
+  /* The predictor residual and its saved initial state must use the same
+   * repaired U. Recover only primitive fields: do not invoke floors or
+   * change the mesh velocities that defined this interval's geometry.
+   * The existing unlimited topology map can still fail admissibility. */
+  for(int i = 0; i < NumGas; i++)
+    {
+      const double *u = set->ale_uold[i];
+      if(!rd_rusanov_admissible(u))
+        terminate_program("Rusanov topology input is not admissible");
+      SphP[i].Density = u[0];
+      P[i].Vel[0] = u[1] / u[0];
+      P[i].Vel[1] = u[2] / u[0];
+      SphP[i].Utherm = rd_rusanov_internal(u) / u[0];
+      SphP[i].Pressure = GAMMA_MINUS1 * rd_rusanov_internal(u);
+      SphP[i].Csnd = sqrt(GAMMA * SphP[i].Pressure / u[0]);
+    }
+#endif
 #endif
 
 
@@ -3172,7 +3277,7 @@ static void rd_accumulate_dual_area(tessellation *T, const struct rd_element_set
 #endif /* #ifdef RD_DEBUG_ASSERTS */
 }
 
-#ifdef RD_ALE_CFL_TIMESTEP
+#if defined(RD_ALE_CFL_TIMESTEP) || defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
 /*! Add the current-mesh RD spectral restriction to CurrentMaxTiStep.
  *
  *  This function is called immediately after tree_based_timesteps(), before
@@ -3206,6 +3311,53 @@ void rd_apply_cfl_timestep_constraint(tessellation *T)
   for(int slot = 0; slot < set.n; slot++)
     {
       int triangle = set.element[slot];
+#if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
+      double u[3][4], n[3][2], w[2] = {0.0, 0.0}, phi[4], residual[4][3], scale;
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_rusanov_local_index(&DP[DT[triangle].p[vertex]]);
+          double rho = SphP[index].Density;
+          u[vertex][0] = rho;
+          u[vertex][1] = rho * P[index].Vel[0];
+          u[vertex][2] = rho * P[index].Vel[1];
+          u[vertex][3] = SphP[index].Pressure / GAMMA_MINUS1 +
+                        0.5 * rho * (P[index].Vel[0] * P[index].Vel[0] + P[index].Vel[1] * P[index].Vel[1]);
+          for(int axis = 0; axis < 2; axis++)
+            {
+              n[vertex][axis] = set.normals[slot].mag[vertex] * set.normals[slot].normal[vertex][axis];
+              w[axis] += SphP[index].VelVertex[axis] / 3.0;
+            }
+          mass[index] += set.normals[slot].area / 3.0;
+        }
+#if defined(RD_LOW_ORDER_HLLC) || defined(RD_BLEND_LOW_HLLC)
+      double coeff[3];
+      double alpha = rd_hllc_residual(u, n, w, GAMMA, phi, residual, coeff, &scale);
+#else
+      double alpha = rd_rusanov_residual(u, n, w, GAMMA, phi, residual, &scale);
+#endif
+#if defined(RD_LDA_RUSANOV_BLEND) && !defined(RD_BLEND_LOW_HLLC)
+      double nx[3], ny[3], mag[3];
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          nx[vertex] = set.normals[slot].normal[vertex][0];
+          ny[vertex] = set.normals[slot].normal[vertex][1];
+          mag[vertex] = set.normals[slot].mag[vertex];
+        }
+      rd_contour_gauss_correction(u, nx, ny, mag, GAMMA, phi, &scale);
+      alpha = rd_lr_low(u, n, GAMMA, phi, residual);
+#endif
+      if(!(alpha > 0.0))
+        terminate_program("Rusanov timestep estimate found an inadmissible state or bar state");
+      for(int vertex = 0; vertex < 3; vertex++)
+        alpha_sum[rd_rusanov_local_index(&DP[DT[triangle].p[vertex]])] +=
+#if defined(RD_LOW_ORDER_HLLC) || defined(RD_BLEND_LOW_HLLC)
+            coeff[vertex];
+#elif defined(RD_LDA_RUSANOV_BLEND)
+            alpha;
+#else
+            4.0 * alpha / 3.0;
+#endif
+#else
       double sum_sqrt_rho = 0.0, velx_num = 0.0, vely_num = 0.0, h_num = 0.0;
       double sigma[2] = {0.0, 0.0};
 
@@ -3267,6 +3419,7 @@ void rd_apply_cfl_timestep_constraint(tessellation *T)
           int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
           alpha_sum[index] += alpha_triangle;
         }
+#endif
     }
 
   double raw_limit = DBL_MAX;
@@ -3889,6 +4042,13 @@ void compute_residuals(tessellation *T)
   int *thistask_triangles = set.element;
   tri_normals_list        = set.normals;
 
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+  struct rd_lr_old_residual
+  {
+    double low[4][3], high[4][3], accepted[4][3], dt;
+  } *rd_lr_old = (struct rd_lr_old_residual *)mymalloc("RD_LROldResidual", Ndt_thistask * sizeof(*rd_lr_old));
+#endif
+
 #if defined(B_SCHEME) && defined(RD_RK2_EQUALSTEP)
   /* A total-B corrector needs both spatial-stage distributions. The equal-bin
    * static element set has the same persistent ordering in both sweeps. */
@@ -4018,6 +4178,34 @@ void compute_residuals(tessellation *T)
   N_FluxRD_export     = 0;
   FluxRD_list =
       (struct FluxRD_list_data *)mymalloc_movable(&FluxRD_list, "FluxRD_list", Max_N_FluxRD_export * sizeof(struct FluxRD_list_data));
+
+#ifdef RD_RUSANOV_LOW_ORDER
+  /* Sum the actual stage coefficients, including midpoint geometry and U*.
+   * A timestep selected on the opening mesh alone is not a proof of this bound. */
+  double *rd_rus_coeff = (double *)mymalloc("RD_RusanovStageCoefficients", 2 * NumGas * sizeof(double));
+  memset(rd_rus_coeff, 0, 2 * NumGas * sizeof(double));
+#endif
+
+#ifdef RD_LDA_RUSANOV_BLEND
+  /* Assemble an admissible low-order state first; retain complete F1
+   * corrections until their common element coefficient can be bounded. */
+  double(*rd_lr_correction)[4][3] =
+      (double(*)[4][3])mymalloc("RD_LRCorrection", Ndt_thistask * sizeof(*rd_lr_correction));
+  double *rd_lr_cfl = (double *)mymalloc("RD_LRCFL", NumGas * sizeof(double));
+  int *rd_lr_degree = (int *)mymalloc("RD_LRDegree", NumGas * sizeof(int));
+  memset(rd_lr_cfl, 0, NumGas * sizeof(double));
+  memset(rd_lr_degree, 0, NumGas * sizeof(int));
+#ifdef RD_BLEND_LOW_HLLC
+  /* Sum of midpoint |T|/3: the lumped temporal mass. With the Arpaia divisor
+   * it gives the ALE corrector weights a_i and b_i=3/2-a_i. */
+  double *rd_lr_mass = (double *)mymalloc("RD_LRMass", NumGas * sizeof(double));
+  memset(rd_lr_mass, 0, NumGas * sizeof(double));
+#endif
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+  double rd_lr_theta_sum[4] = {0}, rd_lr_theta_max = 0;
+  long long rd_lr_sensor_elements = 0;
+#endif
+#endif
 
   // main loop through triangles this task responsible for
   for(i = 0; i < Ndt_thistask; i++)
@@ -4308,8 +4496,37 @@ void compute_residuals(tessellation *T)
       Velvertex_avg[1] /= (DIMS + 1);
       Velvertex_avg[2] /= (DIMS + 1);
 
+#ifdef TWODIMS
+#ifdef RD_RUSANOV_LOW_ORDER
+      double Phi[4], Flux_RD[4][3], phi_scale, normal[3][2];
+      for(int vertex = 0; vertex < 3; vertex++)
+        for(int axis = 0; axis < 2; axis++)
+          normal[vertex][axis] = tri_normals_list[i].mag[vertex] * tri_normals_list[i].normal[vertex][axis];
+#ifdef RD_LOW_ORDER_HLLC
+      double coeff[3];
+      double alpha = rd_hllc_residual(U_fluid, normal, Velvertex_avg, GAMMA, Phi, Flux_RD, coeff, &phi_scale);
+      if(!(alpha > 0.0))
+        terminate_program("HLLC stage found an inadmissible input, orientation or star state");
+      rd_check_conservation(Flux_RD, Phi, phi_scale, thistask_triangles[i], "HLLC");
+#else
+      double alpha = rd_rusanov_residual(U_fluid, normal, Velvertex_avg, GAMMA, Phi, Flux_RD, &phi_scale);
+      if(!(alpha > 0.0))
+        terminate_program("Rusanov stage found an inadmissible input or pair bar state");
+      rd_check_conservation(Flux_RD, Phi, phi_scale, thistask_triangles[i], "Rusanov");
+#endif
+      double N_roundoff_scale = phi_scale;
+      for(int vertex = 0; vertex < 3; vertex++)
+        {
+          int index = rd_rusanov_local_index(&DP[DT[thistask_triangles[i]].p[vertex]]);
+#ifdef RD_LOW_ORDER_HLLC
+          rd_rus_coeff[index] += triangle_dt * coeff[vertex];
+#else
+          rd_rus_coeff[index] += triangle_dt * 4.0 * alpha / 3.0;
+#endif
+          rd_rus_coeff[NumGas + index] += tri_normals_list[i].area / 3.0;
+        }
+#else
       // compute residuals: Roe Vector Z, Modified fluid state U_hat = \frac{ \partial{U(Z_avg)}}{ \partial Z} * Z
-#ifdef TWODIMS  // for now we only consider 2D. 3D case needs to be included in the future
       double Z_Roe[3][4];
       double Z_avg[4];
       double Enthalpy[DIMS + 1];
@@ -5330,6 +5547,7 @@ void compute_residuals(tessellation *T)
 #endif
 
 #endif  // B scheme
+#endif  // RD_RUSANOV_LOW_ORDER: bypass Roe matrices and distribute trapezoidal flux
 
 #ifdef RD_RK2_RATE_CONSISTENT_HEUN
       if(rd_stage == 1 || rd_stage == 3)
@@ -5784,6 +6002,90 @@ void compute_residuals(tessellation *T)
 
       /*use residuals to update fluid state of local points or export to other tasks*/
 
+#ifdef RD_LDA_RUSANOV_BLEND
+      {
+        double normals[3][2], low[4][3];
+        for(int v = 0; v < 3; v++)
+          for(int d = 0; d < 2; d++)
+            normals[v][d] = tri_normals_list[i].mag[v] * tri_normals_list[i].normal[v][d];
+#ifdef RD_BLEND_LOW_HLLC
+        double coeff[3], low_phi[4], low_scale = 0, nx[3], ny[3], mag[3];
+        double alpha = rd_hllc_residual(U_fluid, normals, Velvertex_avg, GAMMA, low_phi, low, coeff, &low_scale);
+        if(!(alpha > 0)) terminate_program("LDA/HLLC low-order stage found an inadmissible or star state");
+        for(int v = 0; v < 3; v++)
+          {
+            nx[v] = tri_normals_list[i].normal[v][0];
+            ny[v] = tri_normals_list[i].normal[v][1];
+            mag[v] = tri_normals_list[i].mag[v];
+          }
+        rd_hllc_gauss_edge_split(U_fluid, nx, ny, mag, GAMMA, low, low_phi, &low_scale);
+        /* Both endpoints must now share LDA's Gauss3 element total. */
+        for(int k = 0; k < 4; k++)
+          if(fabs(low_phi[k] - Phi[k]) > 1e-10 * (low_scale + phi_scale + DBL_MIN))
+            terminate_program("LDA/HLLC element totals differ: k=%d low=%.17g LDA=%.17g", k, low_phi[k], Phi[k]);
+#else
+        double alpha = rd_lr_low(U_fluid, normals, GAMMA, Phi, low);
+        if(!(alpha > 0)) terminate_program("LDA/Rusanov common-total inflow is inadmissible");
+#endif
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+        double sensor_low[4][3], theta[4];
+        if(rd_stage == 0)
+          {
+            memcpy(rd_lr_old[i].low, low, sizeof(low));
+            memcpy(rd_lr_old[i].high, Flux_RD, sizeof(low));
+            rd_lr_old[i].dt = triangle_dt;
+          }
+        else if(triangle_dt != rd_lr_old[i].dt)
+          terminate_program("RD B sensor requires identical predictor/corrector intervals");
+        for(int k = 0; k < 4; k++)
+          for(int v = 0; v < 3; v++)
+            sensor_low[k][v] = rd_stage == 0 ? low[k][v] :
+                tri_normals_list[i].area/3 * dU_vertex[v][k]/triangle_dt +
+                .5*(rd_lr_old[i].low[k][v]+low[k][v]);
+        rd_lr_b_sensor(sensor_low, RD_LDA_RUSANOV_B_SENSOR, theta);
+        for(int k = 0; k < 4; k++)
+          {
+            rd_lr_theta_sum[k] += theta[k];
+            rd_lr_theta_max = dmax(rd_lr_theta_max, theta[k]);
+          }
+        rd_lr_sensor_elements++;
+#endif
+        for(int v = 0; v < 3; v++)
+          {
+            int index = rd_rusanov_local_index(&DP[DT[thistask_triangles[i]].p[v]]);
+#ifdef RD_BLEND_LOW_HLLC
+            rd_lr_cfl[index] += triangle_dt * coeff[v] / SphP[index].DualArea;
+            rd_lr_mass[index] += tri_normals_list[i].area / 3.0;
+#else
+            rd_lr_cfl[index] += triangle_dt * alpha / SphP[index].DualArea;
+#endif
+            rd_lr_degree[index]++;
+            for(int k = 0; k < 4; k++)
+              {
+                if(rd_stage == 1)
+                  low[k][v] = tri_normals_list[i].area/3 * dU_vertex[v][k]/triangle_dt + .5*low[k][v];
+                rd_lr_correction[i][k][v] = -triangle_dt * (Flux_RD[k][v]-low[k][v]);
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+                if(rd_stage == 0)
+                  rd_lr_correction[i][k][v] *= 1-theta[k];
+                else
+                  rd_lr_correction[i][k][v] = -triangle_dt * rd_lr_b_difference(
+                      Flux_RD[k][v], low[k][v], rd_lr_old[i].high[k][v], rd_lr_old[i].low[k][v],
+                      rd_lr_old[i].accepted[k][v], theta[k]);
+#endif
+                Flux_RD[k][v] = low[k][v];
+              }
+          }
+        /* Remove only the roundoff-level element closure defect. */
+        for(int k = 0; k < 4; k++)
+          {
+            double closure = (rd_lr_correction[i][k][0]+rd_lr_correction[i][k][1]+rd_lr_correction[i][k][2])/3;
+            for(int v = 0; v < 3; v++) rd_lr_correction[i][k][v] -= closure;
+            rd_lr_correction[i][k][2] = -rd_lr_correction[i][k][0]-rd_lr_correction[i][k][1];
+          }
+      }
+#endif
+
       for(j = 0; j < 3; j++)
         {
           if(DP[DT[thistask_triangles[i]].p[j]].task == ThisTask)
@@ -5860,6 +6162,183 @@ void compute_residuals(tessellation *T)
 #endif
 
   apply_FluxRD_list();
+
+#ifdef RD_LDA_RUSANOV_BLEND
+  {
+    double(*q_low)[4] = (double(*)[4])mymalloc("RD_LRLowState", NumGas * sizeof(*q_low));
+    double before[4] = {0}, after[4] = {0}, max_cfl = 0, ell_sum = 0, ell_min = 1;
+    double min_rho = DBL_MAX, min_internal = DBL_MAX, correction_norm = 0, accepted_norm = 0, min_b = 1;
+    long long limited = 0, elements = 0;
+    for(int index = 0; index < NumGas; index++)
+      {
+        q_low[index][0] = P[index].Mass;
+        q_low[index][1] = SphP[index].Momentum[0];
+        q_low[index][2] = SphP[index].Momentum[1];
+        q_low[index][3] = SphP[index].Energy;
+#ifdef RD_BLEND_LOW_HLLC
+        /* ALE lumped corrector = (a-.5)U^n + b[U* - dt/(2b) S^-1 sum phi^low(U*)]:
+         * both convex weights and the rescaled stage CFL must hold. */
+        const double a = rd_lr_mass[index] / SphP[index].DualArea;
+        const double b = rd_stage == 0 ? 1.0 : 1.5 - a;
+        rd_lr_cfl[index] *= rd_stage == 0 ? 1.0 : 0.5 / b;
+        if(!(b > 0.0) || b > 1.0)
+          terminate_program("LDA/HLLC low corrector weight invalid: ID=%llu a=%.17g b=%.17g",
+                            (unsigned long long)P[index].ID, a, b);
+        min_b = dmin(min_b, b);
+#endif
+        if(rd_lr_degree[index] < 1 || !rd_rusanov_admissible(q_low[index]) ||
+           !isfinite(rd_lr_cfl[index]) || rd_lr_cfl[index] > 1)
+          terminate_program("LDA/Rusanov low stage invalid: stage=%d ID=%llu CFL=%.17g",
+                            rd_stage, (unsigned long long)P[index].ID, rd_lr_cfl[index]);
+        max_cfl = dmax(max_cfl, rd_lr_cfl[index]);
+        for(int k = 0; k < 4; k++) before[k] += q_low[index][k];
+      }
+#ifdef RD_BLEND_LOCAL_BOUNDS
+    /* Bounds over the element stencil of each node (all incident triangles'
+     * vertices): stage-opening U^n, the predictor U* at the corrector, and
+     * the assembled low-order stage state.  Zalesak-type, not relaxed. */
+    double(*bound)[3] = (double(*)[3])mymalloc("RD_LRBounds", NumGas * sizeof(*bound));
+    for(int index = 0; index < NumGas; index++)
+      bound[index][0] = bound[index][2] = DBL_MAX, bound[index][1] = -DBL_MAX;
+    for(int slot = 0; slot < Ndt_thistask; slot++)
+      {
+        int ids[3];
+        for(int v = 0; v < 3; v++) ids[v] = rd_rusanov_local_index(&DP[DT[thistask_triangles[slot]].p[v]]);
+        for(int w = 0; w < 3; w++)
+          {
+            const int j = ids[w];
+            double states[3][4];
+            int count = 0;
+            for(int k = 0; k < 4; k++)
+              {
+                states[0][k] = SphP[j].RD_Ustage0[k];
+                states[1][k] = q_low[j][k] / SphP[j].DualArea;
+                states[2][k] = SphP[j].RD_Ustage0[k] + SphP[j].RD_dU[k];
+              }
+            count = rd_stage == 0 ? 2 : 3;
+            for(int c = 0; c < count; c++)
+              for(int v = 0; v < 3; v++) rd_lr_bounds_include(bound[ids[v]], states[c], GAMMA);
+          }
+      }
+#endif
+    for(int slot = 0; slot < Ndt_thistask; slot++)
+      if(set.active[slot])
+        {
+          int ids[3];
+          double ell = 1;
+          for(int v = 0; v < 3; v++)
+            {
+              ids[v] = rd_rusanov_local_index(&DP[DT[thistask_triangles[slot]].p[v]]);
+              double dq[4];
+              for(int k = 0; k < 4; k++) dq[k] = rd_lr_degree[ids[v]] * rd_lr_correction[slot][k][v];
+#ifdef RD_BLEND_LOCAL_BOUNDS
+              ell = dmin(ell, rd_lr_limit_bounds(q_low[ids[v]], dq, SphP[ids[v]].DualArea, bound[ids[v]], GAMMA));
+#else
+              ell = dmin(ell, rd_lr_limit(q_low[ids[v]], dq));
+#endif
+            }
+          if(RD_LDA_RUSANOV_BLEND == 0) ell = 0;
+          if(!(ell >= 0 && ell <= 1)) terminate_program("Invalid LDA/Rusanov limiter");
+          ell_sum += ell; ell_min = dmin(ell_min, ell); elements++;
+          if(ell < 1-1e-12) limited++;
+          for(int v = 0; v < 3; v++)
+            {
+              int index = ids[v];
+              P[index].Mass += ell*rd_lr_correction[slot][0][v];
+              SphP[index].Momentum[0] += ell*rd_lr_correction[slot][1][v];
+              SphP[index].Momentum[1] += ell*rd_lr_correction[slot][2][v];
+              SphP[index].Energy += ell*rd_lr_correction[slot][3][v];
+              for(int k = 0; k < 4; k++)
+                {
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+                  if(rd_stage == 0)
+                    rd_lr_old[slot].accepted[k][v] = rd_lr_old[slot].low[k][v] -
+                        ell*rd_lr_correction[slot][k][v]/rd_lr_old[slot].dt;
+#endif
+                  correction_norm += fabs(rd_lr_correction[slot][k][v]);
+                  accepted_norm += ell*fabs(rd_lr_correction[slot][k][v]);
+                }
+            }
+        }
+    for(int index = 0; index < NumGas; index++)
+      {
+        double q[4] = {P[index].Mass, SphP[index].Momentum[0], SphP[index].Momentum[1], SphP[index].Energy};
+        if(!rd_rusanov_admissible(q)) terminate_program("LDA/Rusanov limited stage is inadmissible");
+        for(int k = 0; k < 4; k++) after[k] += q[k];
+        min_rho = dmin(min_rho, q[0]/SphP[index].DualArea);
+        min_internal = dmin(min_internal, rd_rusanov_internal(q)/SphP[index].DualArea);
+      }
+    double defect = 0;
+    for(int k = 0; k < 4; k++)
+      {
+        defect = dmax(defect, fabs(after[k]-before[k]));
+        if(fabs(after[k]-before[k]) > 1e-10*dmax(1, fabs(before[k])))
+          terminate_program("LDA/Rusanov correction lost conservation");
+      }
+    mpi_printf("RD-LR time=%.17g stage=%d elements=%lld limited=%lld ell_mean=%.17g ell_min=%.17g "
+               "correction_norm=%.17g accepted_norm=%.17g rho_min=%.17g internal_min=%.17g CFL_max=%.17g budget_defect=%.17g\n",
+               All.Time, rd_stage, elements, limited, ell_sum/elements, ell_min, correction_norm, accepted_norm,
+               min_rho, min_internal, max_cfl, defect);
+#ifdef RD_BLEND_LOW_HLLC
+    mpi_printf("RD-LR-HLLC time=%.17g stage=%d b_min=%.17g bounds=%d\n", All.Time, rd_stage, min_b,
+#ifdef RD_BLEND_LOCAL_BOUNDS
+               1);
+#else
+               0);
+#endif
+#else
+    (void)min_b;
+#endif
+#ifdef RD_BLEND_LOCAL_BOUNDS
+    myfree(bound);
+#endif
+    myfree(q_low);
+  }
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+  mpi_printf("RD-LR-B time=%.17g stage=%d mode=%d elements=%lld theta_rho=%.17g theta_mx=%.17g "
+             "theta_my=%.17g theta_E=%.17g theta_max=%.17g\n", All.Time, rd_stage,
+             RD_LDA_RUSANOV_B_SENSOR, rd_lr_sensor_elements,
+             rd_lr_theta_sum[0]/rd_lr_sensor_elements, rd_lr_theta_sum[1]/rd_lr_sensor_elements,
+             rd_lr_theta_sum[2]/rd_lr_sensor_elements, rd_lr_theta_sum[3]/rd_lr_sensor_elements, rd_lr_theta_max);
+#endif
+#ifdef RD_BLEND_LOW_HLLC
+  myfree(rd_lr_mass);
+#endif
+  myfree(rd_lr_degree);
+  myfree(rd_lr_cfl);
+  myfree(rd_lr_correction);
+#endif
+
+#ifdef RD_RUSANOV_LOW_ORDER
+  {
+    double min_rho = DBL_MAX, min_internal = DBL_MAX, max_cfl = 0.0, min_b = 1.0;
+    for(int index = 0; index < NumGas; index++)
+      {
+        const double area = SphP[index].DualArea;
+        const double a = rd_rus_coeff[NumGas + index] / area;
+        /* Existing lumped corrector = (a-.5)U^n + b[U* + dt/(2b)L(U*)].
+         * Static a=1. ALE needs BOTH convex weights and the rescaled stage CFL. */
+        const double b = rd_stage == 0 ? 1.0 : 1.5 - a;
+        const double factor = rd_stage == 0 ? 1.0 : 0.5 / b;
+        const double cfl = factor * rd_rus_coeff[index] / area;
+        if(!(area > 0.0) || !(b > 0.0) || b > 1.0 || !isfinite(cfl) || cfl > 1.0)
+          terminate_program("Rusanov stage CFL/convex weight violated: stage=%d ID=%llu a=%.17g b=%.17g CFL=%.17g",
+                            rd_stage, (unsigned long long)P[index].ID, a, b, cfl);
+        double u[4] = {P[index].Mass / area, SphP[index].Momentum[0] / area,
+                       SphP[index].Momentum[1] / area, SphP[index].Energy / area};
+        if(!rd_rusanov_admissible(u))
+          terminate_program("Rusanov produced an inadmissible stage before primitive recovery: stage=%d ID=%llu",
+                            rd_stage, (unsigned long long)P[index].ID);
+        min_rho = dmin(min_rho, u[0]);
+        min_internal = dmin(min_internal, rd_rusanov_internal(u));
+        max_cfl = dmax(max_cfl, cfl);
+        min_b = dmin(min_b, b);
+      }
+    mpi_printf("RD-RUSANOV time=%.17g stage=%d rho_min=%.17g internal_min=%.17g CFL_max=%.17g b_min=%.17g\n",
+               All.Time, rd_stage, min_rho, min_internal, max_cfl, min_b);
+  }
+  myfree(rd_rus_coeff);
+#endif
 
 #ifdef RD_ALE_HIERARCHICAL_ARPAIA
   if(rd_stage == RD_RK_STAGE_CORRECTOR)
@@ -6122,6 +6601,9 @@ void compute_residuals(tessellation *T)
   myfree(rd_b_phi_stage0);
   myfree(rd_b_flux_lda_stage0);
   myfree(rd_b_flux_n_stage0);
+#endif
+#ifdef RD_LDA_RUSANOV_B_SENSOR
+  myfree(rd_lr_old);
 #endif
   rd_free_element_set(&set);
 

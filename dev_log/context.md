@@ -21,18 +21,17 @@ https://academic.oup.com/mnras/article/518/3/4401/6847219 is the published paper
   chapters.** They are existing thesis material, not a general scratch space for
   the moving-mesh development. Reading and citing their notation is encouraged;
   rewriting, reorganising, or opportunistic cleanup is not.
-- **Chapter 4 is currently a mathematical working draft, not polished or final
-  thesis prose.** Its present purpose is to formulate and discuss moving-mesh
-  ALE-RD, DGCL, changing Delaunay topology, and hierarchical-timestep questions
-  before the engineering implementation is chosen. Equations, alternatives,
-  objections, and explicitly unresolved points may be recorded there.
-- Do not silently promote Chapter 4's current formulas into settled design or
-  formal thesis claims. Distinguish derivations that have been established from
-  proposed formulations that still require review by Zhenyu, Claude, or Kimi.
-- Outside an explicitly requested Chapter 4 mathematics update, do not modify
-  the local thesis files. In particular, do not polish Chapter 4 into formal
-  narrative or propagate its draft statements into Chapters 1--3 without an
-  explicit instruction.
+- **Chapter 4's overall structure is established (user decision, 2026-09-29).**
+  Section 4.3.2 may gain further numerical results, such as Sedov blast tests.
+  Connectivity changes and moving hierarchical timesteps remain ongoing work
+  in Section 4.3.3; the detailed red implementation drafts and alternatives
+  are no longer intended for the thesis. Keep those details in development
+  notes and history instead of restoring them to the chapter.
+- This editorial decision does not validate unfinished numerical methods.
+  Distinguish established derivations and presented test results from proposed
+  repairs and extensions that still require implementation or validation.
+- Do not modify local thesis files or propagate statements between chapters
+  without an explicit request covering the affected material.
 
 https://team.inria.fr/cardamom/files/2019/10/deconinck-ricchiuto2017.pdf is a very useful review paper on residual distribution, written by the core mathematicians working in the CFD field.
 

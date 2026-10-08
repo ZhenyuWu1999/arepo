@@ -1,0 +1,28 @@
+{
+  "source_archive": "/Users/zhenyuwu/arepo_rd/local_runs/riemann_rd_schematic_20261001_v1",
+  "author": "Codex",
+  "date": "2026-10-01",
+  "operation": "Exact copies of the previously rendered and visually verified schematic and its generator; no figure regeneration.",
+  "files": [
+    {
+      "path": "plot_riemann_to_rd.py",
+      "sha256": "12ec0d988424b1d51583fce94af119922a4353e5483f6d5c6fa1b7813df747e8"
+    },
+    {
+      "path": "geometry_check.json",
+      "sha256": "ea98e53d2bff83ef4330934e5b596fadf3667fe48b9736e577d41d7fe796b9ee"
+    },
+    {
+      "path": "output/pdf/riemann_flux_to_rd.pdf",
+      "sha256": "b12b239af9b236578982c7bdd025bbb3cbbe11e0cb2a00f862ed7acda249cbd8"
+    },
+    {
+      "path": "output/pdf/riemann_flux_to_rd.png",
+      "sha256": "3130ee1dece8e32a8bb57781e6198fcefdb2b17db31d48ddf5a0ab718b155464"
+    },
+    {
+      "path": "output/pdf/riemann_flux_to_rd.svg",
+      "sha256": "c2db76837999588e4ae746a4d5847a2d1a43cecca7bacd99c497b4863bf23889"
+    }
+  ]
+}

@@ -38,9 +38,11 @@ not automatically turn a proposed algorithm into a validated result.
   changes. Keep evolving conclusions, branch hashes and numerical tables in
   the context/reports/log, rather than duplicating them in this file.
 - Do not modify thesis files without an explicit thesis-edit request. Chapters
-  1--3 require authorization for the specific chapters; Chapter 4 remains a
-  mathematical working draft until the user chooses otherwise. A solver review
-  or baseline discussion does not itself authorize editing the thesis.
+  1--3 require authorization for the specific chapters. Chapter 4 has an
+  established structure; keep experimental connectivity changes and moving
+  hierarchy in its concise ongoing-work discussion, with detailed alternatives
+  in development notes. A solver review or baseline discussion does not itself
+  authorize editing the thesis.
 - State what each test establishes and its limits. Conservation, uniform-state
   preservation, positivity, convergence order, MPI agreement and efficiency are
   separate properties. Preserve failed attempts and distinguish setup failures

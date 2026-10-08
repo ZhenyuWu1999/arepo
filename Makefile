@@ -316,6 +316,7 @@ endif
 
 ifeq (RESIDUAL_DISTRIBUTION,$(findstring RESIDUAL_DISTRIBUTION,$(CONFIGVARS)))
 OBJS    += hydro/residual_distribution_solver.o
+INCL    += hydro/rd_rusanov.h
 endif
 
 ifeq (RD_ALE_GEOMETRY_DIAGNOSTICS,$(findstring RD_ALE_GEOMETRY_DIAGNOSTICS,$(CONFIGVARS)))
@@ -494,6 +495,7 @@ check_rd:
 	@$(PYTHON) tests/rd/test_lda_common_beta.py
 	@$(PYTHON) tests/rd/test_n_frame_covariance.py
 	@$(PYTHON) tests/rd/test_ale_shear_eigenvalue_floor.py
+	@$(PYTHON) tests/rd/test_rusanov_positivity.py
 
 $(CONFIG_CHECK): $(TO_CHECK) $(CONFIG) check.py
 	@$(PYTHON) check.py 2 $(CONFIG) $(CONFIG_CHECK) defines_extra $(TO_CHECK)

@@ -11,8 +11,9 @@ integrate COSMA changes, and continue subsequent experiments on the Mac.
   Production solver files and default configurations are unchanged.
 - Initial fetch and direct GitHub head lookup still returned `94cd37a` for this
   branch. No newer COSMA commit appeared on the other published branches.
-  A read-only SSH check could not authenticate. Integration is pending the
-  COSMA commit/branch location or completion of its push.
+  A read-only SSH check could not authenticate. Zhenyu subsequently confirmed
+  that the COSMA work has not yet been committed and explicitly deferred its
+  integration. Continue local work; do not wait for or initiate that merge.
 
 ## Copied results and provenance
 

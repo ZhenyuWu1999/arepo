@@ -14,7 +14,8 @@ is not needed for the next phase. The copied boosted-Yee comparison figures
 and summaries are available in the workspace's
 `cosma_runs/yee_n_boost10_20260926/comparison_latest/` directory.
 See [the local return record](RD_LOCAL_RESUME_COSMA_IMPORT_20260927.md) for
-verified file provenance and the pending source/log integration status.
+verified file provenance and the source/log integration status. The user has
+confirmed that the COSMA work is not yet committed and deferred that merge.
 This local handoff does not claim to have checked live COSMA jobs or raw
 snapshots, and does not launch, cancel or restart a cluster campaign.
 

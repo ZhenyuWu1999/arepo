@@ -3,7 +3,751 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-09-27
+Updated: 2026-10-02
+
+**Chapter3 wording correction (2026-10-02, log3 §210):**
+User explicitly wants their original FV–RD sentences preserved; only typeset
+math symbols, without unsolicited prose polishing. Restored the two original
+paragraphs after §209, retaining its added derivation. Prose paragraphs and
+caption now each occupy one source line; displayed equations retain line breaks.
+Local three-page compile and visual check pass. Latest exact edit archive:
+`../local_runs/thesis_ch3_fvrd_prose_restore_20261002_v1/`.
+
+**Chapter3 static FV–RD introduction completed (2026-10-02, log3 §209):**
+Restored the archived pre-ALE material into the user's new FV–RD subsection:
+median-dual normals, FV update, flux-to-residual conversion, element sum and
+pair fluctuations. Kept the original Deconinck–Ricchiuto figure and caption.
+Notation follows Chapter3, with phi_FV^T for the nodal-flux/trapezoid total.
+Only this subsection changed; three-page local compile and visual check pass.
+ALE material stays in Chapter4 under the stated scope interpretation.
+Archive: `../local_runs/thesis_ch3_fvrd_text_20261002_v1/`; uncommitted.
+
+**Chapter3 FV–RD figure inserted (2026-10-02, log3 §208):**
+User is introducing concise FV–RD material in Chapter3. Inserted the existing
+`geometry_FV_RD_scheme.png` into the new subsection, with caption and the
+previously empty cross-reference completed (`fig:RD_FV_geometry`, Figure3.3).
+Only this figure insertion and reference changed; local subsection compile
+and visual check passed. Uncommitted; normal Overleaf sync remains to follow.
+
+**Chapter4 FV–RD notation and ALE clarification (2026-10-01, log3 §206):**
+User-authorized edit of the new HLLC subsection only: pair fluctuations now
+use phi and median-dual scaled normals use n_ij, including the figure.
+Clarified that the moving-frame flux mapped back to laboratory conserved
+variables already includes the negative mesh-advection term in the element
+residual; relative wave speeds also affect its distribution. Local Chapter4
+and schematic updated, uncommitted. Only the seven relevant pages (164–170)
+were recompiled and visually checked; no whole-thesis build or solver run.
+Latest preview and reproducible sources:
+`../local_runs/thesis_ch4_fvrd_notation_20261001_v1/`.
+
+
+**Consolidated comments and user position (2026-10-01, log3 §202):**
+User accepts the present HLLC FV–RD construction as distinct from N/LDA
+multidimensional upwinding, useful for strong shocks, with further moving-mesh
+work worth pursuing. Consolidated review, citation scope and remaining limits
+are in log3 §202. Previously verified schematic and generator now also live in
+`dev_log/figures/riemann_flux_to_rd/` with byte-identical-copy provenance.
+No thesis/solver changes, no new simulation or validation claims.
+
+
+**Riemann-flux RD literature and figure (2026-10-01, log3 §201):**
+Verified Deconinck–Ricchiuto2017 §4.1, equations55–59 (older text §3.6.1),
+and Abgrall2018 §4.1 support median-dual FV-to-RD rewriting. Hu–Li–Tang2010
+explicitly uses HLLC in a cell-centred steady RD-type method; related precedent,
+not the same ALE implementation. Original two-panel vector diagram and full
+qualification: `RD_RIEMANN_FLUX_RD_LITERATURE_20261001.md`, archive
+`../local_runs/riemann_rd_schematic_20261001_v1/`. No thesis/solver changes.
+
+
+**Independent HLLC-RD review (2026-10-01, log3 §200):**
+Recomputed40 archived snapshots/eight cases and reran4000 tests on the frozen
+native HLLC header; all pass. Improvement is real (moving peak2.428→2.980,
+core.198→.028), but this is a median-dual FV fluctuation split in ALE-RD,
+not N/LDA multidimensional upwinding; the branch bypasses K distribution.
+Moving budgets remain−.329% mass/+.698% energy (21 hot),−1.606% energy (1 hot).
+Do not conflate bin-number means with mass means, HLLC with Roe in1D, or the
+whole temporary ledger with isolated flip error. The remaining MMFV gap is
+not proved solely due to order. See `RD_HLLC_RD_REVIEW_20261001.md` and
+`../local_runs/hllc_rd_review_20261001_v1/`. No thesis/solver edits or new
+native hydrodynamic runs. Claude's existing notes retained unchanged.
+
+
+**Chapter4 high-resolution Sod inserted (2026-10-01, log3 §198):**
+User removed Chapter4 comments in e3ef001 and prefers minimal changes; defer
+standard AREPO overlays for boosted vortices. Added the existing effective
+Nx128 Sod figure (256² full-box nodes, gamma5/3, t=.2) from main_comparison_v3
+page1, matching the Nx64 figure from page2. Brief cross-referenced caption;
+text now cites high-res sharpening with similar overall behaviour and removes
+"for clarity" omission. Only Chapter4.tex plus new figure; uncommitted. Figure
+render and diff check pass; native chapter compile lacks master preamble.
+Archive: `../local_runs/thesis_ch4_sod_highres_20261001_v1/`.
+
+
+**Chapter3 nullspace calculation inserted (2026-10-01, log3 §197):**
+User approved rank([Sminus|b])=rank(Sminus)<n without a separate compatibility
+discussion. Edited only Chapter3 inverse matrix subsection: zero Roe mean velocity,
+explicit Sminus*z using L/G, then z=z_rho*e_rho and spectral Kplus*z=0. Diff check
+passes; uncommitted. Native chapter compile fails at the first chapter command
+without master preamble; no alternate PDF or editor tab. Other thesis text kept.
+
+
+**Chapter3 zero-velocity nullspace proof (2026-10-01, log3 §196):**
+User has revised Chapter3 personally; unchanged Ben 3D implementation does not
+need expansion. Discussion only: a half-page proof at zero Roe mean velocity
+uses ker(Sminus)=span(e_rho), then spectral splitting gives Kplus_i e_rho=0.
+Also state RHS compatibility (b_E=Hbar b_rho) before calling the pseudoinverse
+an exact solution; the stated Roe N/LDA RHSs satisfy it. Algebra is already in
+`RD_THESIS_42_ZERO_VELOCITY_DERIVATION_20260926.md` §§2–4. No thesis edits.
+
+**Chapter3 scope discussion (2026-10-01, log3 §195):**
+User requests discussion only and prefers minimal Chapter3 changes. Proposed
+focus: identify personal contributions (C++→C preparation for AREPO, corrected
+singular S⁻ solve, own tests/cross-code comparison) and distinguish them from
+Ben's work and the2023 paper timeline. Current fixed-mesh RD should not claim
+strict discrete Galilean invariance; leave ALE/boost discussion in Chapter4,
+with only a short Chapter3 cross-reference if edited later. Boost tests are
+numerical evidence, not a complete invariance proof. Thesis now `090740b`, tracked
+tree clean; no thesis changes in this turn.
+
+
+**Comoving equation / Abstract accepted (2026-10-01, log3 §194):**
+Corrected extra v in Chapter1 comoving momentum flux and made divergence/dot
+products explicit. Abstract Chapter4 now uses the approved concise integration,
+moving-mesh tests and future-framework paragraph. User explicitly retains Morton
+comparison wording: Chapter2 targets order-of-magnitude heating estimates.
+Two-file change only; earlier edits preserved, unstaged/uncommitted. Native
+chapter-only compile still lacks the master preamble; no separate PDF created.
+Archive: `../local_runs/thesis_comoving_abstract_20261001_v1/`.
+
+
+**User-confirmed thesis fixes (2026-10-01, log3 §193):**
+Applied confirmed Chapter1 formula corrections and Figure1.4 caption; retained
+Lambda convention, Chapter2 integral and SHMF/cooling normalization as requested.
+Comoving equation, Abstract and Morton prose remain pending discussion. Merged
+three duplicate bibliography groups (367→364); updated citation aliases, author
+formats, missing publication fields and Wu2026 MNRAS551(2),stag1461. BibTeX and
+all344 active citation keys pass; seven tracked files are unstaged/uncommitted.
+The native editor cannot compile chapter1.tex alone (undefined chapter without
+master preamble). No separate PDF or tab created; full PDF unverified this turn.
+Archive: `../local_runs/thesis_confirmed_fixes_20261001_v1/`.
+
+
+**Thesis front matter–Chapter2 review (2026-10-01, log3 §192):**
+Read-only audit of `68399ec`, now equal to origin/main. Body red comments are
+cleared; List of Figures xx still repeats three SK comments from Figures4.6–4.8.
+Several definite formula typos and a wrong Figure1.4 caption remain. Chapter2
+ln/lg SHMF and nH² cooling normalizations require checking against analysis
+code before inferring any numerical error. Also review Abstract scope, Morton
+comparison qualifications and bibliography entries. Full findings:
+`../local_runs/thesis_front_ch2_review_20261001_v1/review.txt`. Isolated246-page
+build passed; citations resolve and11 targeted pages were visually checked.
+All tracked thesis hashes unchanged; no thesis/solver edits, commit or push.
+
+
+**Thesis GitHub/Overleaf merge (2026-09-30, log3 §190):**
+Merged remote04dcc4a (Sadegh Chapter4/5 comments) with local6e02014/447c9a0
+(Chapter1/Abstract and equation punctuation) as68399ec. No conflicts;
+comments and local revisions retained,30 untracked files unchanged.
+Main is ahead of origin/main by3, tracked working tree clean; no push.
+Comments remain for review; no PDF rebuild. Archive:
+`../local_runs/thesis_github_merge_20260930_v1/`.
+
+
+**Chapter1 follow-up wording restored/simplified (2026-09-30, log3 §188):**
+Applied the user's precise revisions on top of §185: exact decaying-mode
+sentence; original The current Gaussian paragraph with only the requested
+phrase changed; shorter rotation and Schaye/Dalla Vecchia statements;
+original Chapter2 outline and exact Ben Morton contribution sentence.
+Confirmed Abstract line12 already has the new-mechanism wording in its
+unstaged diff. Only Chapter1 changed this turn; earlier Abstract/bib edits
+remain. Isolated245-page build and6-page visual check pass; references
+resolve. Unstaged/uncommitted. Archive:
+`../local_runs/thesis_ch1_followup_20260930_v1/`.
+
+
+**User decision (2026-09-30):** LDA/HLLC blend not mature (scatter mainly
+shock-generated; v_t ~2× HLLC, front corrugation 1.6×). The thesis
+Sedov should favour the edge-HLLC moving result; the blend stays
+experimental (report §4).
+
+**Experimental moving LDA/F1 + edge-HLLC limited blend (2026-09-30, log3 §187):**
+New opt-ins `RD_BLEND_LOW_HLLC` and `RD_BLEND_LOCAL_BOUNDS` under
+`RD_LDA_RUSANOV_BLEND`. The low order is HLLC plus half-split Gauss3 edge
+terms (common Φ_G, nodal cancellation), with ALE a_i/b_i checks and local
+ρ/K bounds. Tests pass; the static blend replay is bitwise; the ℓ=0 control
+reproduces HLLC to 6e−12.
+Sedov 21-point bounds: raw ρmax 3.80, mean peak 2.89, p_core 1.653,
+ΔE −.96%. Single point: p_core 1.595, ΔE −6.4%. Velocity scatter is about
+3× HLLC.
+Positivity-only (no bounds) was resumed after the AREPO CPU limit and
+reached t=.05. It overshoots (ρmax 4.8/5.3), shows about 5× HLLC
+velocity noise, and has about 500 nodes with K below the initial minimum. Flip/rebase conservation is now the bottleneck.
+Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
+[report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
+
+**Chapter4 Sedov figures inserted (2026-10-02, log3 §§212–213):** user moved the
+FV-RD derivation to Chapter3 §3.2.5 (`section:FV_RD_schemes`, DR2017 Fig.2 copy)
+and kept a short moving-mesh FV-RD paragraph in Chapter4; my §203 subsubsection
+is gone. Figures 4.11/4.12 (`fig:ALE_RD_sedov_maps`, `fig:ALE_RD_sedov_profiles`)
+added after the Sedov setup; base a376fb1; uncommitted. Open review items
+(HLLC "in AREPO" wording, "only difference" vs MMFV, Springel eq. numbers,
+closed-hull identity) listed in log3 §213. Figure fonts ~4 pt at \textwidth.
+
+**Chapter4 HLLC FV-RD subsubsection inserted (2026-10-01, log3 §203):**
+User-requested. After "Distribution schemes", new unnumbered subsubsection
+`section:ALE_RD_HLLC_FVRD` (DR2017 §4.1 as main support; HLLC Toro, waves
+LeVeque) plus original Figure 4.6 `chapter4/figures/rd_hllc_fvrd_schematic.pdf`
+following DR2017 Fig.2 geometry. Only chapter4.tex + figure; base 5feca22;
+uncommitted. Full master builds in scratch, no new overfull/undefined refs.
+No Sedov results in thesis yet. Archive
+`../local_runs/thesis_ch4_hllc_fvrd_20261001_v1/`.
+
+**HLLC-RD consolidated write-up (2026-10-01, log3 §199):** idea origin,
+math (ν_ij=(n_j−n_i)/6 FV-RD split, frame HLLC, positivity/ALE checks),
+code map, 10 experiments with archive and figure links, main results
+(incl. single-point, N comparison, MMFV/SWIFT faceting, blend verdict:
+thesis favours HLLC-RD) in [summary](RD_HLLC_RD_SUMMARY_20261001.md).
+Thesis untouched; source uncommitted.
+
+**Edge-HLLC low-order RD implemented and tested (2026-09-30, log3 §186):**
+New opt-in `RD_LOW_ORDER_HLLC` (requires `RD_RUSANOV_LOW_ORDER`;
+`src/hydro/rd_hllc.h`, two call sites, defines_extra). Median-dual edge HLLC
+in the w_T frame, same trapezoidal ALE total, per-vertex stage coefficient,
+star-state checks, no floors. 4000 kernel tests plus 5 check_rd pass.
+Moving 21-point Sedov t=.05: mean ρ peak 2.98, core ρ .0276, p_core 1.714.
+That reaches first-order MMFV (3.10/.0276); Rusanov gave 2.43/.198.
+Single-hot-node run completes (peak 3.00). Flag-absent Rusanov replay is
+bitwise identical to the archive. Still first order; moving budgets drift
+(mass −.33%, energy +.70%/−1.61%) because the connectivity/endpoint terms
+are unchanged. Thesis also read, including red-text commits
+e4fcd84/beb977d. Archive `../local_runs/sedov_hllc_20260930_v1/`,
+[report](RD_SEDOV_HLLC_LOW_ORDER_20260930.md). Uncommitted; defaults and
+thesis unchanged. Next: ALE convex-limited LDA correction, then positive
+conservative flip remap.
+
+**Chapter1/Abstract comments addressed (2026-09-30, log3 §185):**
+User authorized ten specific edits. Thesis base `447c9a0` already commits
+the punctuation pass and is ahead of origin/main by1. Changed only Chapter1,
+the formal Abstract paragraph on DF heating, and chapter1bib-cosmology.bib.
+Emphasized DF heating as a new mechanism affecting PopIII/DCBH formation;
+revised decaying/Gaussian wording; removed the missing-satellite aside;
+added Hubble1926 and ATLAS3D I/III citations; expanded the surface-density
+versus local volume/pressure star-formation discussion using the existing
+SchayeDallaVecchia2008 entry. Added the Chapter2 cross-reference and rewrote
+the outline to match current Chapters2--5, retaining ongoing-work limits.
+All10 addressed comments removed; equations, labels, Lay Summary and other
+chapters unchanged. Full isolated246-page build and12-page visual review
+pass; references resolve. Changes are unstaged/uncommitted for git diff;
+no push or root master.pdf overwrite. Archive:
+`../local_runs/thesis_ch1_comments_20260930_v1/`.
+
+**Sedov RD shock literature + first-order MMFV diagnostic (2026-09-30, log3 §184):**
+Existing moving RD Sedov is pure first-order Rusanov; LDA/Rusanov and Bmax
+are static-only. New diagnostic first-order MMFV (face extrapolation off;
+exact and HLLC) on identical ICs: mean ρ peak 3.10/3.07, core ρ .028,
+roundoff budgets, versus moving Rusanov RD 2.43/.198 and second-order MMFV
+3.30/.030. The main moving-RD deficit is the Rusanov dissipation form
+(∝c on density), not missing second order. Proposed, not implemented:
+(1) edge median-dual HLLC low order in the w_T frame; (2) ALE port of the
+convex-limited LDA correction with local ρ/specific-entropy bounds;
+(3) positive conservative remap at flips. Archive
+`../local_runs/sedov_mmfv_first_order_20260930_v1/`,
+[report](RD_SEDOV_SHOCK_LITERATURE_OPTIMIZATION_20260930.md). No RD solver,
+default Config or thesis change; new configs/runner/analysis are untracked.
+
+**Thesis equation punctuation audited (2026-09-30, log3 §183):**
+User authorized a whole-thesis pass for SK's missing equation punctuation.
+Starting thesis `99df79a` (main/origin-main) already includes the latest
+Chapter4 wording and Chapter5. Checked all248 active display blocks;
+93 changed across Chapters1--4 and Appendix1, mostly Chapters1--2.
+Only punctuation/adjacent whitespace and one continuation `The`→`the`
+changed; math, labels, comments and all other tracked files are preserved.
+Full isolated245-page XeLaTeX build passes; references/citations resolve,
+12 representative pages visually checked. Existing11 overfull locations
+remain (two long Chapter1 equations gain2.61109pt from their full stops).
+Uncommitted/unpushed; root master.pdf unchanged. Archive and checks:
+`../local_runs/thesis_equation_punctuation_20260930_v1/`.
+
+**Chapter4 overview transition simplified (2026-09-30, log3 §182):**
+User synced §4.3.3 edits as thesis `12e9451` (main/origin-main). Only the
+last §4.3.1 paragraph is now locally modified: introduce the numerical
+tests and defer connectivity-conservation/hierarchy development to §4.3.3.
+Text/diff checks passed; uncommitted, with no rebuild for this wording edit.
+
+**Chapter4 hierarchy prose simplified (2026-09-30, log3 §181):**
+Replaced only the last two §4.3.3 paragraphs with the timing problem caused
+by flips and the candidate idea of completing old updates up to the flip,
+conservatively transferring the state, then continuing on the new mesh.
+Native validation/parallel work remains ongoing; presented moving tests
+still use one timestep for all vertices. User has committed red-draft
+removal as thesis `beb977d` (ahead1); connectivity and hierarchy edits remain
+uncommitted. Text checks passed; no rebuild after this prose-only edit.
+Archive: `../local_runs/thesis_hierarchy_prose_20260930_v1/`.
+
+**Chapter4 connectivity prose polished locally (2026-09-30, log3 §180):**
+Applied the user's pasted Overleaf wording and agreed edits to §4.3.3 on
+thesis `8cfb119`: explain the Delaunay/Voronoi geometric distinction and
+nonuniform-field integral change directly, replace the uniform-flow detour,
+and omit the separate midpoint/endpoint discussion from this paragraph.
+Equations, repair limitations, hierarchy and all other chapters unchanged.
+Earlier red-draft removal remains; both edits are uncommitted/unpushed.
+Isolated 242-page XeLaTeX build passes with resolved references; printed
+pp.169--171 visually checked. Root master.pdf unchanged. Archive:
+`../local_runs/thesis_connectivity_polish_20260930_v1/`.
+
+**Chapter4 structure established; red drafts removed (2026-09-29, log3 §176):**
+User considers the chapter structure settled; §4.3.2 may gain Sedov/other tests,
+while connectivity changes stay concise ongoing work in §4.3.3. On thesis
+`8cfb119` (main/origin-main; Lay Summary already synced by user), removed the
+431-line red implementation/alternatives block only. Retained body/§4.3.3
+unchanged,25 removed labels have no outside references. Full isolated242-page
+XeLaTeX build succeeds with resolved references; chapter ending visually checked.
+Uncommitted/unpushed; root master.pdf unchanged. Updated AGENTS/context scope;
+this does not validate unfinished repairs/hierarchy. Review:
+`../../output/pdf/chapter4_clean_review.pdf`; archive:
+`../local_runs/thesis_ch4_remove_red_20260929_v1/`.
+
+**Lay Summary lightly polished locally (2026-09-29, log3 §175):** On thesis
+main `b6786ed`, revised only the Lay Summary in frontmatter/abstract.tex.
+Preserved narrative/voice, corrected grammar, and explained DF/LW/bulk-motion
+terms in plainer language. Formal Abstract and all other tracked thesis files
+unchanged. Isolated two-page XeLaTeX preview compiled and visually checked;
+full thesis PDF not rebuilt. Uncommitted/unpushed; normal Overleaf sync pending.
+Review: `../../output/pdf/lay_summary_review.pdf`; archive:
+`../local_runs/thesis_lay_summary_polish_20260929_v1/`.
+
+**Thesis local merge completed (2026-09-29, log3 §174):** Fetched GitHub
+`origin/main` at `9e428fd` (Lay Summary) and merged with local `c3aa858`
+(4.3.3 Ongoing work), producing `b6786ed` on main without conflicts. Both
+original commits retained; Chapter4 exactly matches the local commit and
+abstract exactly matches the remote. Tracked tree clean; all30 untracked
+files and both stashes preserved. Local main ahead2/behind0, not pushed;
+Overleaf not operated directly. PDF not rebuilt for this Git-only sync.
+Backup/checks: `../local_runs/thesis_merge_20260929_214454/`.
+
+**Thesis 4.3.3 local draft awaiting review (2026-09-29, log3 §§172–173):**
+Expanded the edge-flip explanation using old/new P1 basis functions and their
+integrated-weight defect at identical coordinates/time. Describes the patch
+repair as experimental and disabled in the presented tests. Retains repair
+positivity limits, the endpoint-weight defect and actual-interval hierarchy.
+No Sedov results. Distinguishes independent Euler conservation evidence from
+unfinished native integration and accuracy/positivity/MPI validation. Thesis
+base `1bb457f`; earlier velocity-error typo fix preserved. Full isolated build
+passes with resolved references; current review covers printed pp.169–171 in
+`../../output/pdf/chapter4_3_3_ongoing_work_review.pdf`. Local and unpushed.
+
+**RD B/Bmax sensor transplant completed (2026-09-29, log3 §§170–171):**
+The consolidated development record, comparisons and remaining limits are in
+[log3 §171](RD_DEVELOPMENT_LOG_3_localMac.md#171-2026-09-29ldarusanov与bbmax改进的总开发记录).
+User preferred
+methods already used in RD. Added opt-in `RD_LDA_RUSANOV_B_SENSOR=1/2` for
+component B/scalar Bmax on the existing static positive LDA/Rusanov branch.
+Complete old/new RK residuals are mixed; N is replaced by common-Gauss Rusanov,
+with the existing outer coupled positivity guard. This is not RPJ or MOOD.
+All10 v2 native runs/50 snapshots pass; no active solver. B gives unacceptable
+density outliers (raw peak10.0). Bmax lowers core radial-velocity scatter41x
+(.158645->.00387403), but mean density peak2.147 is close to low1.961 versus
+old blend2.798. Core pressure1.54876 improves on low1.44343 (exact1.60510).
+Budgets at roundoff; Bmax entropy minimum still undershoots initial floor by
+.023%, so no strict entropy claim. Contact16/32/64 orders1.745/1.856. v1 failed
+the smooth-order check because of omitted old-branch correction; stopped v1
+science and retained artifacts. Corrected frozen archive
+`../local_runs/sedov_rd_bsensor_20260929_v2/`, [report](RD_SEDOV_B_SENSOR_20260929.md).
+4000 kernel checks + existing5 algebra checks pass; default Config/thesis
+unchanged, all source uncommitted. Next distinct RD route is characteristic
+limiting/Rusanov-PSI with stabilization and/or MOOD, if pursued.
+
+**LDA+Rusanov static prototype completed (2026-09-29, log3 §167):** New opt-in
+`RD_LDA_RUSANOV_BLEND=1` limits complete LDA/Gauss3/F1 stage corrections to a
+common-Gauss admissible Rusanov update;0 selects its low-only control. Static,
+periodic,1rank,equal steps,unsplit RK only; defaults unchanged. All12 native
+runs/60 snapshots pass, no active solver. Same glass128² nearest21 Sedov reaches
+t.05 with positive stages and roundoff M/E conservation. Mixed raw/mean rho
+peaks3.791/2.798 versus low2.006/1.961; core r<.05 meanp1.6074 vs exact1.6051,
+meanrho.02769 vs exact.00435. Shock-front density undershoot (~.6 mean), large
+vr scatter and entropy-minimum violations remain: positivity is insufficient
+for a finished shock scheme. Next: entropy/oscillation bounds before moving
+geometry/remap. Smooth contact16/32/64 orders2.1166/2.0327; fields agree with
+LDA to2.45e-14.2000 new compiled cases + existing5 algebra tests pass.
+Frozen archive `../local_runs/sedov_lda_rusanov_20260929_v1/`; figures verified.
+[Report](RD_LDA_RUSANOV_BLEND_20260929.md). No moving tests, thesis, commit/push
+or COSMA changes. New source remains uncommitted with existing work.
+
+**Rusanov source/blending audit (2026-09-29, log3 §165):** User asked for actual
+Sedov literature provenance and LDA+N/Rusanov blending. The successful SGH RD
+Sedov paper uses second-order staggered Lagrangian RD, MARS viscosity and an
+energy correction; it is not our global low-order Rusanov implementation.
+MOOD RD uses local high-order/PSI/Rusanov fallback and contains no Sedov test.
+Existing B is LDA+N; N is not a reliable positive endpoint for our strong
+Sedov. Recommended research direction is LDA+Rusanov with conservative
+coupled positivity limiting, common flux totals and complete RK temporal
+corrections. Gauss3/trapezoidal mismatch and positive conservative remap
+remain separate tasks. No implementation/run/thesis change this audit.
+[Report](RD_SEDOV_RUSANOV_LITERATURE_AUDIT_20260929.md).
+
+**MMFV Sedov comparison completed (2026-09-29, log3 §164):** New frozen standard
+AREPO moving Voronoi FV, exact Euler Riemann/native reconstruction, same21 hot
+IDs/glass128²/pbg1e−6/Ehot1/t.05; actual Voronoi hot-mass normalization gives
+phot520.89115 vs RD520.89295. Equal adaptive CFL.1 steps match RD; no refinement.
+Uniform defect2.05e−13; science finishes1179 steps/179.29s. Finalrho min/max
+.02843/3.97057, centralp~1.596 vs analytic1.605, conserved M/E to roundoff.
+Moving/static Rusanov RD raw peaks2.630/2.002, minima.1960/.1248; static budgets
+roundoff, moving energy−2.4147%. MMFV has only4 corecells r<.05 yet much better
+core profile, so sparse sampling alone cannot explain RD plateau. Existing
+SWIFT21 also plotted; all cases same injection count. Raw maxima differ from
+plotted radial means (MMFV meanpeak3.302). MMFV values plotted at cell centroids.
+All10 new saved states positive/finite,2 successful native runs, no active solver.
+Archive `../local_runs/sedov_mmfv_20260929_v1/`, frozen source/config/binary/inputs,
+checked figures; [report](RD_SEDOV_MMFV_COMPARISON_20260929.md). Default/solver/thesis
+unchanged. Initial wrapper's overstrict1e−14 density check stopped after a
+successful uniform run; geometry roundoff6.24e−14 verified, existing1e−12 uniform
+bound applied consistently, then resumed without native rerun (details report).
+
+**SWIFT default Sedov completed (2026-09-29, log3 §163):** Fresh isolated build
+from clean SWIFT8dc43c3c (old build7fbba7e0-dirty not reused), default SPHENIX2D/
+cubic kernel, stock IC/YAML/run options, 1thread. Finishes t.05 in2.189s,396
+steps,6 snapshots positive/finite with IDs/masses preserved. Default eta1.2348
+actually means15.14 target neighbours in2D, not YAML comment48. Density min/max
+.03687/3.60417 versus moving Rusanov RD21 .19601/2.63044; SWIFT's central p/vr
+have substantial deviations/scatter, so it is not a uniformly better profile.
+Final mass exact; energy +.04005% relative to input IC, or−.11274% relative to
+savedt0. The latter has nonzero output velocities from the initialization/
+leapfrog output convention (E0saved1.001531 vs IC1.0000015); budgets show IC
+normalization explicitly. No solver/IC tuning or further SWIFT sweep.
+Archive `../local_runs/swift_sedov_default_20260929_v1/`; full frozen source,
+config/binary/input/logs and visually checked profile/budget figures.
+[Report](RD_SEDOV_SWIFT_DEFAULT_20260929.md). No active hydro, thesis untouched.
+
+**Sedov core/reference audit (2026-09-29, log3 §161):** Read-only; no new native
+runs. Moving1 has only1/7 nodes inside r<.05/.1 at t.05, versus130/516 for
+static21; typical central sqrt(dual area) .0624 vs .00781. Static Rusanov is
+conservative yet also has excess central density, supporting low-order
+diffusion plus sparse moving-core sampling rather than attributing all profile
+error to connectivity loss. Pressure/velocity causes are not uniquely isolated.
+Morton committed main.cpp normalizes hot energy to3e5, after setup pressure
+assignment; prior pilot's provisional1e6 pressure was not the complete IC.
+With L10/rho1/E3e5, Morton t.01 rescales to unit-box t.0547723 and pbg100 to
+.0333333, versus our .05 and1e-6. SWIFT configured finalt.05 matches our actual
+final snapshot; its cadence.01 differs from ours.0125. No SWIFT hydro result
+exists here, only its analytic formula. Dense central sampling of that formula
+passes energy/shock checks; center p1.604968 is finite while rho/vr tend0.
+Archive `../local_runs/sedov_core_reference_audit_20260929_v1/`, core plot checked.
+[Report](RD_SEDOV_CORE_REFERENCE_AUDIT_20260929.md). Solver/default/thesis unchanged.
+Follow-up §162 separates SWIFT/RD/Morton in a full parameter table. RD21 uses
+exactly the same cached SWIFT glass modulo periodic wrapping and the same21
+hot IDs. Equal SPH masses versus actual RD dual masses produce nominal hot
+pressures520.127/520.893, a .147% difference at fixed hot energy1. SWIFT run.sh
+enables its timestep limiter; no SWIFT executable or hydro output was tested.
+
+**Smaller Sedov injection completed (2026-09-29, log3 §160):** SWIFT's local
+SedovBlast_2D makeIC.py matches current upstream bytewise and heats21 particles,
+despite its singular detonation comment. New same-glass128² 1/7-node moving
+Rusanov controls both reach t.05 without repair (3189/3142 steps); final rho
+peaks2.61579/2.64780, energy drift−2.5763%/−2.6657%, mass−.2376%/−.2399%.
+Profiles nearly overlap the21-node reference, with no clear narrowing of the
+shock. Old repair fails at t.00506592/.00544434 with negative pressure in the
+same IDs7932/7977 as21-node failure. All16156 accepted science stages passed
+positivity checks. Six native attempts finished,22 saved states audited,
+2 uniform gates1.11e-15, no active solvers. No solver/default/thesis changes.
+Archive `../local_runs/sedov_injection_sweep_20260929_v1/`; frozen binaries
+reused per-method with full source provenance. [Report](RD_SEDOV_FEWER_INJECTION_POINTS_20260929.md).
+Profiles are centered on each initial injected-energy centroid; single hot
+node is slightly off box center. This tests Rusanov, not LDA or SWIFT hydro.
+
+**Connectivity repair retrial (2026-09-29, log3 §159):** On user request,
+allowed the existing unlimited topology repair with experimental Rusanov;
+this combination refreshes predictor primitives from repaired U while keeping
+interval mesh velocities. Same glass128² strong Sedov ICs: both fail inside
+repair, before RK, at t.00546875 (21 nodes, minimum p−.0190042) and t.00159912
+(130 nodes, p−.000343358). All1836 preceding science stages passed positivity
+and CFL checks. At the common21-node time t.00545654, energy drift improves
+from−1.2498% to−.0001046%, but the next remap fails. The old map conserves
+extensives yet is not positive. A conservative low/high remap limiter remains
+needed; none was added in this retrial. Uniform error1.11e-15, all5 algebra
+checks pass. Frozen archive `../local_runs/sedov_topology_repair_20260929_v1/`,
+all3 attempts finished, no active solvers. [Report](RD_SEDOV_TOPOLOGY_REPAIR_20260929.md).
+Optional `run_positivity.py prepare ARCHIVE --topology-repair` reproduces the
+diagnostic, not a validated Sedov repair. Defaults/thesis unchanged.
+
+**Rusanov positivity prototype finished (2026-09-29, log3 §158):** Added opt-in
+`RD_RUSANOV_LOW_ORDER`: scalar Rusanov spatial RD with trapezoidal flux and
+existing N/lumped RK2 temporal terms, one-rank/equal-step/periodic hydro only.
+Both stage CFLs, pair bars, rho/internal energy and ALE convex weights are
+checked; no clipping. All four original glass128² strong Sedov cases (21 or
+130 heated nodes, static/moving) now reach t.05. This is low-order fallback
+validation, not positivity-limited LDA. Static conservation is roundoff;
+moving loses2.4147%/1.3154% energy and.2397%/.2358% mass, so general ALE
+endpoint conservation remains unresolved. 5000 compiled-kernel tests and all
+5 algebra targets pass;3 uniform gates <=1.11e-15. Flag-disabled static N
+matches the original binary bitwise at5 snapshots. All9 native attempts and
+45 snapshot audits finished, no active solvers. v1 preserves a header-option
+build failure; successful frozen archive `../local_runs/sedov_positivity_20260929_v2/`.
+[Report/next LDA limiter design](RD_SEDOV_POSITIVITY_20260929.md). Source edits
+remain uncommitted; default Config and thesis unchanged. Use explicit
+`examples/Sedov_2d/Config_Rusanov_*.sh`; do not call this method Roe N merely
+because N_SCHEME selects its lumped temporal branch.
+
+**Moving Sedov pilot finished (2026-09-29, log3 §156):** SWIFT physical setup,
+glass128², unit periodic box, gamma5/3, rho1, P0=1e-6, Ehot1, targett.05,
+lab frame, adaptive equal steps/CFL.1. Nearest21 seed: static/moving N/RK2
+fail at .00672073/.00226440; LDA/Gauss3 fails almost immediately in both.
+Radius.05 seed heats130 nodes: static N completes t.05, moving N fails at
+.00828857 with negative mass after corrector. Halving CFL to.05 does not
+rescue21-node N (static .00672493, moving .00296021); static first-order N
+also fails (.00663452). Thus no validated moving Sedov result. Five uniform
+gates pass (max8.88e-16); all18 native attempts finished, no active solvers.
+Moving130-node saved state at .00500488 loses .65% energy; completed static
+conserves mass/energy to roundoff. No solver or thesis edits, commit or push.
+Archive `../local_runs/sedov_2d_20260929_v1/`; source/scripts/configs/failed
+outputs preserved. [Report](RD_SEDOV_MOVING_PILOT_20260929.md). Early density
+preview and completed static profiles in `analysis/disk005/`. Do not treat
+the early moving map as a successful t.05 solution.
+
+**User's boosted-vortex wording decision (2026-09-29, log3 §154):** Supersedes
+the editorial recommendations in §152–153. Keep the current prose: no added
+h=10/N or lab/comoving-frame explanation, retain Galilean invariance without
+"approximate", and retain edge flips as a possible explanation. User explains
+that static boost10 is omitted at t3 because it was already dissipated at t1;
+this is their rationale, not a newly calculated t3 snapshot. Comoving frame is
+an optional optimization, not a required/default mode; its necessity remains
+unsettled (Gresho boost10 runs in the lab frame). Only thesis edit: corrected
+the moving-LDA order1.401 label from density to velocity. No compilation or
+GitHub/Overleaf sync in this turn.
+
+**Boosted-vortex prose review (2026-09-29, log3 §152):** Reviewed the user's
+thesis revision219853e without editing thesis. Yee side length10 is supported
+by param.template BoxSize10, local handoff HDF5 Header/coordinates, and the
+COSMA analysis period10/centre(5,5). Local handoff IC file hashes differ from
+the later COSMA comparison hashes; this was not a byte-identical raw-COSMA IC
+verification. Moving LDA order1.401 is velocity, not density (1.739); excluding
+Nx384 gives velocity order1.554, so the reduced order is not solely that point.
+Current matched Gresho archives contain static boost10 at t1 and boost3 at t3,
+but no static boost10/t3 result supporting the new completely-dissipated claim.
+Recommended separating empirical boost insensitivity from lower rotational
+diffusion, retaining frame/time-refinement details, and leaving edge-flip
+causation as untested. No thesis edits, compilation, new simulations or sync.
+
+**Yee resolution clarification (log3 §153):** Static and moving both use
+L=10 with periodic boundaries. N counts nominal nodes per box side, not per
+unit length; Ntot=N² and h_nom=L/N=10/N. Local ICs48/96/192/384 confirm these
+counts. For an unchanged physical vortex scale, enlarging L1 to10 at fixed N
+makes the spacing ten times larger; consistently rescaling both box and vortex
+does not change relative resolution. Fixed-L fits versus N remain valid.
+
+**Sod Nx64 inserted into thesis (2026-09-28, log3 §151):** User chose the
+clearer Nx64 display and authorized insertion with brief prose. Chapter4.3.2
+now includes Sod shock tube and Figure4.9 (printed169; setup text166), using
+`chapter4/figures/sod_glass_Nx64_t02_profiles.pdf`. This is page2 of the approved
+v3 review, with vector content/600dpi scatter streams preserved exactly.
+Two short paragraphs give the IC, effective resolution, lab/CFL setup and
+observed sharper contact plus persistent LDA/RK2 oscillations; caption records
+Roe first-order versus N/Roe and LDA/Gauss3/F1 RK2 choices and128-bin means.
+Full250-page XeLaTeX build passed, no unresolved references; master.pdf/bbl
+refreshed. Six nearby pages reviewed; all other tracked thesis files unchanged.
+Review: `../local_runs/thesis_ch4_sod_20260928_v1/output/pdf/thesis_ch4_sod_review.pdf`.
+No commit/push; local thesis changes still need the normal GitHub/Overleaf sync.
+
+**Latest Sod preview: three fields / 600 dpi (2026-09-28, log3 §150):**
+`../local_runs/Sod_2d_Morton/20260928_main_comparison_v3/output/pdf/Sod_2d_Morton_main_comparison.pdf`
+shows only rho, vx and p in three rows, N/LDA in two columns, pages Nx128/64.
+Title follows the user's correction: Sod shock tube, Nx=..., gamma=5/3, t=.2.
+No footer; numerical curves remain distinct dashed styles. PNGs5700x4740 at
+600dpi; PDF scatter layers confirmed600dpi, lines/text remain vector.
+Both pages reviewed; scientific input/metadata unchanged. No hydro/thesis edit.
+
+**Sod figure style / internal-energy audit (2026-09-28, log3 §149):**
+Latest two-page review is
+`../local_runs/Sod_2d_Morton/20260928_main_comparison_v2/output/pdf/Sod_2d_Morton_main_comparison.pdf`.
+All three numerical means now use distinct dash lengths/phases, exact remains
+solid; title is only Sod shock tube, Nx=128/64 and footer removed. Data and
+method choices from §148 unchanged. Twelve final snapshots / 491520 nodes
+satisfy stored e=p/[(gamma-1)rho] with max relative defect2.14e-16.
+At x=.70907 in Nx128 static LDA/Gauss3/RK2, rho=.176757 vs exact.229806,
+p=.293417 vs.293945, e=2.490006 vs1.918654: density undershoot explains the
+large specific-energy overshoot algebraically. Shock-side e undershoot has
+a larger fractional pressure drop than density drop. This validates the
+plotted field relation, not the correctness/stability of the RK2/F1 solver.
+Audit script/JSON saved alongside the reviewed PDF. No hydro/thesis edits.
+
+**Sod main comparison and first-order meaning (2026-09-28, log3 §148):**
+User reaffirmed the thesis LDA default is Gauss3 contour, and wants static
+first-order RD plus static/moving RK2 as the main comparison. Predictor-only
+uses the full dt RD predictor as U(n+1), skipping the corrector and F1 temporal
+term; this is precisely the Chapter3 first-order update, not a half step.
+New two-page review (Nx128 then64):
+`../local_runs/Sod_2d_Morton/20260928_main_comparison_v1/output/pdf/Sod_2d_Morton_main_comparison.pdf`.
+N uses Roe throughout (mesh split when moving). LDA first-order is Roe for the
+Morton-style baseline; both RK2 curves are Gauss3/F1. Therefore the LDA
+first-order/RK2 contrast also changes residual, while the RK2 mesh pair is
+matched. All twelve selected raw curves/bin means and source hashes verified;
+both pages rendered/reviewed. Main plot labels now say first-order RD.
+No new hydro runs, solver/thesis changes, commit/push or COSMA operations.
+
+**Sod display labels simplified (2026-09-28, log3 §147):** User accepts
+t=.2 as the Morton comparison assumption. Figures now label x=X-1 on0<x<1
+for raw tube1<X<2, and time t=.2; numerical values equal the earlier xi/tau.
+Left tube0<X<1 has the reversed primitive-state pattern for periodic closure,
+not an exact reflection of individual glass nodes. Presentation-only six-page
+PDF at `../local_runs/Sod_2d_Morton/20260928_display_x_v1/output/pdf/Sod_2d_Morton_variants_review.pdf`.
+All18 raw curves/bin means unchanged; six pages rendered/checked. Both plotting
+entry points updated; original simulation archives and thesis untouched.
+
+**Sod_2d_Morton full variants completed (2026-09-28, log3 §146):** User
+clarified to run the current moving/RK2 variants on the same Morton setup.
+Added7 isolated builds,7 uniform gates and14 science runs; together with the
+previous4 Euler controls, all18 science cases reach t=.2 at effectiveNx64/128.
+Same exact glass ICs, gamma5/3,2x2 box,xi=x-1,tau=t,CFL.4,cap.02,lab frame.
+Static N/RK2, LDA/Euler/Gauss3, LDA/F1 Roe/Gauss3 and moving N/RK2/Roe,
+LDA/F1 Roe-split/Gauss3 all complete. Existing guard forbids moving
+predictor-only; no moving Euler construction, hierarchy or solver changes.
+Nine total uniform gates pass (max2e-15); all135 saved states positive/finite.
+LDA/F1 retains vx trough around-.59 in both meshes and residuals; static
+Euler and N/RK2 have no comparable trough. Moving improves density L1/contact
+sharpness but increases velocity/pressure L1 in these pairs. Moving Roe/F1
+Nx128 has strong contact scatter (vx_max1.2009,e_max8.5319), Gauss3 .9917/2.3247.
+Moving endpoint mass/energy drift reaches.0958%/.2112%; static stays round-off.
+Adaptive dt histories differ; Roe/F1 movingNx128 reachesdt9.76562e-5.
+Six-page local-only PDF, all raw nodes/128-bin means, verified and reviewed:
+`../local_runs/Sod_2d_Morton/20260928_full_v1/output/pdf/Sod_2d_Morton_variants_review.pdf`.
+[Full methods/results](RD_SOD_2D_MORTON_VARIANTS_20260928.md). Reproducible
+`examples/Sod_2d_Morton/run_variants.py` and `analyze_variants.py`.
+No running campaign remains; no thesis edit, commit/push or COSMA operation.
+
+**Sod_2d_Morton completed (2026-09-28, log3 §145):** User named a new test
+using Morton parameters but glass IC. Two uniform gates and four static
+first-order Roe N/LDA runs completed at effectiveNx64/128 (full128²/256²).
+gamma5/3,CFL.4,2×2 periodic box,central high state. Local standalone SODX
+source supports endt=.2 and box2, without proving original Fig7 revision.
+New coordinates xi=x-1 on1<x<2,tau=t; DO NOT apply the earlier2t scaling.
+LDA vx_max.95593/.87979 versus exact.84119; large negative F1 trough absent,
+but positive oscillations remain. N is smoother. All saved rho/p positive,
+max mass/energy drift<8.1e-16. AREPO carrier/tree/dyadic timesteps retained;
+same CFL parameter does not imply original nodal-RD timestep equivalence.
+Example `examples/Sod_2d_Morton/`; archive
+`../local_runs/Sod_2d_Morton/20260928_v1/output/pdf/Sod_2d_Morton_review.pdf`.
+[Setup/results](RD_SOD_2D_MORTON_GLASS_20260928.md). No solver/thesis edits or push.
+
+**Sod IC/Morton/SWIFT audit (2026-09-28, log3 §144):** Verified the actual
+shared IC and six static/moving t0 snapshots. xi=2(x-.25),tau=2t is correct;
+full128² gives initial effective tubeNx64, with8187 nodes in the half-box
+window. Analytic raw/scaled solutions agree exactly; first continuum mirror
+interaction is rawt.142681, after current.08. Morton uses the same primitive
+states but gamma5/3 rather than1.4, structured row-offset points and first-order
+LDA/N; its final time is not explicitly specified in §5.1.1/Fig7. SWIFT2D
+defaults gamma5/3,rhoR.140625 and equal-mass two-glass sampling, not our IC.
+Its displayed unit tube has nominal spacings1/256 left,1/96 right (ours1/64
+both); defaultt.2 is later than ourtau.16. No new runs/IC/solver/thesis edits.
+[Full comparison and evidence](RD_SOD_IC_MORTON_SWIFT_AUDIT_20260928.md).
+
+**Chapter3 TODO / RT landscape (2026-09-28, log3 §143):** Removed the sole
+remaining Chapter3 TODO beside the K matrix without changing the equations.
+Figures3.8/3.9 now use upright landscape PDF pages (printed134/135,
+PDF156/157), matching the Chapter2 table/flowchart style. Source figures and
+captions unchanged. Full249-page XeLaTeX build passed; reviewed the matrix,
+both figures and adjacent pages. master.pdf/master.bbl refreshed, now also
+including the fetched Chapter1 edits. Review PDF:
+`../local_runs/thesis_ch3_rt_landscape_20260928_v1/output/pdf/thesis_chapter3_rt_landscape.pdf`.
+Only Chapter3 tex changed among tracked thesis files; no commit/push.
+
+**Thesis figures pushed (2026-09-28, log3 §142):** User's existing figure-only
+commit2efbebe contained two Yee PDFs and the approved Gresho PDF. Fetched
+Overleaf Chapter1 updates through8f3d53f, rebased the unpublished image commit
+without conflicts, and pushed aa3712a to thesis origin/main. Figure blobs
+unchanged; remote Chapter1 text retained exactly. AREPO commits and local Sod
+previews were not pushed. Existing master.pdf predates the newly fetched
+Chapter1 edits; it was not rebuilt for this Git-only request.
+
+**Matched static Sod review (2026-09-28, log3 §141):** Four new static Sod
+runs plus four uniform gates use the same frozen source/IC/physical parameters
+as September24 moving controls. Static LDA/Gauss3/F1 still has vx_min=-0.7293
+(moving -0.7378); static N is smoother. Predictor-only first-order static LDA
+has no large negative trough for Gauss3 or Roe, but vx_max=1.1695/1.1385 remains
+above the analytic plateau. Morton2023 uses first-order, row-offset regular
+mesh/gamma5/3 and explicitly notes LDA oscillations; our controls are not its
+full reproduction. Three-page local-only review:
+`../local_runs/sod_static_matched_20260928_v1/output/pdf/sod_static_review.pdf`.
+[Setup and diagnostics](RD_SOD_STATIC_COMPARISON_20260928.md). No thesis edits.
+
+**Gresho inserted / Sod local preview (2026-09-28, log3 §140):** Approved
+Gresho colour figure is now Chapter4 Figure4.8 (printed168); one short paragraph
+added under shared `Boosted vortex tests`. Full249-page thesis compiled and
+master.pdf updated; retained red draft starts after all vortex figures.
+Sod is still local-only: three-page review (full profiles, contact/shock zoom,
+central-strip density evolution) in
+`../local_runs/sod_thesis_preview_20260928_v2/output/pdf/sod_review.pdf`.
+Reuses September24 lab-frame moving N/Roe and LDA/Gauss3, glass128² (tubeNx64),
+rawt=.08/tau=.16; LDA vx undershoot -0.738 remains visible. No new solver runs.
+[Settings and interpretation](RD_SOD_THESIS_PREVIEW_20260928.md).
+
+**Gresho preview colour revision (2026-09-28, log3 §139):** Moving boost0 is
+orange in N and purple in LDA, as requested. All data/means and other styling
+unchanged. Latest standalone PDF/PNG:
+`../local_runs/gresho_boost_color_preview_20260928_v1/` (output/pdf and figures).
+
+**Gresho style preview (2026-09-28, log3 §138):** User proposed grouping Yee
+and Gresho boost tests and requested mean lines/faint scatter/internal legends.
+New standalone preview reuses §132 five glass48/t3 cases, adding35 uniform
+unweighted radial means and alpha0.09 scatter, with short title/N-LDA panels.
+Original inputs, old plot and thesis unchanged; no solver runs. New PDF/PNG:
+`../local_runs/gresho_boost_style_preview_20260928_114134/` (output/pdf and figures).
+[Style/section recommendation](RD_GRESHO_BOOST_STYLE_20260928.md).
+Suggested shared heading: Boosted vortex tests; keep separate figure groups and
+explicitly distinguish Yee element-co-moving evaluation from Gresho lab-frame
+evaluation. Proposed caption saved, not inserted into thesis yet.
+
+**Chapter2 Table2.1 landscape PDF (2026-09-28, log3 §137):** User requested
+the same upright landscape reading orientation as the AREPO flowchart.
+Converted sidewaystable to a landscape/table page; afterpage preserves original
+placement. Only PDF page106 (printed84) gains Rotate90. All247 pages retain
+identical extracted text and page numbers; table data/Chapter3/Chapter4 unchanged.
+No unresolved refs or LaTeX errors; printed83--85 rendered and checked.
+Updated master.pdf and review PDF at
+`../local_runs/thesis_ch2_table_landscape_20260928_112503/output/pdf/thesis_chapter2_table_landscape.pdf`.
+Local edits only; no commit/push.
+
+**Chapter3 selected citations added (2026-09-28, log3 §136):** User selected
+Roe/Sidilkover1992 for N, Struijs/Deconinck/Roe1991 for LDA, and van der
+Weide/Deconinck1996 plus Abgrall/Barth2002 for the Euler matrix N form.
+All four inserted directly into existing introductory sentences; three new
+BibTeX entries added (Roe1992 already existed). Distribution `add ref` TODO
+removed. No extra prose/formula changes; K region and Chapter4 unchanged.
+Full247-page PDF compiled with no unresolved refs/citations; printed117--118
+and new bibliography entries visually checked. `master.pdf`/`master.bbl` refreshed.
+Archive `../local_runs/thesis_ch3_scheme_citations_20260928_111819/`, final
+`output/pdf/thesis_chapter3_scheme_citations.pdf`. No commit/push.
+
+**Chapter3 user correction (2026-09-28, log3 §135; supersedes §134 prose edits):**
+K request meant checking the 16 entries only; Distribution Schemes needed early
+N/LDA sources, not added review/application prose. Both regions restored exactly
+to pre-edit/HEAD text, including original TODO markers; CGAL/Fabri2000 retained.
+K elements remain verified correct. Research points to Roe1987 / Roe-Sidilkover1992
+for scalar N, Struijs-Deconinck-Roe1991 for early LDA (explicit attribution in
+Deconinck et al.1993 §3.1), and van der Weide-Deconinck1996 for system N.
+1987/1991/1996 originals not retrieved; metadata/attributions cross-checked with
+early primary papers and VKI catalogue. No new historical citations inserted.
+Refreshed247-page PDF: `../local_runs/thesis_ch3_origins_20260928_105952/output/pdf/thesis_chapter3_restored.pdf`;
+no unresolved citations/refs; pp.115--117 rendered. Chapter4 unchanged, no push.
+[Restoration and source trail](RD_THESIS_CH3_LDA_N_ORIGINS_20260928.md).
+
+**Chapter3 red notes resolved (2026-09-28, log3 §134):** User authorized
+Chapter3 references/K review and PDF build. All3 TODOs removed; distribution
+references and Fabri2000 CGAL citation added. Existing K entries are correct:
+normal includes edge length, while both standalone and AREPO code store unit
+normal and apply ell/2 separately. Symbolic16-entry and480 native-matrix
+checks pass. Full247-page thesis PDF compiled, no undefined refs/citations;
+review printed115--117 and123. master.pdf refreshed. Chapter4 unchanged;
+no commit/push. Archive `../local_runs/thesis_ch3_rednotes_20260927_235021/`,
+[audit/build report](RD_THESIS_CH3_REDNOTES_20260928.md). For isolated builds,
+precreate include subdirectories and put fresh build bibliography first in
+TEXINPUTS; root's old master.bbl otherwise masks new references.
+
+**Thesis Overleaf sync (2026-09-27, log3 §133):** User requested GitHub pull,
+especially Overleaf's4.3.1. Thesis main fast-forwarded from6af0539 to06c9647;
+4.3.1 matches the remote exactly, remote removal of4.2.3 and Chapter1 edits
+included. Local4.3.2 Yee text and its two PDFs preserved, still uncommitted.
+All32 untracked files and both old stashes preserved. No new commit/push or
+PDF compilation; the existing thesis PDF predates this sync. Backup and checks:
+`../local_runs/thesis_overleaf_sync_20260927_234550/`.
 
 **Current execution preference (2026-09-27): return to the local Mac.** The user
 requests subsequent experiments locally; COSMA is not needed for the next phase.
@@ -12,8 +756,68 @@ The copied Yee boost10 comparison is in
 See [local return and COSMA import](RD_LOCAL_RESUME_COSMA_IMPORT_20260927.md)
 for Git-integration status and [file checks](COSMA_RESULT_IMPORT_20260927.json).
 Use `LocalMac`, isolated build/run artifacts, and both `OMP_NUM_THREADS=1` and
-`OPENBLAS_NUM_THREADS=1`; moving equal-step RD remains one MPI rank. No new
-hydro case has been launched and old interrupted campaigns are not restarted.
+`OPENBLAS_NUM_THREADS=1`; moving equal-step RD remains one MPI rank. Old
+interrupted campaigns are not restarted.
+
+**Latest Gresho preview adds static N0 at t3 (2026-09-27, log3 §132):**
+The left N panel now also shows a new matched static boost0 run, glass48,
+lab frame, t3. Uniform/pilot/science complete with original gates; all five
+plotted cases have identical16384-step histories. Static0/moving0 N initial
+fields match bitwise. Static0 L1 .120856 versus moving0 .0472447 (60.91%
+reduction); peak .485980 versus .735437. Supports less damping of local vortex
+rotation even without bulk boost. Original moving runs and figure preserved;
+new PDF/PNG rendered and checked, standalone only, no thesis insertion.
+Archive `../local_runs/gresho_glass_t3_static0_overlay_20260927_v1/`;
+[static0 overlay report](RD_GRESHO_STATIC0_T3_OVERLAY_20260927.md).
+No active solver workers.
+
+**Completed moving Gresho boosts0/10 at t3 (2026-09-27, log3 §131):** Glass48,
+moving N/LDA, lab only, standalone preview per user. All12 uniform/pilot/science
+cases complete; science runs have identical16384-step histories, dt3/16384.
+N boost0/10 vphi L1 .0472447/.0470778; LDA .0125298/.0124913. Analytic-error
+metrics differ by .353%/.308%; radial profiles closely overlap. Joint mesh/state
+ID differences are measurable (position RMS N .0472, LDA .00957 at t3), so do
+not claim exact trajectory invariance. Moving mass drift remains ~1.5–1.8e-4.
+Reviewed standalone PDF/PNG available; no running workers, no thesis insertion.
+Archive `../local_runs/gresho_glass_moving_boost0_10_t3_lab_20260927_v1/`;
+[boost0/10 t3 report](RD_GRESHO_MOVING_BOOST0_10_T3_20260927.md).
+
+**Completed Gresho boost3/t3 (2026-09-27, log3 §130):** N/LDA static/moving,
+boost(3,0), t3, genuine glass48, lab only; same four frozen §128 binaries.
+All12 uniform/pilot/science runs complete. Science cases each take16384 steps,
+actual dt3/16384 (common cap1/4096), identical complete timestep histories.
+N static/moving vphi L1 .239917/.0472093; LDA .222662/.0126008. Moving mass
+drift +1.424e-4/+1.775e-4 remains. Full-range two-panel PDF, including negative
+static-LDA tail, is rendered and reviewed; no active workers. Outputs at
+0,.75,1.5,2.25,3. Source/code/default/thesis unchanged. Archive:
+`../local_runs/gresho_glass_boost3_t3_lab_20260927_v1/`; report:
+[boost3/t3 comparison](RD_GRESHO_GLASS_BOOST3_T3_LAB_20260927.md).
+
+**Completed N boost0 controls (2026-09-27, log3 §129):** Matched static0 and
+moving0 N/Roe glass48 runs reuse the exact §128 binaries, t1/dt1/4096. Uniform
+and pilot gates pass, all six new cases complete. vphi L1 static0 .0580965,
+moving0 .0188867, versus moving10 .0189083. Thus moving10 is about3.07x better
+than static0; moving boost0/10 analytic error norms differ by0.1144%. The full
+mesh/state solutions have measurable differences (ID-matched velocity L1
+.002388 and position RMS .002380 at t1), so this supports weak boost sensitivity,
+not exact invariance. Static0 and quasi-Lagrangian moving10 are different mesh
+motions even after a Galilean transform. Updated N-only figure is reviewed;
+no running workers, LDA0 or boost3. Report:
+[N boost0 controls](RD_GRESHO_N_BOOST0_CONTROLS_20260927.md), archive
+`../local_runs/gresho_n_glass_boost0_controls_20260927_v1/`.
+
+**Completed Gresho glass boost10 (2026-09-27, log3 §128):** User requested lab
+only, genuine glass48, N/Roe and LDA/Gauss3 static/moving, boost10 first.
+Four uniform gates, four short pilots and four t1 science runs all pass native
+completion/positivity checks; uniform defects below existing1e-12 threshold.
+All science cases take4096 matched steps. Moving/static mass-weighted vphi L1
+ratios .07880 (N), .04389 (LDA); moving mass drift +3.707e-5/+4.138e-5 remains.
+Two-panel lab-only profile PDF is complete and visually checked. No current
+solver workers; no boost0/3 launched. This supports a compact static/moving
+illustration, not convergence or strict boost invariance. Source/binaries/raw
+outputs: `../local_runs/gresho_glass_boost10_lab_20260927_v1/`.
+See [matched glass boost10 report](RD_GRESHO_GLASS_BOOST10_LAB_20260927.md).
+No numerical/default Config/thesis changes or Git commit/push for this run.
 
 **STOPPED for COSMA migration (2026-09-25, log3 §113):** User explicitly
 terminated all local hydro tests. Both launchd jobs removed and all six solver
