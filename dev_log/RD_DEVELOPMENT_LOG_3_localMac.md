@@ -8665,3 +8665,26 @@ van2006upwind；其余数学问题留到后续最终版本处理。已在本地 
 113–129；van2006upwind 保留 key 和 2006 年，改为 @article，期刊 Communications in
 Computational Physics，1(2),192–206，删除混入的会议字段。只修改这两个 bib 条目，
 正文及其余文献不变。检查 diff 与空白格式；未重新编译整本，未 commit/push。
+
+## 217. 2026-10-08：新分支启动：flip 元素（守恒+正性）与运动网格分层时间步——Phase 0 与内核
+
+**作者：Claude Code（Opus 5.5）；用户批准计划（~/.claude/plans/i-have-already-submitted-tender-spindle.md）。**
+用户决定：分阶段（先 flip 作为 RD 单元，再评估 lazy flipping）；分层支持 N、LDA，理想含 B 与 FV-RD；单 rank；
+>2 个月，viva 11/17 前可选部分结果；优先级：舍入级守恒 > Sedov 正性 > 小精度代价 > 分层加速。
+Phase 0：`develop_pureC_RD` 未提交工作已提交为 `eacc3f9`（作者 Zhenyu Wu, Codex (GPT-6) and Claude Code (Opus 5.5)；
+check_rd、HLLC/blend 测试通过）；新分支 `feature/ale-flip-conservation-hierarchy`；Makefile INCL 补 rd_hllc.h、
+rd_lda_rusanov.h、rd_contour_quadrature.h；自测试分支引入 Python 参考 colombo_re_limited.py、colombo_re_explicit.py、
+audit_euler_flip_closure.py、audit_p1_ledger_remap.py。文献（三个调研代理）：Colombo & Re 2022（ghost 单元，局部
+自适应+隐式 BDF）、Gaburro et al. 2020（时空 sliver）、Steinberg+2016（donor 修正）、Alauzet–Mehrenberger 2010、
+Kuzmin+2010、Guermond 凸限制；无“分层+中途重连”文献。设计报告
+[RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md](RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md)，
+详细实施计划 [RD_FLIP_HIERARCHY_IMPLEMENTATION_PLAN_20261008.md](RD_FLIP_HIERARCHY_IMPLEMENTATION_PLAN_20261008.md)。
+数学数值核对（20000 随机 flip）：亏损=∫(U_h^new−U_h^old)、=flip 四面体体积；边 donor-cell 体积重现 δm；低阶
+映射守恒、正、密度在包内、熵下界（精确有理数验证；donor 须逐位保持，Q/g 重算在冷高速气体丢 1e-6 内能）。
+内核 `src/hydro/rd_flip_transfer.h`（高阶=均匀平移，低阶=donor-cell 最小混合，公共 θ 二分）与
+`tests/rd/test_flip_transfer.py`：2597 单 flip 守恒 6.2e-16、独立公式 5.4e-16、均匀/仿射不变 θ=1、高阶可逆、
+极端对比可容许；待修：Delaunay 多 flip 腔体部分有效性筛选拒绝了全部样本（0 例）。设计观察：热 donor 时
+均匀平移把能量加到所有点（在界内，θ=1），这正是旧修复的 KH 扰动来源之一，待测“仅 receiver 分配”的高阶端。
+规划代理补充：旧修复 KH −20.6% 可能部分源于 N/LDA 预测器用未修复 primitive 的 bug，应先只修 refresh 重跑；
+分层中强制刷新可不改时间箱（每点 CFL ledger）。下一步：修多 flip 测试→加入 check_rd→registry/cavity（C）→
+RD_ALE_FLIP_TRANSFER 接线+全方案 primitive refresh→Campoli 全方案→原生 gate。未改 thesis。

@@ -185,6 +185,19 @@ velocity noise, and has about 500 nodes with K below the initial minimum. Flip/r
 Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
 [report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
 
+**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-08, log3 §217):**
+Work is on branch `feature/ale-flip-conservation-hierarchy` (base `eacc3f9`,
+the committed develop snapshot). Plan:
+`~/.claude/plans/i-have-already-submitted-tender-spindle.md`; design
+`RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md`; detailed steps
+`RD_FLIP_HIERARCHY_IMPLEMENTATION_PLAN_20261008.md`. Done: kernel
+`src/hydro/rd_flip_transfer.h` + `tests/rd/test_flip_transfer.py` (single
+flips pass). Resume at: fix the multi-flip Delaunay section of that test
+(validity filter rejects all samples), add it to `check_rd`, then Phase 1
+registry/cavities in C, `RD_ALE_FLIP_TRANSFER` wiring, primitive refresh
+for all schemes (also re-run old KH repair with only the refresh fix),
+Campoli for all schemes, native gates. Python: 21cmfast env; OMP/BLAS=1.
+
 **Chapter4 Sedov figures inserted (2026-10-02, log3 §§212–213):** user moved the
 FV-RD derivation to Chapter3 §3.2.5 (`section:FV_RD_schemes`, DR2017 Fig.2 copy)
 and kept a short moving-mesh FV-RD paragraph in Chapter4; my §203 subsubsection

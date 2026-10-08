@@ -317,6 +317,9 @@ endif
 ifeq (RESIDUAL_DISTRIBUTION,$(findstring RESIDUAL_DISTRIBUTION,$(CONFIGVARS)))
 OBJS    += hydro/residual_distribution_solver.o
 INCL    += hydro/rd_rusanov.h
+INCL    += hydro/rd_hllc.h
+INCL    += hydro/rd_lda_rusanov.h
+INCL    += hydro/rd_contour_quadrature.h
 endif
 
 ifeq (RD_ALE_GEOMETRY_DIAGNOSTICS,$(findstring RD_ALE_GEOMETRY_DIAGNOSTICS,$(CONFIGVARS)))
