@@ -340,6 +340,12 @@ static int rd_rusanov_local_index(const point *dp)
  * §3.4). Frozen archives before this date used 0 unless their Config says 1. */
 #define RD_FLIP_HIGH_MODE 1
 #endif
+#ifndef RD_CFL_LEDGER_LIMIT
+/* Frozen-vertex positivity: sum (h/2)(c0+c1) since the last refresh must not
+ * exceed RD_CFL_LEDGER_LIMIT times the refreshed mass (the sufficient condition
+ * is 1).  Smaller values only serve a controlled-overrun test of the check. */
+#define RD_CFL_LEDGER_LIMIT 1.0
+#endif
 #endif
 #ifdef RD_ALE_LAZY_FLIP
 #ifndef RD_ALE_INTERVAL_HIERARCHY
@@ -4276,6 +4282,14 @@ static void rd_ale_interval_event(tessellation *T)
 #ifdef RD_RUSANOV_LOW_ORDER
           const double ratio = SphP[i].RD_CFLLedger / SphP[i].DualArea;
           max_cfl_ledger = dmax(max_cfl_ledger, ratio);
+          /* Enforced (Codex review R2): for a vertex frozen since its last
+           * refresh this is the sufficient positivity condition.  Live
+           * vertices are covered by the stage checks (their ratio can reach
+           * 1.5 legitimately). */
+          if(!isfinite(ratio) || (!live[i] && ratio > RD_CFL_LEDGER_LIMIT))
+            terminate_program("RD interval hierarchy: frozen-vertex CFL ledger %.6g exceeds %.6g of its refreshed mass "
+                              "(ID=%llu); positivity is no longer guaranteed",
+                              ratio, (double)RD_CFL_LEDGER_LIMIT, (unsigned long long)P[i].ID);
           n_cfl_ledger_over += !live[i] && ratio > 1.0;
           SphP[i].RD_CFLLedger = 0.0;
 #endif

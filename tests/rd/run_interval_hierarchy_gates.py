@@ -39,6 +39,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / 'examples/Sedov_2d'))
 from run_n_gauss3_split import ENV, sha, write, rewrite, build, state   # noqa: E402
 from run_hllc import freeze                                              # noqa: E402
+from flip_campaign_checks import check_configs                           # noqa: E402
 
 RUNS = REPO.parent / 'local_runs'
 GATES = RUNS / 'flip_gates_20261009_v1'
@@ -51,8 +52,8 @@ HLLC = REPO / 'examples/Sedov_2d/Config_HLLC_moving.sh'
 REF = REPO / 'examples/yee_2d/Config_RD_ALE_N_CAMPOLI_equalstep_ref.sh'
 
 
-def config_hllc(variant):
-    lines = HLLC.read_text().splitlines() + ['RD_ALE_CAMPOLI_MASS']
+def config_hllc(variant, mode=0):
+    lines = HLLC.read_text().splitlines() + ['RD_ALE_CAMPOLI_MASS', f'RD_FLIP_HIGH_MODE={mode}']
     if variant == 'ref_flip':
         lines += ['RD_ALE_FLIP_TRANSFER']
     else:
@@ -65,13 +66,14 @@ def config_hllc(variant):
     return '# Interval-hierarchy gate; see campaign.json.\n' + '\n'.join(lines) + '\n'
 
 
-def config(scheme, variant):
+def config(scheme, variant, mode=0):
+    """mode: RD_FLIP_HIGH_MODE, stated explicitly (this campaign was frozen with the old default 0)."""
     if scheme == 'HLLC':
-        return config_hllc(variant)
+        return config_hllc(variant, mode)
     if variant == 'ref_flip':
-        lines = REF.read_text().splitlines() + ['RD_ALE_FLIP_TRANSFER']
+        lines = REF.read_text().splitlines() + ['RD_ALE_FLIP_TRANSFER', f'RD_FLIP_HIGH_MODE={mode}']
     else:
-        lines = HIER.read_text().splitlines() + ['RD_ALE_INTERVAL_HIERARCHY']
+        lines = HIER.read_text().splitlines() + ['RD_ALE_INTERVAL_HIERARCHY', f'RD_FLIP_HIGH_MODE={mode}']
         if variant != 'ih_equal':
             assert lines.count('FORCE_EQUAL_TIMESTEPS') == 1
             lines.remove('FORCE_EQUAL_TIMESTEPS')
@@ -125,6 +127,7 @@ def prepare(root):
         assert sha(path) == gates[path.name], path
         shutil.copy2(path, root / 'inputs' / path.name)
     table = methods()
+    check_configs({m: config(s, v) for m, (s, v) in table.items()})
     for method, (scheme, variant) in table.items():
         (root / 'configs' / f'{method}.sh').write_text(config(scheme, variant))
     cases = []

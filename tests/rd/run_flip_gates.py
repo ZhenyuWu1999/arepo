@@ -5,6 +5,7 @@ Equal-step moving RD, one rank, gamma 1.4, Campoli mass for every method, so
 that with fixed connectivity the update telescopes and the edge flips are the
 only remaining conservation loss.  Each scheme runs without and with the
 transfer:
+  (since 2026-10-09 every transfer Config states RD_FLIP_HIGH_MODE; *_flip is mode 0)
   N, LDA, B  examples/gresho_2d/Config_FS_con_cm{_N,,_B}.sh (contour residual,
              element co-moving frame, face-angle regularisation)
   HLLC       examples/Sedov_2d/Config_HLLC_moving.sh with GAMMA=1.4 (edge-HLLC
@@ -37,6 +38,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / 'examples/Sedov_2d'))
 from run_n_gauss3_split import ENV, sha, write, rewrite, build, state   # noqa: E402
 from run_hllc import freeze                                              # noqa: E402
+from flip_campaign_checks import check_configs                           # noqa: E402
 
 RUNS = REPO.parent / 'local_runs'
 LEGACY = RUNS / 'legacy_split_20260912'
@@ -53,7 +55,7 @@ def methods():
     out = {}
     for scheme in BASES:
         out[f'{scheme}_campoli'] = (scheme, ['RD_ALE_CAMPOLI_MASS'])
-        out[f'{scheme}_flip'] = (scheme, ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER'])
+        out[f'{scheme}_flip'] = (scheme, ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER', 'RD_FLIP_HIGH_MODE=0'])
     out['N_flip_h1'] = ('N', ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER', 'RD_FLIP_HIGH_MODE=1'])
     return out
 
@@ -110,6 +112,7 @@ def prepare(root):
         shutil.copy2(path, root / 'inputs' / path.name)
     uniform_random(root / 'inputs/uniform_random48.hdf5')
     table = methods()
+    modes = check_configs({m: config_text(s, e) for m, (s, e) in table.items()})
     for method, (scheme, extra) in table.items():
         (root / 'configs' / f'{method}.sh').write_text(config_text(scheme, extra))
     cases = []
@@ -119,7 +122,8 @@ def prepare(root):
             name = f'{problem}_{method}'; folder = root / 'runs' / name; folder.mkdir()
             param = rewrite(template, dict(InitCondFile=ic.with_suffix(''), OutputDir=str(folder / 'output') + '/', **updates))
             (folder / 'param.txt').write_text(param)
-            cases.append(dict(name=name, method=method, scheme=scheme, flags=extra, problem=problem, group=group, end=end,
+            cases.append(dict(name=name, method=method, scheme=scheme, flags=extra, flip_high_mode=modes[method],
+                              problem=problem, group=group, end=end,
                               ic=str(ic), ic_sha256=sha(ic), param_sha256=sha(folder / 'param.txt'), ranks=1))
     write(root / 'campaign.json', dict(test='flip_transfer_phase1_gates', methods=list(table), cases=cases,
                                        description=__doc__))

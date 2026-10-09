@@ -6,7 +6,9 @@ largest per-step endpoint conservation residual (RD-ALE-FINISH), totals drift
 between the first and last snapshots, positivity minima, and per problem:
   uniform*  max |state(t_end) - state(0)| in rho, v, p
   yee*      area-weighted L1 errors against the moved analytic vortex
-  sod       L1 density/pressure difference from the same scheme's Campoli run
+  sod       matched-ID density/pressure difference from the same scheme's Campoli run
+            (same particle ID, *different* final coordinates: a trajectory
+            difference, not an Eulerian field difference -- Codex review R4)
   kh        E_ky peak and time, entropy excursion (analyze_kh_repair_refresh)
 Writes <root>/analysis/metrics.json.
 """
@@ -105,11 +107,16 @@ def analyze(root, partial):
             fa, fb = finals[name], finals[control]
             if np.array_equal(fa['id'], fb['id']):
                 w = fb['w'] / fb['w'].sum()
-                pair.update(rho_l1_diff=float(w @ abs(fa['rho'] - fb['rho'])), p_l1_diff=float(w @ abs(fa['p'] - fb['p'])),
-                            v_l1_diff=float(w @ np.linalg.norm(fa['v'] - fb['v'], axis=1)))
+                pair.update(rho_matched_id_diff=float(w @ abs(fa['rho'] - fb['rho'])),
+                            p_matched_id_diff=float(w @ abs(fa['p'] - fb['p'])),
+                            v_matched_id_diff=float(w @ np.linalg.norm(fa['v'] - fb['v'], axis=1)),
+                            mean_displacement=float(np.mean(np.linalg.norm(fa['xy'] - fb['xy'], axis=1))))
         for key in ('rho_l1', 'velocity_l1', 'pressure_l1', 'eky_peak'):
             if key in r and key in cr:
                 pair[key + '_change'] = r[key] / cr[key] - 1
+        for key in ('rho_l1', 'velocity_l1', 'pressure_l1'):   # each error is taken at the run's own coordinates
+            if key in r and key in cr:
+                pair[key + '_error_delta'] = r[key] - cr[key]
         if 't_peak' in r and 't_peak' in cr:
             pair['t_peak_delay'] = r['t_peak'] - cr['t_peak']
         pair['drift_control'] = cr['totals_drift']; pair['drift_flip'] = r['totals_drift']

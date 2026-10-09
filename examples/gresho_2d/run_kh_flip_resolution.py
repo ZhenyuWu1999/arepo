@@ -30,6 +30,7 @@ sys.path.insert(0, str(REPO / 'tests/rd'))
 sys.path.insert(0, str(REPO / 'examples/Sedov_2d'))
 from run_n_gauss3_split import ENV, sha, write, rewrite, build   # noqa: E402
 from run_hllc import freeze                                       # noqa: E402
+from flip_campaign_checks import check_configs                    # noqa: E402
 
 RUNS = REPO.parent / 'local_runs'
 GLASS = RUNS / 'lda_baseline_glass_20260911/inputs/glassPlane_48.hdf5'
@@ -37,7 +38,7 @@ GLASS_SHA = '157e1a4767f4678d'
 ARCHIVED = RUNS / 'sod_kh_lab_frame_20260924_v1/inputs/kh_smooth.hdf5'
 ARCHIVED_SHA = '0204ab34a5d3d048'
 METHODS = {'arpaia': [], 'campoli': ['RD_ALE_CAMPOLI_MASS'],
-           'flip': ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER'],
+           'flip': ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER', 'RD_FLIP_HIGH_MODE=0'],
            'flip_h1': ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER', 'RD_FLIP_HIGH_MODE=1']}
 RESOLUTIONS = (48, 96)
 
@@ -79,9 +80,11 @@ def prepare(root):
     base = (HERE / 'Config_FS_con_cm_N.sh').read_text().rstrip('\n') + '\n'
     template = (HERE / 'param_KH_N_glass48_toporepair_t10.txt').read_text()
     cases = []
+    texts = {m: '# KH flip resolution study; see campaign.json.\n' + base + ''.join(f'{flag}\n' for flag in extra)
+             for m, extra in METHODS.items()}
+    check_configs(texts)
     for method, extra in METHODS.items():
-        (root / 'configs' / f'{method}.sh').write_text(
-            '# KH flip resolution study; see campaign.json.\n' + base + ''.join(f'{flag}\n' for flag in extra))
+        (root / 'configs' / f'{method}.sh').write_text(texts[method])
         for n in RESOLUTIONS:
             name = f'kh{n}_{method}'; folder = root / 'runs' / name; folder.mkdir()
             ic = root / 'inputs' / f'kh_glass{n}.hdf5'

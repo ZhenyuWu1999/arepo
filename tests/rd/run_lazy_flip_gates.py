@@ -32,13 +32,13 @@ from run_hllc import freeze                                              # noqa:
 import run_interval_hierarchy_gates as G                                 # noqa: E402
 
 KH96 = G.RUNS / 'kh_flip_resolution_20261009_v1/inputs/kh_glass96.hdf5'
-METHODS = {'N_plain': ('N', []), 'N_plain_h1': ('N', ['RD_FLIP_HIGH_MODE=1']),
-           'N_lazy': ('N', ['RD_ALE_LAZY_FLIP']), 'N_lazy_h1': ('N', ['RD_ALE_LAZY_FLIP', 'RD_FLIP_HIGH_MODE=1']),
-           'HLLC_natural_lazy': ('HLLC', ['RD_ALE_LAZY_FLIP'])}
+METHODS = {'N_plain': ('N', [], 0), 'N_plain_h1': ('N', [], 1),
+           'N_lazy': ('N', ['RD_ALE_LAZY_FLIP'], 0), 'N_lazy_h1': ('N', ['RD_ALE_LAZY_FLIP'], 1),
+           'HLLC_natural_lazy': ('HLLC', ['RD_ALE_LAZY_FLIP'], 0)}
 
 
-def config(scheme, extra):
-    text = G.config(scheme, 'ih_natural' if scheme == 'HLLC' else 'ih_equal')
+def config(scheme, extra, mode):
+    text = G.config(scheme, 'ih_natural' if scheme == 'HLLC' else 'ih_equal', mode)
     return text.rstrip('\n') + '\n' + ''.join(f'{f}\n' for f in extra)
 
 
@@ -55,20 +55,23 @@ def prepare(root):
     for path in inputs.values():
         assert sha(path) == gates[path.name], path
         shutil.copy2(path, root / 'inputs' / path.name)
-    for method, (scheme, extra) in METHODS.items():
-        (root / 'configs' / f'{method}.sh').write_text(config(scheme, extra))
+    from flip_campaign_checks import check_configs
+    check_configs({m: config(s, e, mo) for m, (s, e, mo) in METHODS.items()})
+    for method, (scheme, extra, mode) in METHODS.items():
+        (root / 'configs' / f'{method}.sh').write_text(config(scheme, extra, mode))
     probs = G.problems()
     probs['kh96'] = ('kh',) + probs['kh48'][1:]
     cases = []
     for problem, (group, template, updates, end) in probs.items():
         ic = root / 'inputs' / inputs[problem].name
-        for method, (scheme, extra) in METHODS.items():
+        for method, (scheme, extra, mode) in METHODS.items():
             if (scheme == 'HLLC') != (group == 'sedov'):
                 continue
             name = f'{problem}_{method}'; folder = root / 'runs' / name; folder.mkdir()
             param = rewrite(template, dict(InitCondFile=ic.with_suffix(''), OutputDir=str(folder / 'output') + '/', **updates))
             (folder / 'param.txt').write_text(param)
             cases.append(dict(name=name, method=method, scheme=scheme, variant=method.split('_', 1)[1], problem=problem,
+                              flip_high_mode=mode,
                               group=group, end=end, ic=str(ic), ic_sha256=sha(ic),
                               param_sha256=sha(folder / 'param.txt'), ranks=1))
     write(root / 'campaign.json', dict(test='lazy_flip_gates', methods=list(METHODS), cases=cases, description=__doc__))

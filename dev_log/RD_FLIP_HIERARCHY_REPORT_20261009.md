@@ -12,6 +12,20 @@
 
 This report is self-contained. Section 9 lists the points that most need an independent check.
 
+> **Corrections after the Codex review (2026-10-09; [review](RD_FLIP_HIERARCHY_CODEX_REVIEW_20261009.md), log3 §§223–224).**
+> Codex found four P2 problems and several overstatements. All were checked and accepted, and the text below is corrected in place; corrected passages are marked *(corrected)*.
+> - **R1.** After the default changed to mode 1, drivers that relied on the old default turned their 0/1 comparisons into duplicates. Fixed: every transfer Config now states `RD_FLIP_HIGH_MODE`, and `tests/rd/flip_campaign_checks.py` makes `prepare` fail if a transfer Config omits it or two methods have identical Configs. Archived runs are unaffected; they used their own frozen source, where the default was 0.
+> - **R2.** The frozen-vertex CFL ledger was only counted. It is now a hard failure, `RD_CFL_LEDGER_LIMIT` (default 1), checked by a controlled-overrun test (§5).
+> - **R3.** The Arpaia defect omitted the start-of-step rebase (§3.1).
+> - **R4.** The "transfer − no transfer ρ L1" compared states of the same particle IDs at different final coordinates. It is a trajectory difference, not an Eulerian field difference, and does not establish a convergence order (§6.3).
+> - **Other.**
+>   - The conservation bound is ≈3.5e-14, not ≤2e-14.
+>   - In mode 1, donor values were bit-exact only before blending. They are now copied exactly, and `check_rd` asserts it.
+>   - "Needs no limiting" holds for the KH runs only.
+>   - The lazy thresholds detect invalid intervals; they do not guarantee that none occur.
+>   - The KH grid distances measure sensitivity at the 16×16 scale; they are not error bounds.
+>   - Timings from 2026-10-09 are not citable performance results.
+
 ---
 
 ## 1. Summary
@@ -36,16 +50,16 @@ What is now implemented:
 
 Main results (all frozen, one rank, `OMP_NUM_THREADS=OPENBLAS_NUM_THREADS=1`):
 
-- **Round-off conservation.** Every run with the transfer conserves mass, momentum and energy to ≤2e-14, for every scheme and problem: uniform, Sod, Yee 48/96, KH 48/96 and Sedov 1/21-point. This includes the hierarchy with mixed and natural bins and up to 4×10⁵ flip cavities. The same runs without the transfer drift by 1e-5 to 3.5e-3.
+- **Round-off conservation.** *(corrected)* Every run with the transfer conserves mass, momentum and energy to round-off. The largest common-closure error is ≈3.5e-14 and the largest end-to-end energy drift 3.7e-14 (hierarchy Sedov1). This holds for every scheme and problem: uniform, Sod, Yee 48/96, KH 48/96 and Sedov 1/21-point. This includes the hierarchy with mixed and natural bins and up to 4×10⁵ flip cavities. The same runs without the transfer drift by 1e-5 to 3.5e-3.
 - **Sedov positivity.** HLLC-RD and both LDA/HLLC blends reach t = 0.05 with p > 0. The limiter acts (θ < 1) in about 2 % of cavities.
-- **Accuracy cost.** In smooth flow (Yee) the transfer − no-transfer difference falls by 2.5–3.8× from glass48 to glass96, i.e. about second order. In KH at glass48/96 it stays below the discretisation error (§7.4).
+- **Accuracy cost.** *(corrected)* In smooth flow (Yee) the transfer raises each run's analytic ρ L1 error by 5.5e-5 to 1.2e-4 at glass48 and by 8e-6 to 3.5e-5 at glass96. That is 3–7× smaller at the finer resolution, but there are only two resolutions and the comparison runs are not conservative, so no convergence order is claimed (§6.3). In KH at glass48/96 the change is about as large as the 48 → 96 differences at the 16×16 scale (§7.3–7.4).
   - The receiver-only high endpoint avoids the entropy excursion that the uniform shift creates in KH.
   - In Yee and Sod the two high endpoints are indistinguishable.
   - In Sedov the receiver-only endpoint gives a ≈1 % lower density peak at an unchanged shell radius.
 - **Hierarchy.**
   - With equal bins it reproduces equal-step Campoli to ≈4e-15 for N, LDA and B (HLLC: before the first flip).
-  - Sedov with natural bins (dt ratio up to 128): element work 7–8 % of all-fine stepping, RD CPU 17–37× lower, profiles within L1 ≈ 1e-3 of equal-step.
-  - Wall-clock gain is only ≈1.4×, because AREPO rebuilds the full Delaunay mesh at every synchronisation.
+  - Sedov with natural bins (dt ratio up to 128): element work 7–8 % of all-fine stepping; profiles within a matched-ID L1 ≈ 1e-3 of equal step.
+  - *(corrected)* CPU and wall-clock ratios (RD 17–37×, total ≈1.4×) were measured under oversubscription and are **not citable**. AREPO still rebuilds the full Delaunay mesh at every synchronisation, so most of the cost remains.
   - Across bin interfaces LDA and B degrade to first order (+4–5 %, or +20–32 % when the interface crosses the vortex). N does not.
 - **Lazy flips.** 3–4× fewer adopted cavities at unchanged accuracy, conservation and positivity. No deferred triangle went below 15°.
 
@@ -96,12 +110,24 @@ Since A_mid − (A_old + A_new)/2 = −c₂/4, the two variants differ only by r
 - *Campoli.* For a no-flip Campoli slab, the contour-residual and mass column sums satisfy 1ᵀR = aᵀU and 1ᵀM = bᵀ, with a = (s₁ − s₀)/h and b = (s₀ + s₁)/2. The two-pass RK2 endpoint balance then cancels exactly: Σ_i S_iⁿ⁺¹ U_iⁿ⁺¹ = Σ_i S_iⁿ U_iⁿ.
   - Derivation: log3 §27 and its linked report. It was verified on a 2304-node periodic mesh to 4.65e-14, and in every no-flip Campoli control.
   - Storage and divisor coincide, so nothing more happens at the end of the step.
-- *Arpaia.* The update conserves Σ D_i U_iⁿ⁺¹. Converting to storage changes the total by Σ_i (S_iⁿ⁺¹ − D_i) U_iⁿ⁺¹, with D_T − A_new = −c₂/4. This term is non-zero whenever the flow is non-uniform and the mesh deforms.
+- *Arpaia* *(corrected, R3)*. The step involves two conversions, not one.
+  - At the start of the step `rd_ale_prepare_step` rebases Sⁿ Uⁿ to D Uⁿ.
+  - Within the step, the column-sum identity and D − M = ΔS/2 give Σ_i D_i U_iⁿ⁺¹ = Σ_i (D_i − ΔS_i) U_iⁿ, with ΔS = Sⁿ⁺¹ − Sⁿ.
+  - At the end, the state is stored as Sⁿ⁺¹ Uⁿ⁺¹.
+  - With ε_i = S_iⁿ⁺¹ − D_i = Σ_{T∋i} c₂,T/12, the complete no-flip defect of one step is
+
+    Σ_i S_iⁿ⁺¹ U_iⁿ⁺¹ − Σ_i S_iⁿ U_iⁿ = Σ_i ε_i (U_iⁿ⁺¹ − U_iⁿ).
+
+  - ε = O(Δt²) and the state increment is O(Δt), so the defect is **O(Δt³) per step**.
+  - The original text gave only the end-of-step rebase Σ ε Uⁿ⁺¹. That omits the start-of-step rebase and misstates both the size and the order.
+  - Codex checked the formula on an independent three-node algebra test: actual −1.3224918523953022e-3; full formula −1.3224918523953154e-3; end-only term −1.63e-2.
+  - The defect can vanish (c₂ = 0) or partly cancel, so "non-zero whenever the mesh deforms" was too strong.
+  - For Campoli ε = 0.
 
 **Why we switch to Campoli.**
 1. It removes one of the two leaks, leaving flips as the only one.
 2. Its per-interval geometric increments (A_new − A_old)/3 telescope exactly to the actual current dual area of a vertex once its star closes, however the intervals of its triangles are split. The hierarchy (§3.5) relies on this.
-3. Accuracy is unchanged in every comparison. Sedov HLLC with Campoli and no transfer equals the thesis Arpaia run to L1 = 1.4e-6. So in Sedov the conversion leak is negligible and the flips cause the whole thesis drift.
+3. Accuracy is unchanged in every comparison. Sedov HLLC with Campoli and no transfer equals the thesis Arpaia run to a matched-ID L1 of 1.4e-6, with identical drifts. So *in this problem* the Arpaia conversion term is negligible and the flips cause the thesis drift. This is a statement about Sedov, not a general bound.
 
 The Arpaia form remains the standard published derivation. Campoli is an equivalent second-order choice of the two area weights.
 
@@ -137,11 +163,11 @@ We seek U_i⁺ with Σ g_i⁺ U_i⁺ = Σ g_i U_i.
 **High endpoint, mode 0 (uniform shift):** U_i^H = U_i − D_C / Σ_j g_j⁺.
 - *Minimal max norm.* Any conservative ΔU has Σ g⁺ ΔU = −D_C, so max|ΔU| ≥ |D_C| / Σ g⁺, with equality only for the uniform shift.
 - *Minimal lumped L2 norm.* Minimising Σ g⁺ ΔU² under the same constraint gives ΔU = const (Lagrange).
-- Linear-exact, and invertible at fixed time.
+- Linear-exact, and invertible at fixed time. Invertibility is checked for mode 0 only and should not be assumed for mode 1.
 - **Not** convex: it can be inadmissible at strong contrasts (for example, Sedov p = −0.019).
 
 **High endpoint, mode 1 (receiver-only; default since `8e325e9`).**
-- Donors keep U_i bit-for-bit.
+- Donors keep U_i bit-for-bit. *(corrected)* Up to the Codex review this held only for the endpoint itself: the blend (1 − θ)u + θu can differ from u by an ulp. The blend now copies values where both endpoints agree, and the kernel test asserts bit-exact donors for every θ in mode 1.
 - Receivers take Q_i⁺ = g_i U_i + δm_i (Ū_D + U_i − Ū_R), where Ū_D and Ū_R are the |δm|-weighted donor and receiver means.
 - Equivalently ΔU_i = −(δm_i / g_i⁺)(D_C / R) on receivers.
 - It conserves, since Σ_rec δm_i (Ū_D − Ū_R) = −D_C. It is linear-exact, because D_C = 0 implies Ū_D = Ū_R. Its extensive L1 change is |D_C|, the same as mode 0. It concentrates the change on the vertices that physically received area.
@@ -234,7 +260,7 @@ Totals are therefore conserved exactly whenever all triangles are closed. They a
 
 **Positivity (lumped low-order only).** Since every closed star is refreshed, between two refreshes a vertex is:
 - **live for exactly one RK2 interval.** The equal-step convex-weight and stage-CFL checks apply: a = Σ M_T/3 / D, b = 3/2 − a ∈ (0, 1], and stage CFL ≤ 1, with triangle_dt = h/2 in this two-call form; or
-- **frozen in every interval since its last refresh.** Each deposit is then a nonnegative combination of U_i⁰ and admissible neighbour states. The refreshed state is admissible if Λ_i = Σ (h/2)(c⁰ + c¹) ≤ g_i at refresh. This is the CFL ledger `RD_CFLLedger`; it is reported, and the refreshed states are checked.
+- **frozen in every interval since its last refresh.** Each deposit is then a nonnegative combination of U_i⁰ and admissible neighbour states. The refreshed state is admissible if Λ_i = Σ (h/2)(c⁰ + c¹) ≤ g_i at refresh. This is the CFL ledger `RD_CFLLedger`. *(corrected, R2)* It was originally only reported. It is now enforced: a non-finite ratio, or a ratio above `RD_CFL_LEDGER_LIMIT` (default 1) for a frozen vertex, terminates the run. A live vertex's ratio can legitimately reach 1.5 and is covered by its stage checks. There is no automatic retry or early closure yet.
 
 N, LDA and B have no positivity guarantee, here or in equal-step.
 
@@ -248,6 +274,7 @@ N, LDA and B have no positivity guarantee, here or in equal-step.
   - one of its old interior edges has an opposite-angle sum exceeding π by more than `RD_LAZY_DELAUNAY_EXCESS` (20°).
 - **Otherwise** its old triangles stay in the registry, with no forced closure and no transfer.
 - New star masses and the committed registry come from the *next* registry, not from the Delaunay mesh. The debug check "registry = Delaunay at the opening hook" is disabled in lazy mode.
+- *(corrected)* The 15°/20° thresholds are not a guarantee that no inversion occurs within the next step. A deferred triangle that inverts inside an interval is caught by the full-interval signed-area check, which terminates the run. There is no geometric step prediction or recovery yet, so completion under arbitrarily strong shear is not guaranteed.
 
 ### 3.7 What is proved, what is verified, what is assumed
 
@@ -262,11 +289,12 @@ N, LDA and B have no positivity guarantee, here or in equal-step.
 
 **Proved earlier and checked here:** Campoli fixed-connectivity telescoping (1ᵀR = aᵀU; log3 §27). In the native gates, equal bins match equal-step to ≈4e-15.
 
-**Argued, not formally written out (see §9):**
-- hierarchy conservation with the element co-moving frame and the contour residual on unequal intervals;
-- sufficiency of the CFL ledger condition for frozen vertices when neighbour predictor states enter φ¹.
-
-Both are verified numerically to round-off and at runtime respectively, over every frozen gate.
+**Argued here; the argument was completed in the Codex review (§3, "实际区间的守恒与 frame" and "冻结顶点正性的充分条件"):**
+- Hierarchy conservation with the element co-moving frame and the contour residual on unequal intervals.
+  - The element total is Φ_T = B_T + (A′_mid/3) ΣU_i.
+  - The geometric deposits ΔA/6 Σ(U⁰ + U*) cancel the volume part of h/2 (Φ⁰ + Φ*).
+  - Frozen shared-edge endpoints and linear normals make B cancel between the two sides.
+- Sufficiency of the frozen-vertex ledger condition Λ ≤ g, also when live neighbours' predictor states enter φ¹.
 
 **Assumed (runtime-checked, abort on violation):**
 - edges shorter than a quarter box (minimal-image keys);
@@ -389,17 +417,23 @@ In Sedov, Campoli without transfer equals the thesis Arpaia run to L1 = 1.4e-6 (
 - The bounds-limited blend sharpens its shell: peak 3.80 → 3.97 (21-point) and 3.86 → 4.17 (1-point).
 - The positivity-only blend overshoots (5.5 / 4.9 vs analytic maximum 4) both with and without the transfer.
 
-### 6.3 Accuracy in smooth flow (Yee, transfer − no transfer, ρ L1)
+### 6.3 Accuracy in smooth flow (Yee) *(corrected, R4)*
 
-| Scheme | glass48 | glass96 | ratio | change of ρ L1 error vs analytic, 48 → 96 |
-|---|---|---|---|---|
-| N | 1.17e-4 | 3.5e-5 | 3.3 | +4.2 % → +2.1 % |
-| LDA | 1.43e-4 | 4.1e-5 | 3.5 | +5.4 % → +2.6 % |
-| B | 1.29e-4 | 3.6e-5 | 3.6 | +9.0 % → +5.9 % |
-| HLLC-RD | 1.00e-4 | 4.0e-5 | 2.5 | +2.4 % → +1.4 % |
-| N, mode 1 | 1.37e-4 | 3.6e-5 | 3.8 | +4.1 % → +2.1 % |
+Two metrics compare the run with transfer against the same scheme's Campoli run without transfer, at the same resolution and dt:
+- **Analytic-error increase** (valid): E_transfer − E_none, where E is each run's area-weighted ρ L1 error against the analytic vortex at its *own* final coordinates.
+- **Matched-ID difference** (the originally reported "transfer − no transfer ρ L1"): Σw|ρ_A(ID) − ρ_B(ID)|. Particles with the same ID end at different coordinates (mean displacement in the last column), so this mixes field and trajectory differences. Codex estimates the coordinate part at ≈32 % for N mode 1 at glass48. It is not an Eulerian field difference and gives no convergence order.
 
-The transfer perturbation converges at about second order, as §3.2 predicts.
+| Scheme | analytic-error increase, glass48 | glass96 | relative increase 48 → 96 | matched-ID difference 48 / 96 | mean displacement 48 / 96 |
+|---|---|---|---|---|---|
+| N | 1.18e-4 | 3.4e-5 | +4.2 % → +2.1 % | 1.17e-4 / 3.5e-5 | 1.2e-4 / 5.0e-5 |
+| LDA | 5.5e-5 | 8e-6 | +5.4 % → +2.6 % | 1.43e-4 / 4.1e-5 | 2.3e-4 / 1.2e-4 |
+| B | 1.06e-4 | 2.4e-5 | +9.0 % → +5.9 % | 1.29e-4 / 3.6e-5 | 1.2e-4 / 5.6e-5 |
+| HLLC-RD | 8.8e-5 | 2.9e-5 | +2.4 % → +1.4 % | 1.00e-4 / 4.0e-5 | 1.0e-4 / 1.2e-4 |
+| N, mode 1 | 1.17e-4 | 3.5e-5 | +4.1 % → +2.1 % | 1.37e-4 / 3.6e-5 | 5.7e-4 / 4.5e-5 |
+
+- The accuracy cost of the transfer falls by 3–7× from glass48 to glass96 and halves as a fraction of the total error.
+- This is two-resolution supporting evidence only. The comparison runs are not conservative, there is no third resolution and no dt control, so no convergence order is claimed.
+- A common-space comparison with a third resolution (Yee192) and dt halving is the planned control (§9).
 
 ### 6.4 Limiter sensitivity (decision D2)
 
@@ -440,11 +474,11 @@ The entropy excursion is the maximum distance of s = p/ρ^γ outside its initial
 | Transfer, mode 1 (equal step / interval) | 0.36 / 0.29 | 0.32 / 0.33 |
 | Interval, lazy, mode 0 / mode 1 | 0.48 / 0.26 | 0.52 / 0.48 |
 
-The uniform shift also moves the donors, and in KH pushes a few nodes outside the initial entropy range. The receiver-only endpoint does not, and needs no limiting.
+The uniform shift also moves the donors, and in KH pushes a few nodes outside the initial entropy range. The receiver-only endpoint does not. *(corrected)* It needed no limiting **in these KH runs**; in Sedov it triggers the limiter (102–111 cavities). It is not an entropy bound.
 
 ### 7.3 Distance to the finer solution
 
-Density is binned on a 16×16 grid; the entries are mean |ρ48 − ρ96|.
+Density is binned on a 16×16 grid; the entries are mean |ρ48 − ρ96|. *(corrected)* Neither glass96 run is a known exact solution. These distances measure sensitivity at the 16×16 scale and do not bound errors.
 - **Resolution gap.** Every glass48 run is at about the same distance from every glass96 run: ≈0.010 (t = 0.4), 0.036–0.046 (t = 1), 0.073–0.091 (t = 1.6), 0.074–0.096 (t = 2).
 - **Transfer effect at the same resolution.** Transfer − no-transfer is 0.030 (glass48) and 0.015 (glass96) at t = 1. That is first order at these under-resolved scales, and smaller than the 48 → 96 gap.
 - **Closest conservative run.** Among the conservative glass48 runs, mode 1 (interval) is consistently among the closest to the glass96 runs: 0.0367 at t = 1 and 0.0745 at t = 2. Its distance equals that of the non-conservative runs.
@@ -525,7 +559,7 @@ Sedov, HLLC, natural bins, t = 0.05 (up to 8 occupied bins, dt ratio 128):
 | ρ L1 vs equal step + transfer | 9.8e-4 | 8.7e-4 |
 | ρ peak (r) | 3.466 (0.2502) vs 3.456 (0.2503) | 3.464 (0.2496) vs 3.459 (0.2497) |
 
-- The Voronoi rebuild is ≈70 % of the hierarchy run's CPU, against ≈50 % for equal step. The overall gain is therefore ≈1.4× in a lightly loaded scratch run. The frozen timings are load-contaminated (§5).
+- The Voronoi rebuild is ≈70 % of the hierarchy run's CPU, against ≈50 % for equal step. *(corrected)* The ≈1.4× overall gain came from a scratch run made while the machine was oversubscribed, so it is not a citable performance result. The frozen timings are load-contaminated (§5).
 - KH48 natural bins: element work 84 %.
 - Uniform random natural bins: 97 %.
 - Test-pattern two-bin runs: 56–76 %, but twice as many events.
@@ -604,3 +638,5 @@ PATH=/Users/zhenyuwu/miniconda3/envs/21cmfast/bin:$PATH make -C arepo check_rd
 ```
 
 Use at most 6–8 concurrent simulations on this machine.
+
+*(corrected)* Since the R1 fix every driver states `RD_FLIP_HIGH_MODE` explicitly: mode 0 wherever the original archive used the old default. Re-preparing therefore reproduces the original experiment definitions.

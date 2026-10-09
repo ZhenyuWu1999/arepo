@@ -28,6 +28,7 @@ sys.path.insert(0, str(REPO / 'tests/rd'))
 sys.path.insert(0, str(HERE))
 from run_n_gauss3_split import ENV, sha, write, rewrite, build, state   # noqa: E402
 from run_hllc import freeze                                              # noqa: E402
+from flip_campaign_checks import check_configs                           # noqa: E402
 
 RUNS = REPO.parent / 'local_runs'
 HLLC_REF = RUNS / 'sedov_hllc_20260930_v1'
@@ -35,10 +36,10 @@ BLEND_REF = RUNS / 'sedov_lda_hllc_20260930_v1'
 BASE = {'HLLC': HERE / 'Config_HLLC_moving.sh', 'LDAHLLC_pos': HERE / 'Config_LDA_HLLC_pos_moving.sh',
         'LDAHLLC_bounds': HERE / 'Config_LDA_HLLC_bounds_moving.sh'}
 METHODS = {'HLLC_campoli': ('HLLC', ['RD_ALE_CAMPOLI_MASS']),
-           'HLLC_flip': ('HLLC', ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER']),
+           'HLLC_flip': ('HLLC', ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER', 'RD_FLIP_HIGH_MODE=0']),
            'LDAHLLC_pos_campoli': ('LDAHLLC_pos', ['RD_ALE_CAMPOLI_MASS']),
-           'LDAHLLC_pos_flip': ('LDAHLLC_pos', ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER']),
-           'LDAHLLC_bounds_flip': ('LDAHLLC_bounds', ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER'])}
+           'LDAHLLC_pos_flip': ('LDAHLLC_pos', ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER', 'RD_FLIP_HIGH_MODE=0']),
+           'LDAHLLC_bounds_flip': ('LDAHLLC_bounds', ['RD_ALE_CAMPOLI_MASS', 'RD_ALE_FLIP_TRANSFER', 'RD_FLIP_HIGH_MODE=0'])}
 REFERENCE = {'HLLC': (HLLC_REF, 'HLLC_moving'), 'LDAHLLC_pos': (BLEND_REF, 'LDAHLLC_pos'),
              'LDAHLLC_bounds': (BLEND_REF, 'LDAHLLC_bounds')}
 
@@ -56,10 +57,11 @@ def prepare(root):
         assert sha(ic) == ref[f'{group}_HLLC_moving']['ic_sha256'], group
     template_path = HLLC_REF / 'runs/nearest21_HLLC_moving/param.txt'
     template = template_path.read_text()
-    for method, (base, extra) in METHODS.items():
-        (root / 'configs' / f'{method}.sh').write_text(
-            '# Sedov flip-transfer gate; see campaign.json.\n' + BASE[base].read_text().rstrip('\n') + '\n'
-            + ''.join(f'{flag}\n' for flag in extra))
+    texts = {method: '# Sedov flip-transfer gate; see campaign.json.\n' + BASE[base].read_text().rstrip('\n') + '\n'
+                     + ''.join(f'{flag}\n' for flag in extra) for method, (base, extra) in METHODS.items()}
+    check_configs(texts)
+    for method, text in texts.items():
+        (root / 'configs' / f'{method}.sh').write_text(text)
     cases = []
     for group in ('uniform', 'nearest21', 'nearest1'):
         end = .001 if group == 'uniform' else .05

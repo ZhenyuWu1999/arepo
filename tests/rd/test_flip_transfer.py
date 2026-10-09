@@ -148,8 +148,8 @@ def check_case(g, dm, u, worst, rng_tag):
     rel = np.max(np.abs(ref - out) / np.where(umax > 0, umax, 1.0))
     worst['reference'] = max(worst['reference'], rel)
     assert rel < 1e-12, (rng_tag, rel)
-    if diag[0] == 0:
-        assert np.array_equal(out[donors], u[donors]), rng_tag   # donors bit-for-bit
+    if diag[0] == 0 or HIGH_MODE == 1:
+        assert np.array_equal(out[donors], u[donors]), rng_tag   # donors bit-for-bit (mode 1: for every theta)
     worst['theta_min'] = min(worst['theta_min'], diag[0])
     worst['limited'] += diag[0] < 1
     return out, diag

@@ -62,6 +62,9 @@ def prepare(root, only=None):
         archive, default_method, default_case = DEFAULT[problem]
         base = (archive / 'configs' / f'{default_method}.sh').read_text()
         assert 'RD_ALE_FLIP_TRANSFER' in base and 'RD_ALE_CAMPOLI_MASS' in base
+        # The archived default runs used the old default mode 0; keep that explicit unless the variant sets it.
+        if not any(f.startswith('RD_FLIP_HIGH_MODE') for f in extra) and 'RD_FLIP_HIGH_MODE' not in base:
+            extra = extra + ['RD_FLIP_HIGH_MODE=0']
         (root / 'configs' / f'{method}.sh').write_text(base.rstrip('\n') + '\n' + ''.join(f'{f}\n' for f in extra))
         ref = next(c for c in json.loads((archive / 'campaign.json').read_text())['cases'] if c['name'] == default_case)
         ic = root / 'inputs' / Path(ref['ic']).name

@@ -84,11 +84,14 @@ static int rd_flip_state_ok(const double u[4], const struct rd_flip_bounds *b, i
   return 1;
 }
 
+/* Where both endpoints agree (donors in mode 1, untouched vertices) the value is
+ * copied, so it stays bit-for-bit: (1-theta) u + theta u need not round to u. */
 static void rd_flip_blend(int n, double theta, const double (*ul)[4], const double (*uh)[4], double (*out)[4])
 {
   for(int i = 0; i < n; i++)
     for(int k = 0; k < 4; k++)
-      out[i][k] = theta == 0.0 ? ul[i][k] : (theta == 1.0 ? uh[i][k] : (1.0 - theta) * ul[i][k] + theta * uh[i][k]);
+      out[i][k] = (theta == 0.0 || ul[i][k] == uh[i][k]) ? ul[i][k]
+                  : (theta == 1.0 ? uh[i][k] : (1.0 - theta) * ul[i][k] + theta * uh[i][k]);
 }
 
 static int rd_flip_blend_ok(int n, double theta, const double (*ul)[4], const double (*uh)[4],

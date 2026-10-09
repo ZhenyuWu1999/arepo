@@ -107,7 +107,7 @@ def analyze(root, partial):
         fa, fb = finals[name], finals[ref]
         if np.array_equal(fa['id'], fb['id']):
             w = fb['w'] / fb['w'].sum()
-            pair['rho_l1_diff'] = float(w @ abs(fa['rho'] - fb['rho']))
+            pair['rho_matched_id_diff'] = float(w @ abs(fa['rho'] - fb['rho']))   # trajectory difference (R4)
         pairs.append(pair)
     out = root / 'analysis'; out.mkdir(exist_ok=True)
     write(out / 'metrics.json', dict(cases=list(rows.values()), pairs=pairs))
