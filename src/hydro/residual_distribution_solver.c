@@ -312,6 +312,29 @@ static int rd_rusanov_local_index(const point *dp)
 #endif
 #endif
 
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+#if !defined(RD_ALE_HIERARCHICAL) || !defined(RD_ALE_CAMPOLI_MASS) || defined(RD_ALE_HIERARCHICAL_ARPAIA) || \
+    !defined(N_SCHEME) || !defined(RD_ALE_CONTOUR_RESIDUAL)
+#error "RD_ALE_INTERVAL_HIERARCHY v1 requires the Campoli RD_ALE_HIERARCHICAL N path with the contour residual."
+#endif
+#include "rd_flip_transfer.h"
+#ifndef RD_FLIP_FLOOR_FRACTION
+#define RD_FLIP_FLOOR_FRACTION 0.5
+#endif
+#ifndef RD_FLIP_DMP_RELAX
+#define RD_FLIP_DMP_RELAX (-1.0)
+#endif
+#ifndef RD_FLIP_ENTROPY_BOUND
+#define RD_FLIP_ENTROPY_BOUND 0
+#endif
+#ifndef RD_FLIP_HIGH_MODE
+#define RD_FLIP_HIGH_MODE 0
+#endif
+#endif
+#if defined(RD_ALE_INTERVAL_NO_TRANSFER) && !defined(RD_ALE_INTERVAL_HIERARCHY)
+#error "RD_ALE_INTERVAL_NO_TRANSFER is a negative control of RD_ALE_INTERVAL_HIERARCHY."
+#endif
+
 #ifdef RD_HIERARCHICAL_TIMESTEPS
 #if !defined(RD_RK2_TOTAL_RESIDUAL) || (!defined(N_SCHEME) && !defined(LDA_SCHEME))
 #error "RD_HIERARCHICAL_TIMESTEPS currently requires RD_RK2_TOTAL_RESIDUAL with N_SCHEME or LDA_SCHEME."
@@ -473,7 +496,15 @@ static integertime rd_point_predictor_end(const point *dp)
   return PrimExch[dp->index].RD_PredictorEnd;
 }
 
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+/* Per-event interval-hierarchy views, owned by rd_ale_interval_event(). */
+static char *RdIntervalLive = NULL;  /* local index -> predictor live (whole star due, one start) */
+static double *RdIntervalDt = NULL;  /* synthetic element -> its actual interval h_T */
+static int RdIntervalN = 0;
+static int rd_point_stage_live(const point *dp) { return RdIntervalLive[rd_local_point_index(dp)]; }
+#else
 static int rd_point_stage_live(const point *dp) { return rd_point_star_timebin(dp) == rd_point_timebin(dp); }
+#endif
 
 /*! \brief Whether this build can reconstruct a genuinely partial static mesh.
  *
@@ -628,6 +659,15 @@ static void rd_prepare_vertex_star_context(tessellation *T)
 /*! \brief Reset only predictors whose vertex interval opens at this event. */
 static void rd_open_vertex_predictors(void)
 {
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+  for(int i = 0; i < NumGas; i++)
+    {
+      for(int k = 0; k < 4; k++)
+        SphP[i].RD_dU[k] = 0.0;
+      SphP[i].RD_PredictorEnd = RdIntervalLive[i] ? All.Ti_Current : -1;
+    }
+  return;
+#endif
   for(int i = 0; i < NumGas; i++)
     {
       if(SphP[i].RD_StarTimeBin < P[i].TimeBinHydro)
@@ -3473,6 +3513,727 @@ static void rd_ale_hierarchical_arpaia_finish(const struct rd_element_set *set)
 #endif
 #endif
 
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+/* ==========================================================================
+ * Moving-mesh hierarchy with actual-interval closure (one rank, N, Campoli).
+ * Design: dev_log/RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md;
+ * Python oracle: tests/rd/audit_euler_flip_closure.py.
+ *
+ * A persistent registry holds every triangle of the RD connectivity with the
+ * end s_T of its last integrated interval.  At each synchronisation time t:
+ *  1. the registry is compared with the new Delaunay triangulation; changed
+ *     triangles form cavities (connected components of their vertices);
+ *  2. the closure set C = naturally due triangles (finest vertex bin
+ *     synchronised) and every registry triangle touching a cavity vertex;
+ *  3. C is integrated over its own intervals [s_T, t] with the concentrated
+ *     Campoli RK2 (both sweeps at t, on a synthetic tessellation of C); a
+ *     vertex predictor is live iff its whole star is in C with one start;
+ *  4. active and cavity vertices are refreshed: their stars are complete and
+ *     the geometric ledger equals the star area;
+ *  5. each cavity is transferred with the flip element (rd_flip_transfer.h);
+ *  6. the registry is committed: retained triangles keep s_T (= t if closed),
+ *     new ones start at t.
+ * An edge shared by triangles with different intervals has frozen (non-live)
+ * endpoints moving linearly, so the midpoint normals integrate its flux
+ * exactly on both sides: totals are conserved at every common closure.
+ * ========================================================================== */
+struct rd_reg_triangle
+{
+  MyIDType key[3]; /* sorted particle IDs: the identity of the triangle */
+  MyIDType ccw[3]; /* the same IDs, counter-clockwise */
+  integertime start, birth;
+};
+
+struct rd_reg_new
+{
+  struct rd_reg_triangle t;
+  double area;
+};
+
+struct rd_reg_idmap
+{
+  MyIDType id;
+  int index;
+};
+
+static struct rd_reg_triangle *RdReg = NULL;
+static int RdRegN = 0;
+static double RdRegTotal[4];
+static long long RdRegWork[4]; /* element updates, forced updates, non-dyadic intervals, events */
+static struct rd_reg_idmap *RdIdMap = NULL;
+static char *RdIntervalClosed = NULL; /* local index -> whole star closed in this event */
+
+static int rd_reg_key_cmp(const MyIDType *a, const MyIDType *b)
+{
+  for(int k = 0; k < 3; k++)
+    if(a[k] != b[k])
+      return a[k] < b[k] ? -1 : 1;
+  return 0;
+}
+
+static int rd_reg_new_compare(const void *a, const void *b)
+{
+  return rd_reg_key_cmp(((const struct rd_reg_new *)a)->t.key, ((const struct rd_reg_new *)b)->t.key);
+}
+
+static int rd_reg_idmap_compare(const void *a, const void *b)
+{
+  const MyIDType x = ((const struct rd_reg_idmap *)a)->id, y = ((const struct rd_reg_idmap *)b)->id;
+  return (x > y) - (x < y);
+}
+
+static void rd_reg_build_idmap(void)
+{
+  RdIdMap = (struct rd_reg_idmap *)realloc(RdIdMap, (NumGas > 0 ? NumGas : 1) * sizeof(*RdIdMap));
+  if(RdIdMap == NULL)
+    terminate_program("RD interval hierarchy: ID map allocation failed");
+  for(int i = 0; i < NumGas; i++)
+    {
+      if(P[i].Ti_Current != All.Ti_Current)
+        terminate_program("RD interval hierarchy needs every vertex drifted to the current time (ID=%llu)",
+                          (unsigned long long)P[i].ID);
+      RdIdMap[i].id = P[i].ID;
+      RdIdMap[i].index = i;
+    }
+  qsort(RdIdMap, NumGas, sizeof(*RdIdMap), rd_reg_idmap_compare);
+  for(int i = 1; i < NumGas; i++)
+    if(RdIdMap[i].id == RdIdMap[i - 1].id)
+      terminate_program("RD interval hierarchy requires unique particle IDs");
+}
+
+static int rd_reg_index(MyIDType id)
+{
+  int lo = 0, hi = NumGas - 1;
+  while(lo <= hi)
+    {
+      const int mid = (lo + hi) / 2;
+      if(RdIdMap[mid].id == id)
+        return RdIdMap[mid].index;
+      if(RdIdMap[mid].id < id)
+        lo = mid + 1;
+      else
+        hi = mid - 1;
+    }
+  terminate_program("RD interval hierarchy: registry vertex ID=%llu is not a local gas particle", (unsigned long long)id);
+  return -1;
+}
+
+static int rd_reg_find(int *parent, int i)
+{
+  while(parent[i] != i)
+    {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+  return i;
+}
+
+static void rd_reg_union(int *parent, const MyIDType key[3])
+{
+  int v[3];
+  for(int k = 0; k < 3; k++)
+    {
+      v[k] = rd_reg_index(key[k]);
+      if(parent[v[k]] < 0)
+        parent[v[k]] = v[k];
+    }
+  for(int k = 1; k < 3; k++)
+    {
+      const int r0 = rd_reg_find(parent, v[0]), rk = rd_reg_find(parent, v[k]);
+      if(r0 != rk)
+        parent[rk] = r0;
+    }
+}
+
+static double rd_reg_signed_area(const double x[3][2])
+{
+  return 0.5 * ((x[1][0] - x[0][0]) * (x[2][1] - x[0][1]) - (x[1][1] - x[0][1]) * (x[2][0] - x[0][0]));
+}
+
+/* Current coordinates in one coherent periodic image (minimal image about the
+ * first vertex).  Edges must stay far below half the box. */
+static void rd_reg_coordinates(const MyIDType id[3], int index[3], double x[3][2])
+{
+  const double box[2] = {boxSize_X, boxSize_Y};
+  for(int v = 0; v < 3; v++)
+    index[v] = rd_reg_index(id[v]);
+  for(int d = 0; d < 2; d++)
+    {
+      x[0][d] = P[index[0]].Pos[d];
+      for(int v = 1; v < 3; v++)
+        {
+          double dx = P[index[v]].Pos[d] - x[0][d];
+          dx -= box[d] * floor(dx / box[d] + 0.5);
+          if(fabs(dx) > 0.25 * box[d])
+            terminate_program("RD interval hierarchy: triangle edge longer than a quarter box (IDs %llu %llu %llu)",
+                              (unsigned long long)id[0], (unsigned long long)id[1], (unsigned long long)id[2]);
+          x[v][d] = x[0][d] + dx;
+        }
+    }
+}
+
+static void rd_reg_sort_key(const MyIDType id[3], MyIDType key[3])
+{
+  for(int k = 0; k < 3; k++)
+    key[k] = id[k];
+  for(int a = 0; a < 2; a++)
+    for(int b = a + 1; b < 3; b++)
+      if(key[b] < key[a])
+        {
+          MyIDType tmp = key[a];
+          key[a] = key[b];
+          key[b] = tmp;
+        }
+  if(key[0] == key[1] || key[1] == key[2])
+    terminate_program("RD interval hierarchy found a triangle with repeated particle IDs");
+}
+
+/* The owned physical triangles of a live tessellation, sorted by key, with
+ * counter-clockwise IDs and current (positive) areas. */
+static int rd_reg_collect_mesh(tessellation *T, struct rd_reg_new **out)
+{
+  struct rd_element_set set;
+  rd_build_element_set(T, &set, 0);
+  const int n = set.n;
+  struct rd_reg_new *fresh = (struct rd_reg_new *)malloc((n > 0 ? n : 1) * sizeof(*fresh));
+  if(fresh == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int slot = 0; slot < n; slot++)
+    {
+      const int triangle = set.element[slot];
+      double x[3][2];
+      for(int v = 0; v < 3; v++)
+        {
+          const point *dp = &T->DP[T->DT[triangle].p[v]];
+          fresh[slot].t.ccw[v] = dp->ID;
+          x[v][0] = dp->x;
+          x[v][1] = dp->y;
+        }
+      double area = rd_reg_signed_area(x);
+      if(area < 0.0)
+        {
+          MyIDType tmp = fresh[slot].t.ccw[1];
+          fresh[slot].t.ccw[1] = fresh[slot].t.ccw[2];
+          fresh[slot].t.ccw[2] = tmp;
+          area = -area;
+        }
+      if(!(area > 0.0) || !isfinite(area))
+        terminate_program("RD interval hierarchy found a degenerate Delaunay triangle");
+      rd_reg_sort_key(fresh[slot].t.ccw, fresh[slot].t.key);
+      fresh[slot].t.start = fresh[slot].t.birth = All.Ti_Current;
+      fresh[slot].area = area;
+    }
+  rd_free_element_set(&set);
+  qsort(fresh, n, sizeof(*fresh), rd_reg_new_compare);
+  for(int k = 1; k < n; k++)
+    if(rd_reg_key_cmp(fresh[k - 1].t.key, fresh[k].t.key) == 0)
+      terminate_program("RD interval hierarchy: ID-only triangle key is ambiguous (periodic winding needed)");
+  *out = fresh;
+  return n;
+}
+
+static void rd_reg_totals(double total[4], double scale[4])
+{
+  for(int c = 0; c < 4; c++)
+    total[c] = scale[c] = 0.0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      const double q[4] = {P[i].Mass, SphP[i].Momentum[0], SphP[i].Momentum[1], SphP[i].Energy};
+      for(int c = 0; c < 4; c++)
+        {
+          total[c] += q[c];
+          scale[c] += fabs(q[c]);
+        }
+    }
+}
+
+/*! Create the registry from the opening tessellation (setup time only). */
+static void rd_reg_init(tessellation *T)
+{
+  if(NTask != 1)
+    terminate_program("RD_ALE_INTERVAL_HIERARCHY is restricted to one MPI rank");
+  if(All.Ti_Current != 0)
+    terminate_program("RD_ALE_INTERVAL_HIERARCHY cannot restart: the triangle registry is not stored in restart files");
+  rd_reg_build_idmap();
+  struct rd_reg_new *fresh;
+  const int n = rd_reg_collect_mesh(T, &fresh);
+  if(n != 2 * NumGas)
+    terminate_program("RD interval hierarchy: a periodic triangulation needs 2N triangles (%d for N=%d)", n, NumGas);
+  RdReg = (struct rd_reg_triangle *)malloc(n * sizeof(*RdReg));
+  if(RdReg == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int k = 0; k < n; k++)
+    RdReg[k] = fresh[k].t;
+  RdRegN = n;
+  free(fresh);
+  double scale[4];
+  rd_reg_totals(RdRegTotal, scale);
+  mpi_printf("RD-IHIER-INIT time=%.8g triangles=%d vertices=%d\n", All.Time, RdRegN, NumGas);
+}
+
+#ifdef RD_DEBUG_ASSERTS
+/*! At the opening hook the registry must be exactly the live connectivity. */
+static void rd_reg_check_mesh(tessellation *T)
+{
+  rd_reg_build_idmap();
+  struct rd_reg_new *fresh;
+  const int n = rd_reg_collect_mesh(T, &fresh);
+  if(n != RdRegN)
+    terminate_program("RD interval registry has %d triangles, the live mesh %d", RdRegN, n);
+  for(int k = 0; k < n; k++)
+    if(rd_reg_key_cmp(fresh[k].t.key, RdReg[k].key) != 0)
+      terminate_program("RD interval registry differs from the live mesh at entry %d", k);
+  free(fresh);
+}
+#endif
+
+static void rd_reg_trace(int i, double u[4])
+{
+  const double rho = SphP[i].Density, vx = P[i].Vel[0], vy = P[i].Vel[1];
+  u[0] = rho;
+  u[1] = rho * vx;
+  u[2] = rho * vy;
+  u[3] = SphP[i].Pressure / GAMMA_MINUS1 + 0.5 * rho * (vx * vx + vy * vy);
+}
+
+/* Trace refresh of an inactive (forced) vertex from its conserved state.
+ * Active vertices are refreshed by update_primitive_variables(). */
+static void rd_reg_set_trace(int i, const double u[4])
+{
+  const double internal = u[3] - 0.5 * (u[1] * u[1] + u[2] * u[2]) / u[0];
+  if(!(u[0] > 0.0) || !(internal > 0.0) || !isfinite(internal))
+    terminate_program("RD interval hierarchy refreshed an inadmissible state: ID=%llu rho=%g e=%g",
+                      (unsigned long long)P[i].ID, u[0], internal);
+  SphP[i].Density = u[0];
+  P[i].Vel[0] = u[1] / u[0];
+  P[i].Vel[1] = u[2] / u[0];
+  SphP[i].Utherm = internal / u[0];
+  SphP[i].Pressure = GAMMA_MINUS1 * internal;
+  SphP[i].Csnd = sqrt(GAMMA * SphP[i].Pressure / u[0]);
+}
+
+/*! Geometry of the synthetic closure set over each triangle's own interval.
+ * The predictor call deposits the exact geometric term (dA/3) U_i and
+ * advances the ledger; both calls rebuild the identical midpoint geometry. */
+static void rd_ale_interval_prepare(tessellation *T, struct rd_element_set *set, int rd_stage)
+{
+  if(set->n != RdIntervalN)
+    terminate_program("RD interval hierarchy: synthetic element set has %d of %d triangles", set->n, RdIntervalN);
+  set->ale_hier_divisor_element_area =
+      (double *)mymalloc("RD_ALEHierElementDivisorArea", set->n * sizeof(*set->ale_hier_divisor_element_area));
+  set->ale_hier_endpoint_area = (double *)mymalloc("RD_ALEHierEndpointArea", NumGas * sizeof(*set->ale_hier_endpoint_area));
+  memset(set->ale_hier_endpoint_area, 0, NumGas * sizeof(*set->ale_hier_endpoint_area));
+
+  double min_area = DBL_MAX, geometric_change[4] = {0, 0, 0, 0};
+  for(int slot = 0; slot < set->n; slot++)
+    {
+      const int triangle = set->element[slot];
+      if(triangle != slot)
+        terminate_program("RD interval hierarchy: synthetic element order changed");
+      set->active[slot] = 1;
+      double xnew[3][2], velocity[3][2];
+      int index[3];
+      for(int v = 0; v < 3; v++)
+        {
+          const point *dp = &T->DP[T->DT[triangle].p[v]];
+          index[v] = dp->index;
+          xnew[v][0] = dp->x;
+          xnew[v][1] = dp->y;
+          velocity[v][0] = SphP[index[v]].VelVertex[0];
+          velocity[v][1] = SphP[index[v]].VelVertex[1];
+        }
+      struct rd_ale_triangle_geometry geometry;
+      rd_ale_triangle_geometry_build(xnew, velocity, RdIntervalDt[slot], &geometry);
+      const double a_old = geometry.normals[RD_ALE_OLD].area, a_mid = geometry.normals[RD_ALE_MID].area,
+                   a_new = geometry.normals[RD_ALE_NEW].area;
+      /* Signed area is quadratic in time: check its minimum over the interval. */
+      const double c2 = 2.0 * (a_new + a_old - 2.0 * a_mid), c1 = a_new - a_old - c2;
+      double a_min = dmin(a_old, a_new);
+      if(c2 > 0.0)
+        {
+          const double s = -c1 / (2.0 * c2);
+          if(s > 0.0 && s < 1.0)
+            a_min = dmin(a_min, a_old + c1 * s + c2 * s * s);
+        }
+      if(!(a_min > 0.0) || !(a_mid > 0.0))
+        {
+          printf("RD-IHIER invalid element: IDs=%llu,%llu,%llu Aold=%.17g Amid=%.17g Anew=%.17g Amin=%.17g h=%.17g\n",
+                 (unsigned long long)T->DP[3 * slot].ID, (unsigned long long)T->DP[3 * slot + 1].ID,
+                 (unsigned long long)T->DP[3 * slot + 2].ID, a_old, a_mid, a_new, a_min, RdIntervalDt[slot]);
+          terminate_program("RD interval hierarchy: a triangle inverts within its interval");
+        }
+      for(int v = 0; v < 3; v++)
+        if(!(geometry.normals[RD_ALE_MID].mag[v] > 0.0))
+          terminate_program("RD interval hierarchy found a zero midpoint edge");
+      min_area = dmin(min_area, a_min);
+
+      set->normals[slot] = geometry.normals[RD_ALE_MID];
+      set->normals[slot].area = 0.5 * (a_old + a_new); /* Campoli temporal mass */
+      set->ale_hier_divisor_element_area[slot] = a_new;
+      for(int v = 0; v < 3; v++)
+        set->ale_hier_endpoint_area[index[v]] += a_new / 3.0;
+
+      if(rd_stage == RD_RK_STAGE_PREDICTOR)
+        {
+          const double dg = (a_new - a_old) / 3.0;
+          for(int v = 0; v < 3; v++)
+            {
+              double u[4];
+              rd_reg_trace(index[v], u);
+              P[index[v]].Mass += dg * u[0];
+              SphP[index[v]].Momentum[0] += dg * u[1];
+              SphP[index[v]].Momentum[1] += dg * u[2];
+              SphP[index[v]].Energy += dg * u[3];
+              SphP[index[v]].RD_GeoLedger += dg;
+              for(int c = 0; c < 4; c++)
+                geometric_change[c] += dg * u[c];
+            }
+        }
+    }
+  set->n_active = set->n;
+
+  if(rd_stage == RD_RK_STAGE_PREDICTOR)
+    {
+      /* A closed star is complete: its live predictor is normalised by the
+       * current median-dual mass. */
+      for(int i = 0; i < NumGas; i++)
+        if(RdIntervalClosed[i])
+          SphP[i].DualArea = set->ale_hier_endpoint_area[i];
+        else if(RdIntervalLive[i])
+          terminate_program("RD interval hierarchy: live vertex with an open star");
+      mpi_printf("RD-IHIER time=%.8g stage=prepare due=%d min_interval_area=%.3e geom=[%+.6e,%+.6e,%+.6e,%+.6e]\n",
+                 All.Time, set->n, min_area, geometric_change[0], geometric_change[1], geometric_change[2],
+                 geometric_change[3]);
+    }
+}
+
+/*! One synchronisation event of the interval hierarchy (see block comment). */
+static void rd_ale_interval_event(tessellation *T)
+{
+  if(NTask != 1)
+    terminate_program("RD_ALE_INTERVAL_HIERARCHY is restricted to one MPI rank");
+  if(RdReg == NULL)
+    terminate_program("RD interval hierarchy has no registry (restarts are not supported)");
+  const integertime now = All.Ti_Current;
+  rd_reg_build_idmap();
+
+  /* 1. New connectivity and the changed cavities. */
+  struct rd_reg_new *fresh;
+  const int nf = rd_reg_collect_mesh(T, &fresh);
+  int *match = (int *)malloc((nf > 0 ? nf : 1) * sizeof(int));
+  char *dying = (char *)calloc(RdRegN > 0 ? RdRegN : 1, 1);
+  int *parent = (int *)malloc(NumGas * sizeof(int));
+  if(match == NULL || dying == NULL || parent == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int i = 0; i < NumGas; i++)
+    parent[i] = -1;
+  int removed = 0, inserted = 0;
+  for(int a = 0, b = 0; a < RdRegN || b < nf;)
+    {
+      const int cmp = a >= RdRegN ? 1 : (b >= nf ? -1 : rd_reg_key_cmp(RdReg[a].key, fresh[b].t.key));
+      if(cmp == 0)
+        match[b++] = a++;
+      else if(cmp < 0)
+        {
+          dying[a] = 1;
+          rd_reg_union(parent, RdReg[a++].key);
+          removed++;
+        }
+      else
+        {
+          match[b] = -1;
+          rd_reg_union(parent, fresh[b++].t.key);
+          inserted++;
+        }
+    }
+
+  /* 2. Closure set, vertex stars and the live predictor mask. */
+  char *due = (char *)malloc(RdRegN > 0 ? RdRegN : 1);
+  int(*rindex)[3] = malloc((RdRegN > 0 ? RdRegN : 1) * sizeof(*rindex));
+  int *degree = (int *)calloc(NumGas, sizeof(int)), *closed = (int *)calloc(NumGas, sizeof(int));
+  integertime *smin = (integertime *)malloc(NumGas * sizeof(integertime)), *smax = (integertime *)malloc(NumGas * sizeof(integertime));
+  char *live = (char *)calloc(NumGas, 1), *closed_star = (char *)calloc(NumGas, 1);
+  if(due == NULL || rindex == NULL || degree == NULL || closed == NULL || smin == NULL || smax == NULL || live == NULL ||
+     closed_star == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int i = 0; i < NumGas; i++)
+    {
+      smin[i] = TIMEBASE;
+      smax[i] = -1;
+    }
+  int n_due = 0, n_forced = 0, n_nondyadic = 0;
+  for(int r = 0; r < RdRegN; r++)
+    {
+      int bin = TIMEBINS, forced = 0;
+      for(int v = 0; v < 3; v++)
+        {
+          const int i = rindex[r][v] = rd_reg_index(RdReg[r].ccw[v]);
+          bin = imin(bin, P[i].TimeBinHydro);
+          forced |= parent[i] >= 0;
+        }
+      const int natural = TimeBinSynchronized[bin];
+      if(RdReg[r].start > now || RdReg[r].start < RdReg[r].birth)
+        terminate_program("RD interval registry has an invalid interval start");
+      due[r] = natural || forced;
+      if(due[r] && RdReg[r].start == now)
+        terminate_program("RD interval hierarchy would close an empty interval");
+      n_due += due[r];
+      n_forced += due[r] && !natural;
+      n_nondyadic += due[r] && (now - RdReg[r].start) != (((integertime)1) << bin);
+      for(int v = 0; v < 3; v++)
+        {
+          const int i = rindex[r][v];
+          degree[i]++;
+          closed[i] += due[r];
+          if(RdReg[r].start < smin[i])
+            smin[i] = RdReg[r].start;
+          if(RdReg[r].start > smax[i])
+            smax[i] = RdReg[r].start;
+        }
+    }
+  int n_live = 0, n_closed = 0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      if(degree[i] < 3)
+        terminate_program("RD interval hierarchy: incomplete vertex star (ID=%llu degree=%d)", (unsigned long long)P[i].ID,
+                          degree[i]);
+      closed_star[i] = closed[i] == degree[i];
+      live[i] = closed_star[i] && smin[i] == smax[i];
+      n_live += live[i];
+      n_closed += closed_star[i];
+    }
+
+  /* 3. Synthetic tessellation of the closure set; both concentrated sweeps. */
+  tessellation synthetic;
+  memset(&synthetic, 0, sizeof(synthetic));
+  synthetic.Ndt = synthetic.MaxNdt = n_due;
+  synthetic.Ndp = synthetic.MaxNdp = 3 * n_due;
+  synthetic.DT = (tetra *)calloc(n_due > 0 ? n_due : 1, sizeof(tetra));
+  synthetic.DP = (point *)calloc(3 * (n_due > 0 ? n_due : 1), sizeof(point));
+  RdIntervalDt = (double *)malloc((n_due > 0 ? n_due : 1) * sizeof(double));
+  if(synthetic.DT == NULL || synthetic.DP == NULL || RdIntervalDt == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int r = 0, slot = 0; r < RdRegN; r++)
+    if(due[r])
+      {
+        int index[3];
+        double x[3][2];
+        rd_reg_coordinates(RdReg[r].ccw, index, x);
+        for(int v = 0; v < 3; v++)
+          {
+            point *dp = &synthetic.DP[3 * slot + v];
+            dp->x = x[v][0];
+            dp->y = x[v][1];
+            dp->z = 0.0;
+            dp->ID = RdReg[r].ccw[v];
+            dp->task = ThisTask;
+            dp->index = dp->originalindex = index[v];
+            dp->timebin = P[index[v]].TimeBinHydro;
+            synthetic.DT[slot].p[v] = 3 * slot + v;
+            synthetic.DT[slot].t[v] = slot;
+          }
+        RdIntervalDt[slot] = (now - RdReg[r].start) * All.Timebase_interval;
+        slot++;
+      }
+  RdIntervalN = n_due;
+  RdIntervalLive = live;
+  RdIntervalClosed = closed_star;
+  if(n_due > 0)
+    {
+      compute_residuals(&synthetic, RD_RK_STAGE_PREDICTOR);
+      compute_residuals(&synthetic, RD_RK_STAGE_CORRECTOR);
+    }
+  RdIntervalLive = NULL;
+  RdIntervalClosed = NULL;
+  free(RdIntervalDt);
+  RdIntervalDt = NULL;
+  free(synthetic.DP);
+  free(synthetic.DT);
+  for(int r = 0; r < RdRegN; r++)
+    if(due[r])
+      RdReg[r].start = now;
+
+  /* 4. Star areas at t on both connectivities; ledger closure of every
+   *    complete star; refresh only complete stars. */
+  double *old_star = (double *)calloc(NumGas, sizeof(double)), *new_star = (double *)calloc(NumGas, sizeof(double));
+  if(old_star == NULL || new_star == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int r = 0; r < RdRegN; r++)
+    {
+      int index[3];
+      double x[3][2];
+      rd_reg_coordinates(RdReg[r].ccw, index, x);
+      const double area = rd_reg_signed_area(x);
+      if(!(area > 0.0))
+        terminate_program("RD interval registry triangle is inverted at the current time");
+      for(int v = 0; v < 3; v++)
+        old_star[index[v]] += area / 3.0;
+    }
+  for(int b = 0; b < nf; b++)
+    for(int v = 0; v < 3; v++)
+      new_star[rd_reg_index(fresh[b].t.ccw[v])] += fresh[b].area / 3.0;
+  double max_ledger = 0.0, outside_dm = 0.0;
+  int n_refresh = 0, n_forced_refresh = 0;
+  for(int i = 0; i < NumGas; i++)
+    {
+      const int active = TimeBinSynchronized[P[i].TimeBinHydro];
+      if((active || parent[i] >= 0) && !closed_star[i])
+        terminate_program("RD interval hierarchy: refresh before full star closure (ID=%llu)", (unsigned long long)P[i].ID);
+      if(closed_star[i])
+        {
+          const double rel = fabs(SphP[i].RD_GeoLedger - old_star[i]) / old_star[i];
+          max_ledger = dmax(max_ledger, rel);
+          if(rel > 1e-10)
+            terminate_program("RD interval hierarchy: ledger %.17g differs from the star area %.17g (ID=%llu)",
+                              SphP[i].RD_GeoLedger, old_star[i], (unsigned long long)P[i].ID);
+          SphP[i].RD_GeoLedger = SphP[i].DualArea = old_star[i];
+        }
+      if(parent[i] < 0)
+        outside_dm = dmax(outside_dm, fabs(new_star[i] - old_star[i]) / old_star[i]);
+      n_refresh += active || parent[i] >= 0;
+      n_forced_refresh += !active && parent[i] >= 0;
+    }
+  if(outside_dm > 1e-10)
+    terminate_program("RD interval hierarchy: nodal mass changed outside every cavity (rel %g)", outside_dm);
+
+  /* 5. Flip element on each cavity, from the refreshed states. */
+  int *start = (int *)calloc(NumGas + 1, sizeof(int)), *member = (int *)malloc((NumGas > 0 ? NumGas : 1) * sizeof(int));
+  if(start == NULL || member == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  int n_cavity_vertices = 0;
+  for(int i = 0; i < NumGas; i++)
+    if(parent[i] >= 0)
+      {
+        start[rd_reg_find(parent, i) + 1]++;
+        n_cavity_vertices++;
+      }
+  for(int i = 0; i < NumGas; i++)
+    start[i + 1] += start[i];
+  int *fill = (int *)malloc((NumGas + 1) * sizeof(int));
+  memcpy(fill, start, (NumGas + 1) * sizeof(int));
+  for(int i = 0; i < NumGas; i++)
+    if(parent[i] >= 0)
+      member[fill[rd_reg_find(parent, i)]++] = i;
+  free(fill);
+  int max_n = 1;
+  for(int root = 0; root < NumGas; root++)
+    max_n = imax(max_n, start[root + 1] - start[root]);
+  double *g = (double *)malloc(max_n * sizeof(double)), *dm = (double *)malloc(max_n * sizeof(double));
+  double(*u)[4] = malloc(max_n * sizeof(*u)), (*ul)[4] = malloc(max_n * sizeof(*ul)), (*uh)[4] = malloc(max_n * sizeof(*uh));
+  double(*work)[4] = malloc(max_n * sizeof(*work)), (*uout)[4] = malloc(max_n * sizeof(*uout));
+  if(!g || !dm || !u || !ul || !uh || !work || !uout)
+    terminate_program("RD interval hierarchy: allocation failed");
+  struct rd_flip_options options = {GAMMA, RD_FLIP_FLOOR_FRACTION, RD_FLIP_DMP_RELAX, RD_FLIP_ENTROPY_BOUND,
+                                    RD_FLIP_HIGH_MODE};
+  int cavities = 0, limited = 0;
+  double theta_min = 1.0, max_change = 0.0, before[4] = {0, 0, 0, 0}, after[4] = {0, 0, 0, 0}, scale[4] = {0, 0, 0, 0};
+  for(int root = 0; root < NumGas; root++)
+    {
+      const int n = start[root + 1] - start[root];
+      if(n == 0)
+        continue;
+      for(int k = 0; k < n; k++)
+        {
+          const int i = member[start[root] + k];
+          const double q[4] = {P[i].Mass, SphP[i].Momentum[0], SphP[i].Momentum[1], SphP[i].Energy};
+          g[k] = SphP[i].DualArea;
+          dm[k] = new_star[i] - old_star[i];
+          for(int c = 0; c < 4; c++)
+            u[k][c] = q[c] / g[k];
+        }
+#ifdef RD_ALE_INTERVAL_NO_TRANSFER
+      /* Negative control: keep U, so the totals change by the flip defect. */
+      for(int k = 0; k < n; k++)
+        for(int c = 0; c < 4; c++)
+          uout[k][c] = u[k][c];
+      struct rd_flip_diagnostics diag = {1.0, 0.0, 0.0, 1, 0, 0};
+#else
+      struct rd_flip_diagnostics diag;
+      const int status = rd_flip_transfer(n, g, dm, (const double(*)[4])u, &options, ul, uh, work, uout, &diag);
+      if(status != RD_FLIP_OK)
+        terminate_program("RD interval hierarchy: flip transfer status %d on a cavity of %d vertices (ID=%llu)", status, n,
+                          (unsigned long long)P[member[start[root]]].ID);
+#endif
+      for(int k = 0; k < n; k++)
+        {
+          const int i = member[start[root] + k];
+          const double gnew = g[k] + dm[k];
+          for(int c = 0; c < 4; c++)
+            {
+              before[c] += g[k] * u[k][c];
+              after[c] += gnew * uout[k][c];
+              scale[c] += g[k] * fabs(u[k][c]);
+            }
+          P[i].Mass = gnew * uout[k][0];
+          SphP[i].Momentum[0] = gnew * uout[k][1];
+          SphP[i].Momentum[1] = gnew * uout[k][2];
+          SphP[i].Energy = gnew * uout[k][3];
+          SphP[i].RD_GeoLedger = SphP[i].DualArea = new_star[i];
+          if(!TimeBinSynchronized[P[i].TimeBinHydro])
+            rd_reg_set_trace(i, uout[k]);
+        }
+      cavities++;
+      limited += diag.theta < 1.0;
+      theta_min = dmin(theta_min, diag.theta);
+      max_change = dmax(max_change, diag.max_change);
+    }
+  double transfer_rel = 0.0;
+  for(int c = 0; c < 4; c++)
+    if(scale[c] > 0.0)
+      transfer_rel = dmax(transfer_rel, fabs(after[c] - before[c]) / scale[c]);
+#ifndef RD_ALE_INTERVAL_NO_TRANSFER
+  if(transfer_rel > 1e-12)
+    terminate_program("RD interval hierarchy: cavity transfer lost conservation (rel %g)", transfer_rel);
+#endif
+
+  /* 6. Commit: retained triangles keep their (possibly just closed) start. */
+  struct rd_reg_triangle *next = (struct rd_reg_triangle *)malloc((nf > 0 ? nf : 1) * sizeof(*next));
+  if(next == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int b = 0; b < nf; b++)
+    next[b] = match[b] >= 0 ? RdReg[match[b]] : fresh[b].t;
+  free(RdReg);
+  RdReg = next;
+  RdRegN = nf;
+
+  /* Totals are meaningful when every triangle has just been closed. */
+  RdRegWork[0] += n_due;
+  RdRegWork[1] += n_forced;
+  RdRegWork[2] += n_nondyadic;
+  RdRegWork[3] += cavities;
+  double cons = NAN, coverage = NAN;
+  if(n_closed == NumGas)
+    {
+      double total[4], tscale[4];
+      rd_reg_totals(total, tscale);
+      cons = 0.0;
+      for(int c = 0; c < 4; c++)
+        if(tscale[c] > 0.0)
+          cons = dmax(cons, fabs(total[c] - RdRegTotal[c]) / tscale[c]);
+      double area = 0.0;
+      for(int i = 0; i < NumGas; i++)
+        area += SphP[i].DualArea;
+      coverage = area / (boxSize_X * boxSize_Y) - 1.0;
+#ifndef RD_ALE_INTERVAL_NO_TRANSFER
+      if(cons > 1e-12 || fabs(coverage) > 1e-12)
+        terminate_program("RD interval hierarchy lost conservation at a common closure: cons=%g coverage=%g", cons, coverage);
+#endif
+    }
+  mpi_printf("RD-IHIER time=%.8g stage=event triangles=%d due=%d forced=%d nondyadic=%d live=%d closed=%d refresh=%d "
+             "forced_refresh=%d removed=%d inserted=%d cavities=%d cavity_vertices=%d limited=%d theta_min=%.6g "
+             "max_dU=%.3e transfer_rel=%.3e max_ledger=%.3e outside_dm=%.3e cons=%.3e coverage=%+.3e "
+             "work=[%lld,%lld,%lld,%lld]\n",
+             All.Time, RdRegN, n_due, n_forced, n_nondyadic, n_live, n_closed, n_refresh, n_forced_refresh, removed, inserted,
+             cavities, n_cavity_vertices, limited, theta_min, max_change, transfer_rel, max_ledger, outside_dm, cons, coverage,
+             RdRegWork[0], RdRegWork[1], RdRegWork[2], RdRegWork[3]);
+
+  free(uout); free(work); free(uh); free(ul); free(u); free(dm); free(g);
+  free(member); free(start); free(new_star); free(old_star);
+  free(closed_star); free(live); free(smax); free(smin); free(closed); free(degree); free(rindex); free(due);
+  free(parent); free(dying); free(match); free(fresh);
+}
+#endif /* RD_ALE_INTERVAL_HIERARCHY */
+
 /*! \brief Accumulate the median dual area over the complete physical set.
  *
  *  Uses every owned element, active or not, because the control area is a
@@ -4151,6 +4912,14 @@ void rd_step_begin(tessellation *T)
   mpi_printf("RD-STEP time=%.8g hook=begin sweeps=0 pending_endpoint=%lld\n", All.Time, (long long)All.RD_EqualStepEnd);
 #endif
 #elif defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_RK2_SPLIT_STAGES)
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+  if(RdReg == NULL)
+    rd_reg_init(T);
+#ifdef RD_DEBUG_ASSERTS
+  else
+    rd_reg_check_mesh(T);
+#endif
+#endif
 #ifndef RD_ALE_HIERARCHICAL
   compute_residuals(T, RD_RK_STAGE_PREDICTOR);
 #endif
@@ -4169,6 +4938,8 @@ void rd_step_end(tessellation *T)
 #ifdef RD_DEBUG_ASSERTS
   mpi_printf("RD-STEP time=%.8g hook=end sweeps=2 pending_endpoint=0\n", All.Time);
 #endif
+#elif defined(RD_ALE_INTERVAL_HIERARCHY)
+  rd_ale_interval_event(T);
 #elif defined(RD_ALE_HIERARCHICAL)
   compute_residuals(T, RD_RK_STAGE_PREDICTOR);
   compute_residuals(T, RD_RK_STAGE_CORRECTOR);
@@ -4261,6 +5032,8 @@ void compute_residuals(tessellation *T)
 #endif
 #ifdef RD_ALE_EQUALSTEP
   rd_ale_prepare_step(T, &set);
+#elif defined(RD_ALE_INTERVAL_HIERARCHY)
+  rd_ale_interval_prepare(T, &set, rd_stage);
 #elif defined(RD_ALE_HIERARCHICAL)
   rd_ale_hierarchical_prepare(T, &set, rd_stage);
 #elif defined(RD_RK2_SPLIT_STAGES)
@@ -4305,7 +5078,7 @@ void compute_residuals(tessellation *T)
 #ifdef RD_HIERARCHICAL_TIMESTEPS
   if(rd_stage == RD_RK_STAGE_PREDICTOR)
     {
-#if !defined(RD_ALE_HIERARCHICAL_ARPAIA)
+#if !defined(RD_ALE_HIERARCHICAL_ARPAIA) && !defined(RD_ALE_INTERVAL_HIERARCHY)
       rd_prepare_vertex_star_context(T);
 #endif
       rd_open_vertex_predictors();
@@ -4520,7 +5293,12 @@ void compute_residuals(tessellation *T)
         if(timebin_vertices[j] < timebin_this_triangle)
           timebin_this_triangle = timebin_vertices[j];
 
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+      (void)timebin_this_triangle;
+      double full_triangle_dt = RdIntervalDt[i]; /* actual interval [s_T, t], not 2^bin */
+#else
       double full_triangle_dt = (((integertime)1) << timebin_this_triangle) * All.Timebase_interval;
+#endif
       double triangle_dt      = full_triangle_dt;
 
 #ifdef RD_ALE_EQUALSTEP
@@ -6636,11 +7414,18 @@ void compute_residuals(tessellation *T)
 
       for(i = 0; i < NumGas; i++)
         {
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+          if(RdIntervalLive[i])
+            {
+              local_counts[0]++;
+              {
+#else
           if(SphP[i].RD_StarTimeBin == P[i].TimeBinHydro)
             {
               local_counts[0]++;
               if(TimeBinSynchronized[P[i].TimeBinHydro])
                 {
+#endif
                   for(k = 0; k < 4; k++)
                     SphP[i].RD_dU[k] /= SphP[i].DualArea;
 
@@ -6667,8 +7452,10 @@ void compute_residuals(tessellation *T)
           else
             {
               local_counts[1]++;
+#ifndef RD_ALE_INTERVAL_HIERARCHY
               int ratio = 1 << (P[i].TimeBinHydro - SphP[i].RD_StarTimeBin);
               local_max_ratio = imax(local_max_ratio, ratio);
+#endif
             }
         }
 
