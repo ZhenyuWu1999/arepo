@@ -185,33 +185,24 @@ velocity noise, and has about 500 nodes with K below the initial minimum. Flip/r
 Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
 [report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
 
-**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-09, log3 §§217–220):**
-Branch `feature/ale-flip-conservation-hierarchy`. Results report:
-`RD_FLIP_HIERARCHY_RESULTS_20261009.md` (keep it updated).
+**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-09, log3 §§217–222):**
+Branch `feature/ale-flip-conservation-hierarchy`. **Review report:**
+`RD_FLIP_HIERARCHY_REPORT_20261009.md`, prepared for the Codex review. It covers maths, the code map, all frozen archives,
+results, limitations, the review checklist (§9) and the 3D outlook (§10).
 
-Implemented:
-- Phase 1: `RD_ALE_FLIP_TRANSFER`, equal-step, for N/LDA/B/HLLC/blend with Campoli.
-- Phase 2: `RD_ALE_INTERVAL_HIERARCHY` for N/LDA/B/HLLC-RD.
-- Phase 3: `RD_ALE_LAZY_FLIP`.
+All campaigns are complete. Implemented:
+- `RD_ALE_FLIP_TRANSFER` (equal step);
+- `RD_ALE_INTERVAL_HIERARCHY` (N/LDA/B/HLLC);
+- `RD_ALE_LAZY_FLIP`.
 
-Running, all in `../local_runs/`:
-- `flip_gates_20261009_v1`: KH group (`*.kh.log`).
-- `sedov_flip_gate_20261009_v1`: nearest21 blend and the nearest1 group.
-- `flip_limiter_sensitivity_20261009_v1`: queued after the Sedov chain.
-- `interval_hierarchy_gates_20261009_v2`: sedov → uniform → yee → kh.
-- `kh_flip_resolution_20261009_v1`: glass96, about 1 day.
+The default is `RD_FLIP_HIGH_MODE=1` (receiver-only).
 
-Analysis scripts:
-- `tests/rd/analyze_flip_gates.py`
-- `tests/rd/analyze_interval_hierarchy_gates.py`
-- `examples/gresho_2d/analyze_kh_flip_resolution.py`
-- `examples/Sedov_2d/plot_flip_hierarchy_sedov.py`
+Suggested next steps:
+- a confirmation freeze with the final defaults (mode 1 + lazy + natural bins);
+- a Python 3D algebra check;
+- thesis text suggestions, without editing the thesis.
 
-Next:
-- Analyse the archives as they finish and update the report and log.
-- Run a frozen lazy-flip gate (KH48/96, Sedov natural+lazy).
-- Decide D2 limiter defaults from the sensitivity runs.
-
+Resource budget: at most 6–8 concurrent simulations; it was exceeded on 2026-10-09, so that day's timings are not reliable.
 Python: 21cmfast env; OMP/BLAS=1. Wait on PIDs, not `pgrep -f`. Do not edit the thesis.
 
 **Chapter4 Sedov figures inserted (2026-10-02, log3 §§212–213):** user moved the

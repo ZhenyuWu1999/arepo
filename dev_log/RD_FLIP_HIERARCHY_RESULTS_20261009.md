@@ -1,5 +1,7 @@
 # Conservative edge flips and a conservative moving-mesh hierarchy for P1 RD: results
 
+> **Superseded** by the review report [RD_FLIP_HIERARCHY_REPORT_20261009.md](RD_FLIP_HIERARCHY_REPORT_20261009.md) (2026-10-09). This file is kept as the running record.
+
 Author: Claude Code (Opus 5.5), for Zhenyu Wu.
 Branch: `feature/ale-flip-conservation-hierarchy`.
 

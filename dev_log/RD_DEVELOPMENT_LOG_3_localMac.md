@@ -8879,3 +8879,43 @@ RD_ALE_FLIP_TRANSFER 接线+全方案 primitive refresh→Campoli 全方案→�
   - 此前冻结的档案若 Config 未注明，则为 mode 0。
 - **LDA 的 KH 在所有变体中都失败**（含等步长参考），为已知的 moving-LDA KH 问题（§§52–56），与 flip 无关。
 - **待完成**：kh_flip_resolution 的 flip_h1（glass48/96）；最终报告与图；thesis 文字建议（不改 thesis）。
+
+## 222. 2026-10-09（续）：供 Codex 审阅的完整进展报告；KH 分辨率研究完成；3D 展望
+
+**作者：Claude Code（Opus 5.5）；用户要求写详细报告供 Codex 审阅。未改 thesis。**
+
+**审阅报告：[RD_FLIP_HIERARCHY_REPORT_20261009.md](RD_FLIP_HIERARCHY_REPORT_20261009.md)**
+（取代 RD_FLIP_HIERARCHY_RESULTS_20261009.md）。内容：
+- 数学推导：
+  - Arpaia 与 Campoli 的权重代数：二者差 −c₂/4，D−M 相同；
+  - flip 缺陷恒等式；
+  - 两种高阶端（均匀平移的 L∞/L2 极小性；receiver-only）、donor-cell 低阶端、θ 混合；
+  - 约定 A/B；
+  - 实际区间分层：registry、闭合集、live 掩码、各方案沉积、守恒论证、CFL ledger 正性；
+  - lazy 的有效性；
+  - "已证明 / 数值验证 / 假设"清单。
+- 代码地图：行号对应 8e325e9。
+- 全部冻结活动：每项说明能确立什么、有何局限。
+- 结果表。
+- 失败与局限。
+- 优先审阅清单（§9，8 项）。
+- 3D 展望（§10）。
+- 复现命令。
+
+**KH 分辨率研究完成**（`../local_runs/kh_flip_resolution_20261009_v1`）：
+- mode 1 的熵偏移：glass48 为 0.35，glass96 为 0.32。对照：mode 0 为 1.07/0.71，Campoli 为 0.42/0.36，Arpaia 为 0.42/0.72。
+- 两种模式对早期场的改变相近：48→96 比值在 t=1 为 1.6–2.0，t=2 为 1.4。
+- KH 欠分辨，未达渐近区；需要 glass192+ 才能下收敛结论。
+
+**资源预算违规（如实记录）。**
+- 2026-10-09 曾同时运行约 13 个模拟加构建（负载最高约 50），超过 context_localMac.md 规定的 6–8。
+- 结果互相独立，不受影响；但当天所有墙钟与 CPU 计时不可靠。报告只引用元素工作量与单次运行内的 CPU 占比。
+- 此后遵守 6–8 的上限。
+
+**3D（用户提问；未实现）。**
+- 可直接推广：数学部分（|T|/4 集中质量、cavity 由 2-3/3-2/4-4 变化构成、registry/分层/lazy）。
+- 关键差异：线性运动下四面体体积对时间是三次的，面法向是二次的；中点规则不满足离散 GCL，也不能保证分层中共享面通量相消。需要精确的时间积分法向（两点 Gauss 或 Simpson；Lesoinne & Farhat 1996，Farhat et al. 2001）。
+- 另需 3D N/LDA/B（5×5 系统）、3D HLLC-RD 面，以及 MPI。
+- 建议：
+  - 终稿前只做 Python 3D 代数检查（kernel 与分层守恒），作为维度无关性的证据；
+  - 3D AREPO 集成（可基于 Ben Morton 的 3D 代码，需先审阅）放到提交之后。
