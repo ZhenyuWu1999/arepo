@@ -294,7 +294,8 @@ static int rd_rusanov_local_index(const point *dp)
 
 #ifdef RD_ALE_HIERARCHICAL
 #if defined(VORONOI_STATIC_MESH) || !defined(RD_HIERARCHICAL_TIMESTEPS) || !defined(RD_RK2_TOTAL_RESIDUAL) || \
-    !(defined(N_SCHEME) || (defined(LDA_SCHEME) && defined(RD_ALE_INTERVAL_HIERARCHY))) || !defined(CREATE_FULL_MESH)
+    !(defined(N_SCHEME) || ((defined(LDA_SCHEME) || defined(B_SCHEME)) && defined(RD_ALE_INTERVAL_HIERARCHY))) || \
+    !defined(CREATE_FULL_MESH)
 #error "RD_ALE_HIERARCHICAL v1 requires moving mesh, CREATE_FULL_MESH, hierarchy, total-residual RK2 and N (LDA: interval mode)."
 #endif
 #if(defined(RD_ALE_CAMPOLI_MASS) + defined(RD_ALE_HIERARCHICAL_ARPAIA)) != 1
@@ -316,7 +317,8 @@ static int rd_rusanov_local_index(const point *dp)
 
 #ifdef RD_ALE_INTERVAL_HIERARCHY
 #if !defined(RD_ALE_HIERARCHICAL) || !defined(RD_ALE_CAMPOLI_MASS) || defined(RD_ALE_HIERARCHICAL_ARPAIA) || \
-    !(defined(N_SCHEME) || defined(LDA_SCHEME)) || !(defined(RD_ALE_CONTOUR_RESIDUAL) || defined(RD_RUSANOV_LOW_ORDER))
+    !(defined(N_SCHEME) || defined(LDA_SCHEME) || defined(B_SCHEME)) || \
+    !(defined(RD_ALE_CONTOUR_RESIDUAL) || defined(RD_RUSANOV_LOW_ORDER))
 #error "RD_ALE_INTERVAL_HIERARCHY requires the Campoli RD_ALE_HIERARCHICAL N/LDA path with a conservative contour residual."
 #endif
 #include "rd_flip_transfer.h"
@@ -338,13 +340,16 @@ static int rd_rusanov_local_index(const point *dp)
 #endif
 
 #ifdef RD_HIERARCHICAL_TIMESTEPS
-#if !defined(RD_RK2_TOTAL_RESIDUAL) || (!defined(N_SCHEME) && !defined(LDA_SCHEME))
-#error "RD_HIERARCHICAL_TIMESTEPS currently requires RD_RK2_TOTAL_RESIDUAL with N_SCHEME or LDA_SCHEME."
+#if !defined(RD_RK2_TOTAL_RESIDUAL) || \
+    (!defined(N_SCHEME) && !defined(LDA_SCHEME) && !(defined(B_SCHEME) && defined(RD_ALE_INTERVAL_HIERARCHY)))
+#error "RD_HIERARCHICAL_TIMESTEPS requires RD_RK2_TOTAL_RESIDUAL with N or LDA (B: interval hierarchy only)."
 #endif
 #if defined(RD_ALE_HIERARCHICAL) && defined(RD_ALE_HIERARCHICAL_ARPAIA)
 #define RD_RK2_STAGE_BETA_LABEL "concentrated-ALE-hierarchy-N-Arpaia"
 #elif defined(RD_ALE_INTERVAL_HIERARCHY) && defined(LDA_SCHEME)
 #define RD_RK2_STAGE_BETA_LABEL "interval-ALE-hierarchy-LDA-F1-Campoli"
+#elif defined(RD_ALE_INTERVAL_HIERARCHY) && defined(B_SCHEME)
+#define RD_RK2_STAGE_BETA_LABEL "interval-ALE-hierarchy-B-total-theta-Campoli"
 #elif defined(RD_ALE_INTERVAL_HIERARCHY)
 #define RD_RK2_STAGE_BETA_LABEL "interval-ALE-hierarchy-N-Campoli"
 #elif defined(RD_ALE_HIERARCHICAL)
@@ -389,8 +394,9 @@ static int rd_rusanov_local_index(const point *dp)
 #error "Select exactly one residual-distribution scheme: LDA_SCHEME, N_SCHEME, or B_SCHEME."
 #endif
 
-#if defined(RD_RK2_TOTAL_RESIDUAL) && defined(B_SCHEME) && defined(RD_HIERARCHICAL_TIMESTEPS)
-#error "RD_RK2_TOTAL_RESIDUAL with B_SCHEME is an equal-bin experiment; the hierarchy has only been derived for the N and LDA temporal terms."
+#if defined(RD_RK2_TOTAL_RESIDUAL) && defined(B_SCHEME) && defined(RD_HIERARCHICAL_TIMESTEPS) && \
+    !defined(RD_ALE_INTERVAL_HIERARCHY)
+#error "RD_RK2_TOTAL_RESIDUAL with B_SCHEME in a hierarchy is derived only for the interval moving hierarchy."
 #endif
 
 #if defined(RD_RK2_RATE_CONSISTENT_HEUN) && \
@@ -506,6 +512,15 @@ static integertime rd_point_predictor_end(const point *dp)
 /* Per-event interval-hierarchy views, owned by rd_ale_interval_event(). */
 static char *RdIntervalLive = NULL;  /* local index -> predictor live (whole star due, one start) */
 static double *RdIntervalDt = NULL;  /* synthetic element -> its actual interval h_T */
+#ifdef B_SCHEME
+/* Stage-0 N and LDA distributions, the applied stage-0 blend and Phi(U^n),
+ * kept from the predictor to the corrector call of the same event. */
+struct rd_interval_b_stage0
+{
+  double n[4][3], lda[4][3], applied[4][3], phi[4];
+};
+static struct rd_interval_b_stage0 *RdIntervalB = NULL;
+#endif
 static int RdIntervalN = 0;
 static int rd_point_stage_live(const point *dp) { return RdIntervalLive[rd_local_point_index(dp)]; }
 #else
@@ -4053,11 +4068,20 @@ static void rd_ale_interval_event(tessellation *T)
   RdIntervalN = n_due;
   RdIntervalLive = live;
   RdIntervalClosed = closed_star;
+#ifdef B_SCHEME
+  RdIntervalB = (struct rd_interval_b_stage0 *)malloc((n_due > 0 ? n_due : 1) * sizeof(*RdIntervalB));
+  if(RdIntervalB == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+#endif
   if(n_due > 0)
     {
       compute_residuals(&synthetic, RD_RK_STAGE_PREDICTOR);
       compute_residuals(&synthetic, RD_RK_STAGE_CORRECTOR);
     }
+#ifdef B_SCHEME
+  free(RdIntervalB);
+  RdIntervalB = NULL;
+#endif
   RdIntervalLive = NULL;
   RdIntervalClosed = NULL;
   free(RdIntervalDt);
@@ -6628,6 +6652,91 @@ void compute_residuals(tessellation *T)
       B_roundoff_scale = dmax(B_roundoff_scale, dmax(LDA_roundoff_scale, N_roundoff_scale));
       rd_check_conservation(Flux_RD, Phi, B_roundoff_scale + phi_scale, thistask_triangles[i], "B");
 
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+      if(rd_stage == RD_RK_STAGE_PREDICTOR)
+        {
+          memcpy(RdIntervalB[i].n, Flux_N, sizeof(RdIntervalB[i].n));
+          memcpy(RdIntervalB[i].lda, Flux_LDA, sizeof(RdIntervalB[i].lda));
+          memcpy(RdIntervalB[i].applied, Flux_RD, sizeof(RdIntervalB[i].applied));
+          memcpy(RdIntervalB[i].phi, Phi, sizeof(RdIntervalB[i].phi));
+        }
+      else
+        {
+          /* Interval total-theta B (Arpaia & Ricchiuto 2015, eqs. 43-45) for the
+           * two-call hierarchy.  The predictor call already applied
+           * -(h/2) b^0 with the spatial stage-0 blend b^0.  The complete
+           * interval update is
+           *   -(h) { T + [theta (N^0+N^1) + (1-theta)(L^0+L^1)]/2 },
+           *   T = theta T_lumped + (1-theta) T_F1,
+           * and the lumped T is the base the deposits already contain, so the
+           * corrector (multiplier -h/2) applies
+           *   theta (N^0+N^1) + (1-theta)(L^0+L^1) - b^0 + 2 (1-theta)(T_F1 - T_lumped).
+           * Its element total is Phi(U*): conservative for every theta. */
+          /* After the solve rhs[.][2] holds z (S^- z = target), not the target. */
+          double T_lumped[4][3], T_f1[4][3], T_target[4], theta[4], scale = 0.0;
+          for(k = 0; k < 4; k++)
+            {
+              T_target[k] = 0.0;
+              for(j = 0; j < 3; j++)
+                {
+                  T_lumped[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / full_triangle_dt;
+                  T_target[k] += T_lumped[k][j];
+                }
+            }
+          if(solve_rank == 4)
+            {
+              for(k = 0; k < 4; k++)
+                for(j = 0; j < 3; j++)
+                  {
+                    T_f1[k][j] = 0.0;
+                    for(p = 0; p < 4; p++)
+                      {
+                        T_f1[k][j] -= Kmatrix[k][p][j][kplus] * rhs[p][2];
+                        scale += fabs(Kmatrix[k][p][j][kplus]) * fabs(rhs[p][2]);
+                      }
+                  }
+            }
+          else
+            {
+              RD_stat_f1_lumped++;
+              memcpy(T_f1, T_lumped, sizeof(T_f1));
+            }
+          for(k = 0; k < 4; k++)
+            {
+#ifdef RD_B_FROZEN_THETA
+              double theta_num = T_target[k] + RdIntervalB[i].phi[k], sum_n = 0.0;
+              for(j = 0; j < 3; j++)
+                sum_n += fabs(T_lumped[k][j] + RdIntervalB[i].n[k][j]);
+#else
+              double theta_num = T_target[k] + 0.5 * (RdIntervalB[i].phi[k] + Phi[k]), sum_n = 0.0;
+              for(j = 0; j < 3; j++)
+                sum_n += fabs(T_lumped[k][j] + 0.5 * (RdIntervalB[i].n[k][j] + Flux_N[k][j]));
+#endif
+              theta[k] = sum_n == 0.0 ? 0.0 : dmin(1.0, fabs(theta_num) / sum_n);
+            }
+#ifdef RD_B_SCALAR_THETA
+          double theta_max = 0.0;
+          for(k = 0; k < 4; k++)
+            theta_max = dmax(theta_max, theta[k]);
+          for(k = 0; k < 4; k++)
+            theta[k] = theta_max;
+#endif
+          for(k = 0; k < 4; k++)
+            for(j = 0; j < 3; j++)
+              {
+#ifdef RD_DIAG_THETA
+                if(j == 0)
+                  rd_record_theta(1, theta[k]);
+#endif
+                Flux_RD[k][j] = theta[k] * (RdIntervalB[i].n[k][j] + Flux_N[k][j]) +
+                                (1.0 - theta[k]) * (RdIntervalB[i].lda[k][j] + Flux_LDA[k][j]) - RdIntervalB[i].applied[k][j] +
+                                2.0 * (1.0 - theta[k]) * (T_f1[k][j] - T_lumped[k][j]);
+                scale += fabs(RdIntervalB[i].n[k][j]) + fabs(Flux_N[k][j]) + fabs(RdIntervalB[i].lda[k][j]) +
+                         fabs(Flux_LDA[k][j]) + fabs(RdIntervalB[i].applied[k][j]) + 2.0 * fabs(T_lumped[k][j]);
+              }
+          rd_check_conservation(Flux_RD, Phi, scale + B_roundoff_scale + phi_scale, thistask_triangles[i], "B-interval");
+        }
+#endif
 #ifdef RD_RK2_EQUALSTEP
       if(rd_stage == 0)
         {
