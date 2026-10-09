@@ -191,6 +191,27 @@ After the first flip the two transfer conventions differ: A applies the transfer
 
 **KH glass48, N, two bins, t = 2:** 16 558 cavities and 117 k forced closures; conservation 2e-15; no abort.
 
+**Frozen v2, uniform / Yee / KH groups** (`local_runs/interval_hierarchy_gates_20261009_v2`, 64 runs, all complete).
+
+- **LDA on KH** fails at t ≈ 0.1–0.4 in every variant, including the equal-step reference. This is the known moving-LDA KH failure, not a hierarchy problem.
+- **Uniform random points**, N/LDA/B × {equal, two-bin, two-bin 0.25, natural}: state exact to ≤9.5e-15 with 1249–1275 cavities. Element work is 74 % (two-bin), 65 % (split 0.25) and 97 % (natural).
+- **Yee: L1 error of ρ relative to equal-step + flip.** Equal and natural bins agree to ≤0.2 %; for this problem natural bins collapse to one bin.
+
+| Scheme | two-bin, glass48 | two-bin, glass96 | split 0.25, glass48 | split 0.25, glass96 |
+|---|---|---|---|---|
+| N | −0.1 % | −0.1 % | 0.0 % | 0.0 % |
+| LDA | +10.6 % | +23 % | +4.8 % | +3.9 % |
+| B | +21 % | +32 % | +4.3 % | +4.8 % |
+
+  - The LDA/B penalty is the first-order frozen-F1 error at bin interfaces. It grows relative to the second-order scheme error when the interface crosses the vortex, and stays at about 4–5 % when it does not.
+  - N has no penalty.
+- **KH glass48, t = 10, N and B**, every hierarchy variant:
+  - conservation at common closures ≤9.5e-15;
+  - ≈77 000 cavities;
+  - up to 531 000 forced closures;
+  - element work 56–69 % with the test patterns and 84 % with natural bins.
+- **Negative control without transfer:** common-closure conservation degrades to 2.6e-4 (Yee48), 3.9e-5 (Yee96) and 5.0e-3 (KH48); KH mass drift is +5.1e-4.
+
 **Frozen v2 Sedov group** (`local_runs/interval_hierarchy_gates_20261009_v2`, HLLC-RD, t = 0.05; every run positive; differences are against the equal-step Campoli + flip reference):
 
 | Run | Events | Common-closure conservation | Element work | RD CPU (hierarchy / reference) | ρ L1 difference | ρ peak (r) |
