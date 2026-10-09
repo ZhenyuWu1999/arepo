@@ -8,6 +8,7 @@
 * extreme contrasts (Sedov-like energy ratio 1e8, counter-streaming flows)
   stay admissible and respect the density hull and entropy minimum;
 * the high endpoint is exactly invertible (flip followed by its reverse);
+* stationary contacts (v = 0, uniform p) keep v = 0 and p uniform for every theta;
 * independent NumPy formulas for the defect and both endpoints.
 Kernel tests only; not a moving-mesh or time-integration result.
 """
@@ -237,10 +238,30 @@ def main():
             # the uniform shift removes D_E/M from the cold nodes: inadmissible, so theta < 1
             assert diag[0] < 1, name
 
+    # 5. stationary contact (v = 0, uniform p, density jumps up to 1e6): every blend keeps v = 0 exactly and
+    #    p uniform to round-off, since D has no momentum part and only a round-off energy part
+    contact_limited = 0
+    for trial in range(1000):
+        ang = np.sort(rng.uniform(0, 2 * np.pi, 4)); rad = rng.uniform(.5, 1.5, 4)
+        x = np.c_[rad * np.cos(ang), rad * np.sin(ang)]
+        T = lambda i, j, k: tri_area(x, np.array([[i, j, k]]))[0]
+        A = [T(0, 1, 2), T(0, 2, 3), T(0, 1, 3), T(1, 2, 3)]
+        if min(A) < 1e-3: continue
+        dm = np.array([-A[3], A[1], -A[2], A[0]]) / 3
+        g = np.array([A[0] + A[1], A[0], A[0] + A[1], A[1]]) / 3 + rng.uniform(.01, .3, 4)
+        rho = 10 ** rng.uniform(-3, 3, 4); p = 10 ** rng.uniform(-2, 2)
+        u = np.c_[rho, 0 * rho, 0 * rho, np.full(4, p / (GAMMA - 1))]
+        out, diag = check_case(g, dm, u, worst, ('contact', trial))
+        assert np.all(out[:, 1:3] == 0), trial
+        assert np.allclose(out[:, 3], u[0, 3], rtol=4e-15, atol=0), trial
+        contact_limited += diag[0] < 1
+    assert contact_limited > 0          # the density shift alone can need theta < 1
+
     print(f"PASS: {worst['cases']} single flips + {worst['multi']} Delaunay cavities ({worst['multi_big']} with >4 nodes); conservation "
           f"{worst['conservation']:.2e}, reference {worst['reference']:.2e}, limited {int(worst['limited'])} "
           f"(min theta {worst['theta_min']:.3g}); uniform/affine unchanged with theta=1; high endpoint invertible; "
-          "extreme contrasts admissible within density hull and entropy minimum")
+          f"extreme contrasts admissible within density hull and entropy minimum; stationary contacts keep v=0, p "
+          f"uniform ({contact_limited} limited)")
 
 
 if __name__ == '__main__':

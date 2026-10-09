@@ -102,13 +102,16 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "LDA/HLLC blend requires equal-step ALE LDA/F1 with the Gauss3 contour residual."
 #endif
 #if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_B_SENSOR) || defined(RD_HIERARCHICAL_TIMESTEPS) || \
-    defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_ELEMENT_COMOVING_FRAME) || defined(RD_ALE_CAMPOLI_MASS) || \
+    defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_ELEMENT_COMOVING_FRAME) || \
     defined(RD_ALE_SPLIT_MESH_VELOCITY) || defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_DIAG_NO_KICK) || \
-    defined(RD_ALE_FLIP_TRANSFER) || defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
+    defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
     defined(PASSIVE_SCALARS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || \
     defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
 #error "LDA/HLLC blend supports lab-frame periodic source-free equal-step ALE hydro only."
 #endif
+/* Campoli: the low corrector keeps the Rusanov/HLLC form (a-.5)U^n + b[...],
+ * with a = temporal mass (A_old+A_new)/6 summed over the star / divisor S^{n+1}
+ * and b = 3/2 - a; the convex-weight check below covers both mass variants. */
 #else
 #if !defined(VORONOI_STATIC_MESH) || !defined(LDA_SCHEME) || !defined(RD_RK2_TOTAL_RESIDUAL) || \
     !defined(FORCE_EQUAL_TIMESTEPS) || !defined(CREATE_FULL_MESH) || !defined(TREE_BASED_TIMESTEPS) || \
