@@ -73,7 +73,23 @@ where a_i and b_i are the old and new lumped P1 masses. This residual:
 | Uniform glass48 (8 steps) and uniform random points (t = 1/4, 1278 cavities) | 18/18 runs: state exact to ≤5e-15, totals unchanged |
 | Sod glass Nx64, t = 0.08, N | Campoli without transfer drifts −2.2e-4 (mass) and −6.1e-4 (energy). With transfer: 1.4e-15 and 9.7e-16, over 4773 cavities, all θ = 1. Flip − no-flip density L1 = 6e-4. |
 | Sod, all schemes (27/27 science runs complete) | With transfer every scheme conserves to ≤1.4e-15. Campoli without transfer drifts (mass/energy): N −2.2e-4/−6.1e-4, LDA −7.2e-4/−1.1e-3, B −4.7e-4/−1.0e-3, HLLC −1.3e-4/−3.8e-4. Flip − no-flip density L1: N 6.0e-4, LDA 1.7e-3, B 8.8e-4, HLLC 3.8e-4. All θ = 1. |
-| KH t = 10 | pending |
+| KH glass48, t = 10 (7/9 complete) | See the table below. LDA fails at t ≈ 0.4 both with and without the transfer; this is the known moving-LDA KH failure (log3 §§52–56), unrelated to flips. |
+
+**KH glass48, t = 10, equal step, Campoli**
+
+| Scheme | Mass drift, no transfer → transfer | Flip cavities | E_ky peak (t), no transfer → transfer | Entropy excursion, no transfer → transfer |
+|---|---|---|---|---|
+| N, uniform shift (mode 0) | +3.5e-3 → 7e-16 | 78 467 | 6.72e-2 (8.2) → 6.17e-2 (10.0) | 0.42 → **1.07** |
+| N, receiver-only (mode 1) | +3.5e-3 → 9e-16 | 76 048 | 6.72e-2 (8.2) → 9.05e-2 (6.8) | 0.42 → **0.36** |
+| B | +1.7e-3 → 1.5e-16 | 79 391 | 5.90e-2 (7.2) → 7.35e-2 (6.6) | 0.54 → 1.37 |
+| HLLC-RD | +5.6e-4 → −6e-16 | 23 261 | KH does not grow (too diffusive at glass48) | 0.034 → 0.048 |
+
+The E_ky peaks again differ through the noise-seeded onset. The robust signal is the entropy excursion:
+- The uniform shift (mode 0) moves donor states as well. In KH it pushes some nodes outside the initial entropy range (excursion 2.5× larger).
+- The receiver-only high endpoint (mode 1) keeps donors bit-for-bit and does not raise the excursion.
+- Mode 0 and mode 1 are indistinguishable in Yee and Sod (Section 3.2).
+
+Pending evidence: the entropy-bound limiter (sensitivity campaign) and the KH glass96 runs with both modes. If mode 1 holds up, it should become the default.
 
 **Yee vortex: convergence of the transfer perturbation.** Each pair has the same resolution and dt; the difference is with transfer minus without (Campoli only). Without transfer the totals drift by ≈2e-5; with it they are exact.
 
