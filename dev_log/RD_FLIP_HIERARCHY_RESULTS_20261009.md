@@ -163,11 +163,23 @@ After the first flip the two transfer conventions differ: A applies the transfer
 
 **KH glass48, N, two bins, t = 2:** 16 558 cavities and 117 k forced closures; conservation 2e-15; no abort.
 
-**Sedov 21-point, HLLC-RD, natural bins** (in progress):
-- 8 occupied bins, with a dt ratio of 128.
-- Conservation at common closures ≈1e-14; the CFL ledger never exceeds 0.11.
-- Element work is ≈2.6 % of all-fine stepping.
-- Wall-clock time is still dominated by AREPO rebuilding the full mesh at every sync point (`CREATE_FULL_MESH`). Real wall-clock gains need active-only mesh construction, which is outside this scope.
+**Sedov 21-point, HLLC-RD, natural bins, t = 0.05** (scratch; the frozen v2 repeat is running). Up to 8 occupied bins, dt ratio 128.
+
+| | Hierarchy | Equal-step Campoli + flip |
+|---|---|---|
+| Steps / events | 2448 | 2466 |
+| Conservation | ≤2.1e-14 at 64 common closures; final drift ≤7e-15 | ≤1.3e-15 |
+| Flip cavities (θ < 1, θ_min) | 4697 (99, 0.025) | 4720 (93, 0.034) |
+| Positivity | kept; CFL ledger ≤ 0.108 | kept |
+| ρ peak / mass-weighted shell radius | 3.466 / 0.2427 | 3.456 / 0.2429 |
+| Element work (fraction of all-fine) | 8.0 % (2.6 % early) | 100 % |
+| CPU: residual distribution | 15 s | 284 s |
+| CPU: Voronoi mesh | 802 s | 852 s |
+| CPU: total | 1141 s | 1634 s |
+
+- The two runs differ by an L1 of 1e-3 in ρ and p.
+- The hierarchy cuts the RD cost about 19× and the total about 1.4×.
+- What remains is AREPO's full mesh rebuild at every sync point (`CREATE_FULL_MESH`, 70 % of CPU). A larger gain would need registry-local mesh maintenance instead of a global Delaunay rebuild, which is outside this scope.
 
 ## 5. Phase 3 — lazy flips (`RD_ALE_LAZY_FLIP`)
 
