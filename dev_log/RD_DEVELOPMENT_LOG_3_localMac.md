@@ -8761,3 +8761,66 @@ RD_ALE_FLIP_TRANSFER 接线+全方案 primitive refresh→Campoli 全方案→�
   - glass96 每例约 1 天。
 - 待做：Sedov 冻结 gate（`examples/Sedov_2d/run_flip_sedov.py`，HLLC 与 blend，有/无 transfer）；
   限制器敏感性（floor κ、DMP、熵界）。
+
+## 219. 2026-10-09：Phase 2——运动网格实际区间分层（RD_ALE_INTERVAL_HIERARCHY）：N、LDA、B、HLLC-RD
+
+**作者：Claude Code（Opus 5.5）；提交 288c1fd、c509350、ae7c3f0、7bc1351、c911bec、9d062d9。单 rank。未改 thesis。**
+
+**实现**（`residual_distribution_solver.c`，`RD_ALE_INTERVAL_HIERARCHY` 块；需 `RD_ALE_HIERARCHICAL`+Campoli）。
+- 持久三角形 registry：排序 ID 键、CCW ID、区间起点 s_T 与诞生时刻。
+  - 首次 opening hook 时由网格建立；`RD_DEBUG_ASSERTS` 下每步核对与活网格一致。
+  - 重启不支持（终止）。
+- 每个同步时刻 t：
+  1. 与新 Delaunay 求差，用 union-find 得腔体；
+  2. 闭合集 C = 自然到期三角形（顶点最细 bin 同步）∪ 接触腔体顶点的全部 registry 三角形；
+  3. 在 C 的合成 tessellation 上执行两次集中式 Campoli sweep，h_T = t − s_T；
+     预测器 live ⇔ 整个星形都在 C 且起点相同；
+  4. 星形完全闭合的顶点全部刷新（⊇ 活跃点与腔体点）：
+     - 几何 ledger 与星形面积对比，断言 ≤1e-10；
+     - **以 ledger 作除数**（离散 GCL：均匀态 1.1e-13→8e-15）；
+     - 被强制刷新的点不改 bin 与 VelVertex；
+  5. 每个腔体执行 flip 元素传递（Phase 1 内核）；
+  6. 提交 registry：保留的三角形沿用 s_T（闭合者为 t），新三角形从 t 开始。
+- 每个公共闭合时刻硬断言 ΣQ 守恒 ≤1e-12、覆盖 ≤1e-12。
+  `RD_ALE_INTERVAL_NO_TRANSFER` 为负对照。
+- 守恒的理由：区间不等的共享边，其端点冻结（非 live）且线性运动，中点法向使边通量在两侧精确积分一致。
+- 各方案的处理：
+  - **N**：沿用集中式沉积，(ΔA/3)U⁰ − (h/2)(φ⁰+φ¹) + (ΔA/6)dU。
+  - **LDA**：静态分层的冻结 dU F1 校正（Campoli 时间质量、实际区间），并对 LDA 也施加质量变体项 (D−M)dU/3。
+  - **B**：预测调用按合成元素保存 N⁰、L⁰、已施加的 b⁰ 与 Φ⁰；校正调用施加
+    θ(N⁰+N¹)+(1−θ)(L⁰+L¹)−b⁰+2(1−θ)(T_F1−T_lumped)，元素总量为 Φ(U*)，θ 由区间总残差确定。
+    - 修过一个 bug：求解后 rhs[·][2] 已是解 z 而非 F1 目标，原先误用导致 θ≈1。
+  - **HLLC-RD / Rusanov**：
+    - 允许 natural bin 与 Campoli，以 HLLC 自身的梯形周线代替 contour residual。
+    - live 点沿用等步长的 a/b 与 stage-CFL 检查（triangle_dt=h/2）。
+    - 冻结点用新的 `SphP.RD_CFLLedger` = Σ(h/2)(coeff⁰+coeff¹)，刷新时报告，正性需其 ≤ 刷新质量。
+    - 每个刷新态都检查可容许。
+
+**Scratch 检查（非冻结）。**
+- 等 bin 退化（H1）：与等步长 Campoli 对比，N 4e-15、LDA 5e-15、B 4e-15；HLLC 在首次 flip 前 7e-13/p≈259。
+  - 首次 flip 后，A/B 两种 flip 约定在爆炸中心差异明显（t=0.00125 时 p 差 0.19）。
+- 随机点均匀态 + 双 bin（1274 腔体）：N/LDA/B 状态缺陷均 ≤8e-15。
+- Yee glass48、双 bin（分界 x=0.5 穿过涡心）、t=1，相对等步长 Campoli（等步长参考无 transfer，漂移约 2e-5；分层守恒到舍入）：
+
+| 方案 | ρL1（分层/等步长） | 变化 |
+|---|---|---|
+| N | 2.96e-3 / 2.85e-3 | +4% |
+| LDA | 1.19e-3 / 1.02e-3 | +17% |
+| B | 1.55e-3 / 1.18e-3 | +32% |
+
+  - 速度误差：N −1%，LDA +33%，B +24%。冻结 F1 的界面代价在预期之内（决策 D5）。
+  - 双 bin 元素工作量为全细步长的 76%。
+- KH glass48 N 双 bin 到 t=2：16558 腔体、117k 次强制闭合，公共闭合守恒 2e-15，无中止。
+- Sedov 21 点 HLLC-RD natural bin（进行中，t≈0.009）：
+  - 8 个占用 bin，dt 比 128；
+  - 公共闭合守恒 1e-14，CFL ledger ≤0.105；
+  - 元素工作量约为全细步长的 2.6%。
+  - 墙钟时间受 CREATE_FULL_MESH 每步重建全网格限制，待测。
+
+**冻结活动。**
+- `../local_runs/interval_hierarchy_gates_20261009_v1`（`tests/rd/run_interval_hierarchy_gates.py`）：
+  - N/LDA × {ref_flip, ih_equal, ih_twobin, ih_twobin25, ih_natural}，外加 N 负对照。
+  - 冻结于"仅刷新活跃+腔体点"的旧规则（c911bec 之前）。
+  - uniform 组 11/11 通过：缺陷 ≤9.5e-15，1249–1275 腔体。
+  - Yee/KH 组进行中。
+- 最终规则需重新冻结 v2，并加入 B 与 HLLC-Sedov。
