@@ -252,7 +252,20 @@ Equal bins, glass48:
 | Uniform random | 1249 → 407 | state exact (6e-15) |
 | Yee t = 1 | 245 → 64 | ρ/v/p L1 −1.4/+1.2/−1.0 % |
 
-KH glass48, t = 10, equal bins:
+**Frozen lazy-flip gates** (`local_runs/lazy_flip_gates_20261009_v1`; interval hierarchy, equal bins for N, natural bins for HLLC):
+
+| Problem | Cavities, plain → lazy | Accuracy (lazy relative to plain) | Notes |
+|---|---|---|---|
+| Uniform random | 1249 → 407 | state exact (≤6e-15) | deferred triangles ≥ 15.0° |
+| Yee48 | 245 → 64 | ρ/v/p L1 −1.4/+1.2/−1.0 % | |
+| Yee96 | 1020 → 309 | ρ/v/p L1 −0.3/+0.7/−0.2 % | |
+| Sedov 21-point, HLLC, natural bins | 4697 → 1181 | ρ peak 3.436 vs 3.466; shell radius 0.2424 vs 0.2427 | conservation 1.2e-14, positive, element work 7.9 % |
+| Sedov 1-point, HLLC, natural bins | 4762 → 1149 | ρ peak 3.459 vs 3.464 | conservation 3.5e-14, positive |
+
+- Receiver-only high mode 1 matches mode 0 on all of these problems.
+- KH48/96 with both modes, plain and lazy, is still running.
+
+Scratch, KH glass48, t = 10, equal bins:
 
 | Run | Flip cavities | E_ky peak (t) | Mass drift | Entropy excursion |
 |---|---|---|---|---|
