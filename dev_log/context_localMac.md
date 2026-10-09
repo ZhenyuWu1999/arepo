@@ -185,7 +185,22 @@ velocity noise, and has about 500 nodes with K below the initial minimum. Flip/r
 Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
 [report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
 
-**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-09, log3 §§217–222):**
+**Independent Codex review (2026-10-09, log3 §223):**
+Read `RD_FLIP_HIERARCHY_CODEX_REVIEW_20261009.md` alongside Claude's report below.
+Reviewed `eacc3f9..9672ad7`; supports the 2D periodic one-rank conservation path.
+Four P2 findings: current comparison drivers silently alias mode 0 to mode 1;
+frozen-vertex CFL ledger overruns are counted, not enforced; Arpaia's complete
+no-flip endpoint defect is `sum (Snew-D)*(Unew-Uold)` (the original report omitted
+the initial rebase); matched-ID differences on different coordinates do not
+establish Eulerian field convergence. Five frozen archives independently
+verified: 156/163 cases complete, seven disclosed LDA-KH failures.
+Current-HEAD mode1+lazy+natural confirmation passes uniform/N and Yee/N plus
+Sedov/HLLC 1/21-point **only to t=.005**; not a full t=.05 confirmation.
+Archive: `../local_runs/codex_flip_review_20261009_v1/`. No solver/thesis changes.
+Next: fix experiment definitions/CFL enforcement, then final-default full gates
+and spatial convergence controls before extending the scope to 3D.
+
+**Claude handoff — flip element + moving hierarchy (2026-10-09, log3 §§217–222):**
 Branch `feature/ale-flip-conservation-hierarchy`. **Review report:**
 `RD_FLIP_HIERARCHY_REPORT_20261009.md`, prepared for the Codex review. It covers maths, the code map, all frozen archives,
 results, limitations, the review checklist (§9) and the 3D outlook (§10).

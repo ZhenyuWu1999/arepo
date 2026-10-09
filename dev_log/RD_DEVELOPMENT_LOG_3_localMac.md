@@ -8918,4 +8918,43 @@ RD_ALE_FLIP_TRANSFER 接线+全方案 primitive refresh→Campoli 全方案→�
 - 另需 3D N/LDA/B（5×5 系统）、3D HLLC-RD 面，以及 MPI。
 - 建议：
   - 终稿前只做 Python 3D 代数检查（kernel 与分层守恒），作为维度无关性的证据；
-  - 3D AREPO 集成（可基于 Ben Morton 的 3D 代码，需先审阅）放到提交之后。
+- 3D AREPO 集成（可基于 Ben Morton 的 3D 代码，需先审阅）放到提交之后。
+
+## 223. 2026-10-09：Codex 独立审核 Claude 的 flip / interval hierarchy / lazy 工作
+
+**作者：Codex（GPT-6）；用户要求先审核 Claude Code 的工作。**
+审核 `feature/ale-flip-conservation-hierarchy` 的 `eacc3f9..9672ad7`。
+完整审核：[RD_FLIP_HIERARCHY_CODEX_REVIEW_20261009.md](RD_FLIP_HIERARCHY_CODEX_REVIEW_20261009.md)。
+证据：`../local_runs/codex_flip_review_20261009_v1/`。没有修改求解器或 thesis。
+
+**结论。** 支持 Campoli + 局部 flip transfer + 实际区间闭合在已测二维周期、
+单 rank 范围内实现舍入级守恒。补全 unequal-interval 共享边 / element-frame 总量抵消
+与 frozen-node CFL ledger 的条件正性论证；未发现否定守恒主路径的反例。
+对 LDA-KH、接口精度、MPI/restart、几何恢复与性能的限制仍须保留。
+
+**四项 P2 发现。**
+1. 默认变为 mode 1 后，当前脚本中的 `N_plain`/`N_plain_h1`、`N_lazy`/`N_lazy_h1`
+   有效配置相同。须为 mode 0 显式赋值；冻结历史档案不受影响。
+2. frozen 顶点 ledger ratio>1 仅计数并清零，未强制执行正性充分条件。
+   已测 runs 未超限；这不是已复现的负压失败。
+3. 原报告 Arpaia 推导遗漏初始 rebase。无 flip 共同区间的完整缺陷是
+   `Σ(Snew−D)(Unew−Uold)`，不是仅末端 `Σ(Snew−D)Unew`。独立代数复现。
+4. 报告的 matched-ID L1 差包含移动坐标改变，不能直接作为共同空间的场差/收敛阶。
+   Yee48 N mode1 的解析采样差约占该指标 32%；各自坐标上的解析误差指标正确。
+
+**验证。** 现有 `make check_rd` 全通过。五套冻结 source/binary/config/input/param
+哈希关联及首末快照独立核验：156/163 完成，七个已披露的 LDA-KH 失败。
+排除负对照后公共闭合最大误差约 3.53e-14；原摘要“全部 ≤2e-14”需修正。
+9,654 个 production-default flip 探针保持正性、守恒 ≤9.04e-16；独立严格内能
+floor 比较有舍入级差异，原失败样本保留，未宣称 strict-floor gate 通过。
+
+冻结当前 9672ad7，独立构建显式 mode1 + lazy + natural 配置：
+- uniform/N（2304 点，t=.25）：404 cavities，状态误差 4.89e-15。
+- Yee/N（2304 点，t=1）：64 cavities，rho L1=2.91870e-3；natural 实际为等步长。
+- Sedov/HLLC（16384 点，21/1 hot，t=.005）：89/87 cavities，正性通过；
+  公共闭合误差 1.09e-14 / 3.84e-14，ledger ratio ≤.128。
+- 仅补充短程默认组合证据，不替代 t=.05 长程验证。两个并发，OMP/BLAS=1。
+  首次构建因 conda mpicc 的 PATH 优先级失败，保留 setup 日志；Homebrew 重试成功。
+
+建议先修实验定义/CFL执行约束，再完成最终默认配置的完整 gates 和共同空间精度比较，
+随后再考虑 KH192+、MPI/restart/3D。原报告保持不动，以上为独立审核更正。
