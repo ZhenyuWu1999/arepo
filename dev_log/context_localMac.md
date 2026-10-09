@@ -185,37 +185,34 @@ velocity noise, and has about 500 nodes with K below the initial minimum. Flip/r
 Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
 [report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
 
-**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-09, log3 §§217–218):**
-Branch `feature/ale-flip-conservation-hierarchy` (last commit 9de3bb3). Plan:
-`~/.claude/plans/i-have-already-submitted-tender-spindle.md`; design and detailed
-steps in `RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md`,
-`RD_FLIP_HIERARCHY_IMPLEMENTATION_PLAN_20261008.md`.
+**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-09, log3 §§217–220):**
+Branch `feature/ale-flip-conservation-hierarchy`. Results report:
+`RD_FLIP_HIERARCHY_RESULTS_20261009.md` (keep it updated).
 
-Phase 1 is implemented:
-- `RD_ALE_FLIP_TRANSFER`: exact ID-triple cavities, kernel
-  `rd_flip_transfer.h` (`RD_FLIP_HIGH_MODE` 0/1), hard per-step conservation
-  assert with Campoli.
-- Primitive refresh for all schemes (bug fix).
-- Campoli for HLLC and the LDA/HLLC blend.
+Implemented:
+- Phase 1: `RD_ALE_FLIP_TRANSFER`, equal-step, for N/LDA/B/HLLC/blend with Campoli.
+- Phase 2: `RD_ALE_INTERVAL_HIERARCHY` for N/LDA/B/HLLC-RD.
+- Phase 3: `RD_ALE_LAZY_FLIP`.
 
-Results so far:
-- Uniform gates pass.
-- Sedov HLLC with flip transfer + Campoli is positive and conserves to round-off.
-- In KH glass48 the old repair changes E_ky by +25% (stale) / +52% (refresh)
-  vs control. This is onset timing after the seed decays, so it is not robust.
+Running, all in `../local_runs/`:
+- `flip_gates_20261009_v1`: KH group (`*.kh.log`).
+- `sedov_flip_gate_20261009_v1`: nearest21 blend and the nearest1 group.
+- `flip_limiter_sensitivity_20261009_v1`: queued after the Sedov chain.
+- `interval_hierarchy_gates_20261009_v2`: sedov → uniform → yee → kh.
+- `kh_flip_resolution_20261009_v1`: glass96, about 1 day.
 
-Running (check `*.science.log` and `*.run.log`):
-- `../local_runs/flip_gates_20261009_v1`: science group (Sod, Yee).
-  Then run `--group kh` and `tests/rd/analyze_flip_gates.py`.
-- `../local_runs/kh_flip_resolution_20261009_v1`: KH glass48/96, about 1 day.
+Analysis scripts:
+- `tests/rd/analyze_flip_gates.py`
+- `tests/rd/analyze_interval_hierarchy_gates.py`
+- `examples/gresho_2d/analyze_kh_flip_resolution.py`
+- `examples/Sedov_2d/plot_flip_hierarchy_sedov.py`
 
 Next:
-- Freeze and run the Sedov gate (`examples/Sedov_2d/run_flip_sedov.py`, not
-  yet prepared).
-- Limiter sensitivity.
-- Then Phase 2A (registry + actual intervals, N).
+- Analyse the archives as they finish and update the report and log.
+- Run a frozen lazy-flip gate (KH48/96, Sedov natural+lazy).
+- Decide D2 limiter defaults from the sensitivity runs.
 
-Python: 21cmfast env; OMP/BLAS=1. Do not edit the thesis.
+Python: 21cmfast env; OMP/BLAS=1. Wait on PIDs, not `pgrep -f`. Do not edit the thesis.
 
 **Chapter4 Sedov figures inserted (2026-10-02, log3 §§212–213):** user moved the
 FV-RD derivation to Chapter3 §3.2.5 (`section:FV_RD_schemes`, DR2017 Fig.2 copy)

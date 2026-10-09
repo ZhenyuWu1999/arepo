@@ -8824,3 +8824,35 @@ RD_ALE_FLIP_TRANSFER 接线+全方案 primitive refresh→Campoli 全方案→�
   - uniform 组 11/11 通过：缺陷 ≤9.5e-15，1249–1275 腔体。
   - Yee/KH 组进行中。
 - 最终规则需重新冻结 v2，并加入 B 与 HLLC-Sedov。
+
+## 220. 2026-10-09（续）：Phase 1 gate 结果、Sedov 自然 bin 分层、lazy flip（Phase 3）、限制器敏感性排队
+
+**作者：Claude Code（Opus 5.5）；提交 ff8b3f4..（见 git log）。完整结果见 [RD_FLIP_HIERARCHY_RESULTS_20261009.md](RD_FLIP_HIERARCHY_RESULTS_20261009.md)。未改 thesis。**
+
+- **flip_gates science 组 27/27 完成**（`../local_runs/flip_gates_20261009_v1`）。
+  - Sod：有 transfer 的各方案守恒 ≤1.4e-15；仅 Campoli 时漂移 1e-4–1e-3。
+  - Yee：flip 与无 flip 的 ρL1 差，glass48→96 比值为 N 3.3、LDA 3.5、B 3.6、HLLC 2.5，约二阶收敛。
+    - 相对解析误差的增量：N +4.2%→+2.1%，LDA +5.4%→+2.6%。
+    - 可回答用户"更优雅"的问题：均匀平移是 L∞ 与集中 L2 意义下的最小守恒修正，其扰动按 O(h²) 消失。
+  - KH 组之前因排队循环的 `pgrep -f` 自匹配而未启动，已直接启动。
+    - **教训：后台等待请用 PID（kill -0），不要用 pgrep -f 模式。**
+- **Sedov gate（21 点，HLLC）。**
+  - 仅 Campoli 与 thesis 的 Arpaia 结果相同（L1 1.4e-6），漂移完全来自 flip。
+  - 加 transfer 后守恒到舍入，壳峰半径 0.2503（thesis 0.2462，解析 0.258）。
+  - 1 点注入与 blend 组进行中。
+- **Sedov 分层，HLLC natural bin（scratch，非冻结）。**
+  - 2448 个事件，最多 8 个 bin，守恒 ≤2.1e-14，CFL ledger ≤0.108；剖面与等步长 flip 差 L1 1e-3。
+  - 元素工作量 8.0%；RD CPU 15 s，等步长为 284 s；总 CPU 1141 s，等步长为 1634 s（1.4×）。
+  - Voronoi 全网格重建占 70%。冻结复现见 v2。
+- **Lazy flip（`RD_ALE_LAZY_FLIP`，e825d34）。**
+  - 仅当旧三角形最小角 <15°，或 Delaunay 违反 >20° 时才采纳该连通改变；否则保留旧连接（不强制闭合，不传递）。
+  - 采纳率：均匀态 1249→407，Yee 245→64，KH 76858→18180。
+  - 精度：Yee 不变。KH 熵偏移 0.66→0.48（Arpaia 无处理为 0.42）。
+  - KH 晚期 E_ky 在三者之间都不同，起始时刻由噪声决定，不可作为精度排序。
+- **其他改动。**
+  - 直接地址 ID 表（结果逐位一致）。
+  - 分层 gate v1 已停止（规则被取代，见 STOPPED.txt）；v2 冻结并运行中：19 个方法，含 B 与 HLLC-Sedov。
+  - 分析与作图脚本：`analyze_interval_hierarchy_gates.py`、`plot_flip_hierarchy_sedov.py`、`analyze_kh_flip_resolution.py`。
+- **限制器敏感性 D2**（`tests/rd/run_flip_limiter_sensitivity.py`，`../local_runs/flip_limiter_sensitivity_20261009_v1`）：
+  - KH：entropy、dmp0、二者兼有；Sedov：κ=1e-12、κ=0.1、entropy、dmp0。
+  - 已构建，排队等 Sedov gate 链结束后运行。
