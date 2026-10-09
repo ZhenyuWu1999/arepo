@@ -292,8 +292,8 @@ static int rd_rusanov_local_index(const point *dp)
 
 #ifdef RD_ALE_HIERARCHICAL
 #if defined(VORONOI_STATIC_MESH) || !defined(RD_HIERARCHICAL_TIMESTEPS) || !defined(RD_RK2_TOTAL_RESIDUAL) || \
-    !defined(N_SCHEME) || !defined(CREATE_FULL_MESH)
-#error "RD_ALE_HIERARCHICAL v1 requires moving mesh, CREATE_FULL_MESH, hierarchy, total-residual RK2 and N."
+    !(defined(N_SCHEME) || (defined(LDA_SCHEME) && defined(RD_ALE_INTERVAL_HIERARCHY))) || !defined(CREATE_FULL_MESH)
+#error "RD_ALE_HIERARCHICAL v1 requires moving mesh, CREATE_FULL_MESH, hierarchy, total-residual RK2 and N (LDA: interval mode)."
 #endif
 #if(defined(RD_ALE_CAMPOLI_MASS) + defined(RD_ALE_HIERARCHICAL_ARPAIA)) != 1
 #error "RD_ALE_HIERARCHICAL requires exactly one temporal mass pair: Campoli or experimental Arpaia."
@@ -314,8 +314,8 @@ static int rd_rusanov_local_index(const point *dp)
 
 #ifdef RD_ALE_INTERVAL_HIERARCHY
 #if !defined(RD_ALE_HIERARCHICAL) || !defined(RD_ALE_CAMPOLI_MASS) || defined(RD_ALE_HIERARCHICAL_ARPAIA) || \
-    !defined(N_SCHEME) || !defined(RD_ALE_CONTOUR_RESIDUAL)
-#error "RD_ALE_INTERVAL_HIERARCHY v1 requires the Campoli RD_ALE_HIERARCHICAL N path with the contour residual."
+    !(defined(N_SCHEME) || defined(LDA_SCHEME)) || !defined(RD_ALE_CONTOUR_RESIDUAL)
+#error "RD_ALE_INTERVAL_HIERARCHY requires the Campoli RD_ALE_HIERARCHICAL N or LDA path with the contour residual."
 #endif
 #include "rd_flip_transfer.h"
 #ifndef RD_FLIP_FLOOR_FRACTION
@@ -341,6 +341,10 @@ static int rd_rusanov_local_index(const point *dp)
 #endif
 #if defined(RD_ALE_HIERARCHICAL) && defined(RD_ALE_HIERARCHICAL_ARPAIA)
 #define RD_RK2_STAGE_BETA_LABEL "concentrated-ALE-hierarchy-N-Arpaia"
+#elif defined(RD_ALE_INTERVAL_HIERARCHY) && defined(LDA_SCHEME)
+#define RD_RK2_STAGE_BETA_LABEL "interval-ALE-hierarchy-LDA-F1-Campoli"
+#elif defined(RD_ALE_INTERVAL_HIERARCHY)
+#define RD_RK2_STAGE_BETA_LABEL "interval-ALE-hierarchy-N-Campoli"
 #elif defined(RD_ALE_HIERARCHICAL)
 #define RD_RK2_STAGE_BETA_LABEL "concentrated-ALE-hierarchy-N-Campoli"
 #elif defined(LDA_SCHEME)
@@ -7018,10 +7022,12 @@ void compute_residuals(tessellation *T)
         }
 #endif
 
-#if defined(RD_ALE_HIERARCHICAL) && defined(N_SCHEME)
+#if defined(RD_ALE_HIERARCHICAL) && (defined(N_SCHEME) || defined(RD_ALE_INTERVAL_HIERARCHY))
       if(rd_stage == RD_RK_STAGE_CORRECTOR)
         {
-          /* The concentrated two-half-call hierarchy has no explicit
+          /* For LDA (interval mode) this mass-variant term is lumped and is
+           * added on top of the F1 swap of the M_T temporal term above.
+           * The concentrated two-half-call hierarchy has no explicit
            * total-residual temporal sweep. Let D_T/3 contribute to the common
            * two-stage nodal divisor and M_T/3 be the lumped temporal mass.
            * The equal-step algebra leaves
