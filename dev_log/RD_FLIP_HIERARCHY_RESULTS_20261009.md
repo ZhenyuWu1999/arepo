@@ -116,7 +116,32 @@ The flip perturbation converges at close to second order (O(h²) predicts a rati
 - Campoli without transfer is identical to the thesis run (L1 difference 1.4e-6), so in Sedov the whole conservation error comes from the flips.
 - With the transfer, the shell sits closer to the analytic radius 0.258.
 - 4720 cavities were transferred; 93 needed θ < 1 (θ_min = 0.034). Positivity was kept throughout.
-- 1-point injection and the blend variants: pending.
+- **All 10 Sedov science runs complete.** Every run with the transfer conserves to ≤2e-14 and keeps p > 0. Thesis runs (Arpaia) for comparison:
+
+| Run | Thesis drift (mass / energy) | With transfer | ρ peak (r): thesis → transfer | 
+|---|---|---|---|
+| HLLC, 1 point | −3.4e-3 / −1.6e-2 | 2e-16 / 1.2e-14 | 3.402 (0.2475) → 3.459 (0.2497) |
+| LDA/HLLC blend (bounds), 21 points | −4.5e-3 / −9.6e-3 | −4e-16 / 4e-15 | 3.797 (0.2515) → 3.969 (0.2549) |
+| LDA/HLLC blend (bounds), 1 point | −4.9e-3 / **−6.4e-2** | −1e-16 / 4e-15 | 3.861 (0.2550) → 4.170 (0.2548) |
+| LDA/HLLC blend (positivity only), 21 / 1 points | energy +1.5e-2 / +2.8e-2 | exact | overshoot 5.5 / 4.9, as the thesis runs (analytic maximum 4) |
+
+  - The bounds-limited blend loses up to 6 % of its energy through flips in the thesis runs. With the transfer it is exact, and its shell is sharper.
+
+**Limiter sensitivity (decision D2)** (`local_runs/flip_limiter_sensitivity_20261009_v1`, equal step, Campoli + flip; all runs conservative and positive):
+
+| Problem / variant | θ < 1 | Result |
+|---|---|---|
+| Sedov 21, HLLC, κ = 0.5 (default) / 0.1 / 1e-12 | 93 / 45 / 39 of ≈4720 | identical profiles (ρ peak 3.456–3.457) |
+| Sedov 21, HLLC, entropy bound | 3137 | ρ peak 3.438 (more diffusive) |
+| Sedov 21, HLLC, density hull (r = 0) | all 4774 | ρ peak 3.427 (mostly donor-cell) |
+| KH48, N, entropy bound | 36 360 of 71 183 | entropy excursion 1.07 → 0.36 |
+| KH48, N, density hull | all 67 712 | excursion 0.07 (donor-cell smoothing at every flip) |
+| KH48, N, entropy bound + hull | all 67 621 | excursion 0.08 |
+
+Decision: keep κ = 0.5 with the entropy bound and the density hull off.
+- κ is insensitive.
+- The bound and the hull reduce KH excursions only by switching most flips to the diffusive low-order endpoint.
+- The receiver-only high endpoint (Section 3.4) removes the excursion without any limiting.
 
 ### 3.4 KH and the "result changes a little" question
 
