@@ -12,7 +12,11 @@
  *   sum_i (g_i + dm_i) uout_i = sum_i g_i u_i      (per component).
  *
  * The cavity residual is D = sum_i dm_i u_i = int (u_h^new - u_h^old).
- *   High (linear-exact, minimal max-norm change): u_i - D / sum_j (g_j+dm_j).
+ *   High, mode 0 (linear-exact, minimal max-norm change): u_i - D / sum_j (g_j+dm_j).
+ *   High, mode 1 (linear-exact, donors untouched): receivers take
+ *        g_i u_i + dm_i (ubar_D + u_i - ubar_R), ubar_R the dm-weighted receiver
+ *        mean; it differs from the low endpoint by a receiver zero-sum term and
+ *        has the same L1 change |D| as mode 0.
  *   Low  (convex donor-cell): donors (dm<0) keep u_i bit-for-bit;
  *        receivers mix g_i u_i + dm_i ubar_D, ubar_D the |dm|-weighted
  *        donor mean.  For one 2-2 flip this is the edge donor-cell exchange.
@@ -33,6 +37,7 @@ struct rd_flip_options
   double floor_fraction; /* rho, e floors as fractions of the input minima */
   double dmp_relax;      /* density hull relaxation r; negative disables the hull */
   int entropy_bound;     /* nonzero: require K = p/rho^gamma >= min input K */
+  int high_mode;         /* 0: uniform shift; 1: receiver-weighted (donors untouched) */
 };
 
 struct rd_flip_diagnostics
@@ -134,7 +139,8 @@ static int rd_flip_transfer(int n, const double *g, const double *dm, const doub
   if(fabs(donor_mass - receiver_mass) > 64.0 * DBL_EPSILON * (dm_abs + mass_new))
     return RD_FLIP_BAD_BALANCE;
 
-  double defect[4] = {0, 0, 0, 0}, ubar[4] = {0, 0, 0, 0}, scale[4] = {0, 0, 0, 0}, umax[4] = {0, 0, 0, 0};
+  double defect[4] = {0, 0, 0, 0}, ubar[4] = {0, 0, 0, 0}, urec[4] = {0, 0, 0, 0}, scale[4] = {0, 0, 0, 0},
+         umax[4] = {0, 0, 0, 0};
   for(int i = 0; i < n; i++)
     for(int k = 0; k < 4; k++)
       {
@@ -143,11 +149,15 @@ static int rd_flip_transfer(int n, const double *g, const double *dm, const doub
         umax[k] = fmax(umax[k], fabs(u[i][k]));
         if(dm[i] < 0.0)
           ubar[k] += -dm[i] * u[i][k];
+        else if(dm[i] > 0.0)
+          urec[k] += dm[i] * u[i][k];
       }
   for(int k = 0; k < 4; k++)
     {
       if(donor_mass > 0.0)
         ubar[k] /= donor_mass;
+      if(receiver_mass > 0.0)
+        urec[k] /= receiver_mass;
       if(scale[k] > 0.0)
         diag->defect_scale = fmax(diag->defect_scale, fabs(defect[k]) / scale[k]);
     }
@@ -159,7 +169,10 @@ static int rd_flip_transfer(int n, const double *g, const double *dm, const doub
       const double gnew = g[i] + dm[i];
       for(int k = 0; k < 4; k++)
         {
-          uh[i][k] = u[i][k] - defect[k] / mass_new;
+          if(opt->high_mode == 1)
+            uh[i][k] = dm[i] > 0.0 ? (g[i] * u[i][k] + dm[i] * (ubar[k] + u[i][k] - urec[k])) / gnew : u[i][k];
+          else
+            uh[i][k] = u[i][k] - defect[k] / mass_new;
           if(dm[i] > 0.0)
             ul[i][k] = (g[i] * u[i][k] + dm[i] * ubar[k]) / gnew;
           else

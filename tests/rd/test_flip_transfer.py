@@ -28,8 +28,8 @@ def build():
     src.write_text(
         '#include "rd_flip_transfer.h"\n'
         'int kernel(int n,const double*g,const double*dm,const double*u,double gamma,double floor_fraction,'
-        'double dmp_relax,int entropy,double*out,double*diag){\n'
-        ' struct rd_flip_options o={gamma,floor_fraction,dmp_relax,entropy}; struct rd_flip_diagnostics d;\n'
+        'double dmp_relax,int entropy,int high_mode,double*out,double*diag){\n'
+        ' struct rd_flip_options o={gamma,floor_fraction,dmp_relax,entropy,high_mode}; struct rd_flip_diagnostics d;\n'
         ' double (*ul)[4]=malloc(sizeof(double[4])*n),(*uh)[4]=malloc(sizeof(double[4])*n),(*w)[4]=malloc(sizeof(double[4])*n);\n'
         ' int s=rd_flip_transfer(n,g,dm,(const double(*)[4])u,&o,ul,uh,w,(double(*)[4])out,&d);\n'
         ' free(ul);free(uh);free(w);\n'
@@ -40,7 +40,7 @@ def build():
                     '-include', 'stdlib.h', '-I' + str(REPO / 'src/hydro'), str(src), '-o', str(lib), '-lm'], check=True)
     fn = ctypes.CDLL(str(lib)).kernel
     p = np.ctypeslib.ndpointer(dtype=np.float64, flags='C_CONTIGUOUS')
-    fn.argtypes = [ctypes.c_int, p, p, p, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_int, p, p]
+    fn.argtypes = [ctypes.c_int, p, p, p, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_int, ctypes.c_int, p, p]
     fn.restype = ctypes.c_int
     return fn
 
@@ -48,10 +48,14 @@ def build():
 KERNEL = build()
 
 
-def transfer(g, dm, u, dmp_relax=0.0, entropy=1, floor_fraction=1e-12):
+HIGH_MODE = 0
+
+
+def transfer(g, dm, u, dmp_relax=0.0, entropy=1, floor_fraction=1e-12, high_mode=None):
+    high_mode = HIGH_MODE if high_mode is None else high_mode
     out = np.zeros_like(u); diag = np.zeros(6)
     s = KERNEL(len(g), np.ascontiguousarray(g, float), np.ascontiguousarray(dm, float), np.ascontiguousarray(u, float),
-               GAMMA, floor_fraction, dmp_relax, entropy, out, diag)
+               GAMMA, floor_fraction, dmp_relax, entropy, high_mode, out, diag)
     return s, out, diag
 
 
@@ -120,11 +124,21 @@ def check_case(g, dm, u, worst, rng_tag):
     assert 0 <= diag[0] <= 1
     assert np.all(out[:, 0] >= u[:, 0].min() * (1 - 1e-13)) and np.all(out[:, 0] <= u[:, 0].max() * (1 + 1e-13)), rng_tag
     # entropy minimum up to the kernel's round-off allowance: e = E - |m|^2/2rho is known only to a few
-    # ulp of E (cold, fast gas has KE/e ~ 1e5 in these random states)
-    slack = 16 * np.finfo(float).eps * np.abs(out[:, 3]) * (GAMMA - 1) / out[:, 0] ** GAMMA
-    assert np.all(K(out) + slack >= K(u).min() * (1 - 1e-12)), rng_tag
+    # ulp of E (cold, fast gas has KE/e ~ 1e5 in these random states); the bound K_min itself carries the
+    # same uncertainty from its own node
+    eps = np.finfo(float).eps; k = np.argmin(K(u))
+    slack = 16 * eps * np.abs(out[:, 3]) * (GAMMA - 1) / out[:, 0] ** GAMMA
+    kmin = K(u)[k] * (1 - 1e-12 - 16 * eps * abs(u[k, 3]) / internal(u[k]))
+    assert np.all(K(out) + slack >= kmin), rng_tag
     # independent endpoints
-    D = dm @ u; uh = u - D / gnew.sum()
+    D = dm @ u
+    if HIGH_MODE == 1:
+        rec_ = dm > 0; don_ = dm < 0; uh = u.copy()
+        ud = (-dm[don_]) @ u[don_] / (-dm[don_]).sum() if don_.any() else 0 * u[0]
+        ur = dm[rec_] @ u[rec_] / dm[rec_].sum() if rec_.any() else 0 * u[0]
+        uh[rec_] = (g[rec_, None] * u[rec_] + dm[rec_, None] * (ud + u[rec_] - ur)) / gnew[rec_, None]
+    else:
+        uh = u - D / gnew.sum()
     donors = dm < 0; ubar = (-dm[donors]) @ u[donors] / (-dm[donors]).sum() if donors.any() else 0 * u[0]
     ul = u.copy(); rec = dm > 0
     ul[rec] = (g[rec, None] * u[rec] + dm[rec, None] * ubar) / gnew[rec, None]
@@ -203,8 +217,10 @@ def main():
         aff = c0 + x @ grad                                # affine in all conserved components
         s, out, diag = transfer(g, dm, aff); assert s == 0 and diag[0] == 1
         assert np.allclose(out, aff, rtol=1e-12, atol=1e-14)
-        # high endpoint invertible: flip, then reverse from the new masses
+        # high endpoint invertible (uniform shift only): flip, then reverse from the new masses
         u = euler_states(4, rng, 0.3)
+        if HIGH_MODE == 1:
+            continue
         s, mid, d1 = transfer(g, dm, u, dmp_relax=-1, entropy=0)
         if d1[0] == 1:
             s, back, d2 = transfer(g + dm, -dm, mid, dmp_relax=-1, entropy=0)
@@ -228,4 +244,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    for HIGH_MODE in (0, 1):
+        print(f'high_mode={HIGH_MODE}:', end=' ')
+        main()

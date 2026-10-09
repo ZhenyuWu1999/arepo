@@ -104,7 +104,7 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_B_SENSOR) || defined(RD_HIERARCHICAL_TIMESTEPS) || \
     defined(RD_RK2_RATE_CONSISTENT_HEUN) || defined(RD_ELEMENT_COMOVING_FRAME) || defined(RD_ALE_CAMPOLI_MASS) || \
     defined(RD_ALE_SPLIT_MESH_VELOCITY) || defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_DIAG_NO_KICK) || \
-    defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
+    defined(RD_ALE_FLIP_TRANSFER) || defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
     defined(PASSIVE_SCALARS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || \
     defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
 #error "LDA/HLLC blend supports lab-frame periodic source-free equal-step ALE hydro only."
@@ -229,6 +229,9 @@ static int rd_rusanov_local_index(const point *dp)
 #endif
 #ifndef RD_FLIP_ENTROPY_BOUND
 #define RD_FLIP_ENTROPY_BOUND 0
+#endif
+#ifndef RD_FLIP_HIGH_MODE
+#define RD_FLIP_HIGH_MODE 0
 #endif
 #endif
 #if defined(RD_ALE_CFL_TIMESTEP) && (!defined(RD_ALE_EQUALSTEP) || !defined(TREE_BASED_TIMESTEPS))
@@ -2762,7 +2765,8 @@ static void rd_ale_apply_flip_transfer(tessellation *T, struct rd_element_set *s
   if(!g || !dm || !u || !ul || !uh || !work || !uout)
     terminate_program("RD flip transfer: allocation failed");
 
-  struct rd_flip_options options = {GAMMA, RD_FLIP_FLOOR_FRACTION, RD_FLIP_DMP_RELAX, RD_FLIP_ENTROPY_BOUND};
+  struct rd_flip_options options = {GAMMA, RD_FLIP_FLOOR_FRACTION, RD_FLIP_DMP_RELAX, RD_FLIP_ENTROPY_BOUND,
+                                    RD_FLIP_HIGH_MODE};
   int cavities = 0, limited = 0, low_only = 0;
   double theta_min = 1.0, theta_sum = 0.0, max_defect = 0.0, max_change = 0.0;
   double before[4] = {0, 0, 0, 0}, after[4] = {0, 0, 0, 0}, scale[4] = {0, 0, 0, 0};
