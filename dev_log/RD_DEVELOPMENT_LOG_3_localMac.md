@@ -8856,3 +8856,26 @@ RD_ALE_FLIP_TRANSFER 接线+全方案 primitive refresh→Campoli 全方案→�
 - **限制器敏感性 D2**（`tests/rd/run_flip_limiter_sensitivity.py`，`../local_runs/flip_limiter_sensitivity_20261009_v1`）：
   - KH：entropy、dmp0、二者兼有；Sedov：κ=1e-12、κ=0.1、entropy、dmp0。
   - 已构建，排队等 Sedov gate 链结束后运行。
+
+## 221. 2026-10-09（续）：全部 gate 完成；flip 默认高阶端改为 receiver-only（RD_FLIP_HIGH_MODE=1）
+
+**作者：Claude Code（Opus 5.5）。详见 [RD_FLIP_HIERARCHY_RESULTS_20261009.md](RD_FLIP_HIERARCHY_RESULTS_20261009.md)。未改 thesis。**
+
+- **Sedov flip gate 10/10 完成**，有 transfer 的全部守恒 ≤2e-14 且 p>0。
+  - blend(bounds) 的 thesis 运行能量损失最高达 6.4%（1 点注入），现为精确守恒，壳更锐。
+- **限制器敏感性（D2）**：
+  - κ 不敏感，Sedov 的 θ<1 仅 39–93/4720。
+  - 熵界与密度包限制都会把大多数 flip 推向 donor-cell 端，扩散更强（Sedov 峰值下降，KH 熵偏移下降）。
+  - 结论：κ=0.5、熵界与密度包均关闭。
+- **KH 分辨率研究**（48/96，16×16 网格对比）：
+  - transfer−无 transfer 的差在 t=1 处为 1 阶收敛（比值 2.0）。
+  - 所有 glass48 变体到 glass96 的距离相近（t=1 约 0.037，t=2 约 0.085），即 transfer 影响低于离散误差。
+  - KH 欠分辨（tanh 宽约 1–2 格）。
+- **receiver-only 高阶端（mode 1）**：
+  - KH 熵偏移：glass48 为 0.29–0.36，mode 0 为 0.66–1.07；glass96 为 0.33，mode 0 为 0.71–0.79，Arpaia 无处理为 0.42/0.72。
+  - 不需要限制；Yee/Sod 与 mode 0 无差别。
+  - Sedov（`../local_runs/flip_mode1_sedov_20261009_v1`）守恒、正性，峰值低约 1%，壳半径不变。
+- **默认值改为 `RD_FLIP_HIGH_MODE=1`**（求解器两处），`check_rd` 12/12 通过。
+  - 此前冻结的档案若 Config 未注明，则为 mode 0。
+- **LDA 的 KH 在所有变体中都失败**（含等步长参考），为已知的 moving-LDA KH 问题（§§52–56），与 flip 无关。
+- **待完成**：kh_flip_resolution 的 flip_h1（glass48/96）；最终报告与图；thesis 文字建议（不改 thesis）。

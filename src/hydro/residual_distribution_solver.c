@@ -236,7 +236,10 @@ static int rd_rusanov_local_index(const point *dp)
 #define RD_FLIP_ENTROPY_BOUND 0
 #endif
 #ifndef RD_FLIP_HIGH_MODE
-#define RD_FLIP_HIGH_MODE 0
+/* 1 (receiver-only) since 2026-10-09: same conservation and accuracy as the
+ * uniform shift in Yee/Sod/Sedov, no KH entropy excursion (results report
+ * §3.4). Frozen archives before this date used 0 unless their Config says 1. */
+#define RD_FLIP_HIGH_MODE 1
 #endif
 #endif
 #if defined(RD_ALE_CFL_TIMESTEP) && (!defined(RD_ALE_EQUALSTEP) || !defined(TREE_BASED_TIMESTEPS))
@@ -332,7 +335,10 @@ static int rd_rusanov_local_index(const point *dp)
 #define RD_FLIP_ENTROPY_BOUND 0
 #endif
 #ifndef RD_FLIP_HIGH_MODE
-#define RD_FLIP_HIGH_MODE 0
+/* 1 (receiver-only) since 2026-10-09: same conservation and accuracy as the
+ * uniform shift in Yee/Sod/Sedov, no KH entropy excursion (results report
+ * §3.4). Frozen archives before this date used 0 unless their Config says 1. */
+#define RD_FLIP_HIGH_MODE 1
 #endif
 #endif
 #ifdef RD_ALE_LAZY_FLIP

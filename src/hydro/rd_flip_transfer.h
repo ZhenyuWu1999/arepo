@@ -37,7 +37,7 @@ struct rd_flip_options
   double floor_fraction; /* rho, e floors as fractions of the input minima */
   double dmp_relax;      /* density hull relaxation r; negative disables the hull */
   int entropy_bound;     /* nonzero: require K = p/rho^gamma >= min input K */
-  int high_mode;         /* 0: uniform shift; 1: receiver-weighted (donors untouched) */
+  int high_mode;         /* 0: uniform shift; 1: receiver-weighted, donors untouched (solver default) */
 };
 
 struct rd_flip_diagnostics

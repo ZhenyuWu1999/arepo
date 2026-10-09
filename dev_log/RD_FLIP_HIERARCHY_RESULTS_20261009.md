@@ -16,7 +16,7 @@ Scope: one MPI rank, 2D, periodic. Nothing in the thesis has been edited.
 |---|---|
 | Round-off conservation across edge flips | **Done** for equal-step N, LDA, B, HLLC-RD and the LDA/HLLC blend, all with Campoli mass. Every frozen run conserves to ≤1e-14 (previously −0.33 % mass and +0.70 % energy in Sedov HLLC). |
 | Sedov positivity | **Done** for HLLC-RD (21- and 1-point injection) and the blend; the old uniform-shift repair aborted with negative pressure. |
-| Small accuracy cost | The transfer is provably the minimal conservative correction (Section 2). Yee and Sod show small changes. KH resolution study running (Section 3.4). |
+| Small accuracy cost | The transfer is the minimal conservative correction (Section 2). In Yee its effect shrinks at ≈2nd order from glass48 to glass96. In KH it stays below the 48 → 96 discretisation error, and the receiver-only high endpoint (now the default) removes the extra entropy excursion. |
 | Hierarchical timesteps on the moving mesh | **Done** for N, LDA, B and HLLC-RD (actual-interval closure, `RD_ALE_INTERVAL_HIERARCHY`). Totals are conserved to ≤1.5e-14 at every common closure, flips included. Element work is 2.6 % of all-fine stepping in Sedov with natural bins. |
 | Deferred (lazy) flips | **Implemented** (`RD_ALE_LAZY_FLIP`): 3–4× fewer adopted cavities at unchanged accuracy (uniform, Yee). KH test running. |
 
@@ -89,7 +89,18 @@ The E_ky peaks again differ through the noise-seeded onset. The robust signal is
 - The receiver-only high endpoint (mode 1) keeps donors bit-for-bit and does not raise the excursion.
 - Mode 0 and mode 1 are indistinguishable in Yee and Sod (Section 3.2).
 
-Pending evidence: the entropy-bound limiter (sensitivity campaign) and the KH glass96 runs with both modes. If mode 1 holds up, it should become the default.
+**Mode 1 adopted as the default (`RD_FLIP_HIGH_MODE` 1, 2026-10-09).** The evidence:
+
+- **KH entropy excursion** (glass48 / glass96):
+  - mode 1: 0.29–0.36 / 0.33;
+  - mode 0: 0.66–1.07 / 0.71–0.79;
+  - Arpaia without transfer: 0.42 / 0.72.
+  - Mode 1 needs no limiting. The entropy bound and density hull reach low excursions only by switching most flips to donor-cell mixing.
+- **Yee and Sod:** the modes are indistinguishable.
+- **Sedov, HLLC, equal step** (`local_runs/flip_mode1_sedov_20261009_v1`):
+  - 21-point: exact conservation, p > 0; θ < 1 in 111 cavities (mode 0: 93); ρ peak 3.430 vs 3.456; shell radius 0.2429 in both; L1 difference from mode 0 is 9.5e-4 (ρ).
+  - 1-point: ρ peak 3.422 vs 3.459; L1 difference 1.3e-3.
+- Mode 0 stays available with `RD_FLIP_HIGH_MODE=0`. Archives frozen before this change used mode 0 unless their Config sets the flag.
 
 **Yee vortex: convergence of the transfer perturbation.** Each pair has the same resolution and dt; the difference is with transfer minus without (Campoli only). Without transfer the totals drift by ≈2e-5; with it they are exact.
 
