@@ -3898,7 +3898,12 @@ static void rd_ale_interval_prepare(tessellation *T, struct rd_element_set *set,
        * current median-dual mass. */
       for(int i = 0; i < NumGas; i++)
         if(RdIntervalClosed[i])
-          SphP[i].DualArea = set->ale_hier_endpoint_area[i];
+          {
+            if(fabs(SphP[i].RD_GeoLedger - set->ale_hier_endpoint_area[i]) > 1e-10 * set->ale_hier_endpoint_area[i])
+              terminate_program("RD interval hierarchy: closed-star ledger differs from the star area (ID=%llu)",
+                                (unsigned long long)P[i].ID);
+            SphP[i].DualArea = SphP[i].RD_GeoLedger;
+          }
         else if(RdIntervalLive[i])
           terminate_program("RD interval hierarchy: live vertex with an open star");
       mpi_printf("RD-IHIER time=%.8g stage=prepare due=%d min_interval_area=%.3e geom=[%+.6e,%+.6e,%+.6e,%+.6e]\n",
@@ -4086,7 +4091,9 @@ static void rd_ale_interval_event(tessellation *T)
           if(rel > 1e-10)
             terminate_program("RD interval hierarchy: ledger %.17g differs from the star area %.17g (ID=%llu)",
                               SphP[i].RD_GeoLedger, old_star[i], (unsigned long long)P[i].ID);
-          SphP[i].RD_GeoLedger = SphP[i].DualArea = old_star[i];
+          /* The ledger, not the recomputed geometry, is the divisor: Q was
+           * accumulated with it, so a uniform state stays exactly uniform. */
+          SphP[i].DualArea = SphP[i].RD_GeoLedger;
         }
       if(parent[i] < 0)
         outside_dm = dmax(outside_dm, fabs(new_star[i] - old_star[i]) / old_star[i]);
@@ -4168,7 +4175,7 @@ static void rd_ale_interval_event(tessellation *T)
           SphP[i].Momentum[0] = gnew * uout[k][1];
           SphP[i].Momentum[1] = gnew * uout[k][2];
           SphP[i].Energy = gnew * uout[k][3];
-          SphP[i].RD_GeoLedger = SphP[i].DualArea = new_star[i];
+          SphP[i].RD_GeoLedger = SphP[i].DualArea = gnew;
           if(!TimeBinSynchronized[P[i].TimeBinHydro])
             rd_reg_set_trace(i, uout[k]);
         }
