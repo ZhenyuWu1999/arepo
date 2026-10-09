@@ -191,7 +191,18 @@ After the first flip the two transfer conventions differ: A applies the transfer
 
 **KH glass48, N, two bins, t = 2:** 16 558 cavities and 117 k forced closures; conservation 2e-15; no abort.
 
-**Sedov 21-point, HLLC-RD, natural bins, t = 0.05** (scratch; the frozen v2 repeat is running). Up to 8 occupied bins, dt ratio 128.
+**Frozen v2 Sedov group** (`local_runs/interval_hierarchy_gates_20261009_v2`, HLLC-RD, t = 0.05; every run positive; differences are against the equal-step Campoli + flip reference):
+
+| Run | Events | Common-closure conservation | Element work | RD CPU (hierarchy / reference) | ρ L1 difference | ρ peak (r) |
+|---|---|---|---|---|---|---|
+| 21-point, equal bins | 2466 | 1.2e-14 | 100 % | — | 2.8e-4 | 3.434 (0.2504) |
+| 21-point, natural bins | 2448 | 2.1e-14 | 8.0 % | 14.5 s / 245 s | 9.8e-4 | 3.466 (0.2502) |
+| 1-point, equal bins | 2785 | 1.8e-14 | 100 % | — | 3.7e-4 | 3.457 (0.2497) |
+| 1-point, natural bins | 2794 | 3.5e-14 | 7.4 % | 8.9 s / 329 s | 8.7e-4 | 3.464 (0.2496) |
+
+Wall-clock ratios (natural bins / reference: 0.88 and 0.43) were measured under strongly varying machine load and are only indicative; even the equal-bin runs, which should take about as long as the reference, ranged from 0.77 to 1.04.
+
+Scratch run, 21-point, natural bins, t = 0.05. Up to 8 occupied bins, dt ratio 128.
 
 | | Hierarchy | Equal-step Campoli + flip |
 |---|---|---|
