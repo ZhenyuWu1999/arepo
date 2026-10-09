@@ -1353,6 +1353,11 @@ extern struct sph_particle_data
    * At a vertex synchronization this is closed to the exact current median
    * dual area before the fluid residual is applied. */
   MyDouble RD_GeoLedger;
+#ifdef RD_ALE_INTERVAL_HIERARCHY
+  /* Lumped low-order positivity ledger since the last refresh:
+   * sum over closed intervals of (h/2)(coeff^0 + coeff^1). */
+  MyDouble RD_CFLLedger;
+#endif
 #endif
 #ifdef RD_RK2_TOTAL_RESIDUAL
   /* Per-step transients for the two-stage total-residual update. Both are

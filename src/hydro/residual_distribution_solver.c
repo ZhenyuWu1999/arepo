@@ -55,19 +55,21 @@ static lapack_int solve_system(int n, double *A, double *b);
 #if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
 #include "rd_rusanov.h"
 #ifdef RD_RUSANOV_LOW_ORDER
-#if !defined(N_SCHEME) || !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(FORCE_EQUAL_TIMESTEPS) || \
-    !defined(CREATE_FULL_MESH) || !defined(TREE_BASED_TIMESTEPS)
-#error "RD_RUSANOV_LOW_ORDER requires full-mesh, equal-step N/lumped RK2 and tree timesteps."
+#if !defined(N_SCHEME) || !defined(RD_RK2_TOTAL_RESIDUAL) || \
+    (!defined(FORCE_EQUAL_TIMESTEPS) && !defined(RD_ALE_INTERVAL_HIERARCHY)) || !defined(CREATE_FULL_MESH) || \
+    !defined(TREE_BASED_TIMESTEPS)
+#error "RD_RUSANOV_LOW_ORDER requires full-mesh, equal-step (or interval-hierarchy) N/lumped RK2 and tree timesteps."
 #endif
-#if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_ELEMENT_COMOVING_FRAME) || defined(RD_ALE_CONTOUR_RESIDUAL) || \
+#if (defined(RD_HIERARCHICAL_TIMESTEPS) && !defined(RD_ALE_INTERVAL_HIERARCHY)) || defined(RD_ELEMENT_COMOVING_FRAME) || \
+    defined(RD_ALE_CONTOUR_RESIDUAL) || \
     defined(RD_DIAG_NO_KICK) || \
     defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
     defined(PASSIVE_SCALARS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || \
     defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
 #error "RD_RUSANOV_LOW_ORDER is periodic, hydro-only, lab-frame static or Arpaia/Campoli ALE."
 #endif
-#if defined(RD_ALE_CAMPOLI_MASS) && !defined(RD_ALE_EQUALSTEP)
-#error "RD_RUSANOV_LOW_ORDER with Campoli mass is an equal-step ALE option."
+#if defined(RD_ALE_CAMPOLI_MASS) && !defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_INTERVAL_HIERARCHY)
+#error "RD_RUSANOV_LOW_ORDER with Campoli mass is an equal-step or interval-hierarchy ALE option."
 #endif
 #ifdef RD_LOW_ORDER_HLLC
 /* Replaces only the element kernel and its per-vertex stage coefficient;
@@ -314,8 +316,8 @@ static int rd_rusanov_local_index(const point *dp)
 
 #ifdef RD_ALE_INTERVAL_HIERARCHY
 #if !defined(RD_ALE_HIERARCHICAL) || !defined(RD_ALE_CAMPOLI_MASS) || defined(RD_ALE_HIERARCHICAL_ARPAIA) || \
-    !(defined(N_SCHEME) || defined(LDA_SCHEME)) || !defined(RD_ALE_CONTOUR_RESIDUAL)
-#error "RD_ALE_INTERVAL_HIERARCHY requires the Campoli RD_ALE_HIERARCHICAL N or LDA path with the contour residual."
+    !(defined(N_SCHEME) || defined(LDA_SCHEME)) || !(defined(RD_ALE_CONTOUR_RESIDUAL) || defined(RD_RUSANOV_LOW_ORDER))
+#error "RD_ALE_INTERVAL_HIERARCHY requires the Campoli RD_ALE_HIERARCHICAL N/LDA path with a conservative contour residual."
 #endif
 #include "rd_flip_transfer.h"
 #ifndef RD_FLIP_FLOOR_FRACTION
@@ -3532,8 +3534,10 @@ static void rd_ale_hierarchical_arpaia_finish(const struct rd_element_set *set)
  *  3. C is integrated over its own intervals [s_T, t] with the concentrated
  *     Campoli RK2 (both sweeps at t, on a synthetic tessellation of C); a
  *     vertex predictor is live iff its whole star is in C with one start;
- *  4. active and cavity vertices are refreshed: their stars are complete and
- *     the geometric ledger equals the star area;
+ *  4. every vertex whose whole star was closed is refreshed (this includes
+ *     all active and cavity vertices); the geometric ledger equals the star
+ *     area.  Between refreshes a vertex is therefore either live for one
+ *     RK2 interval or frozen throughout;
  *  5. each cavity is transferred with the flip element (rd_flip_transfer.h);
  *  6. the registry is committed: retained triangles keep s_T (= t if closed),
  *     new ones start at t.
@@ -3772,6 +3776,8 @@ static void rd_reg_init(tessellation *T)
   free(fresh);
   double scale[4];
   rd_reg_totals(RdRegTotal, scale);
+  for(int i = 0; i < NumGas; i++)
+    SphP[i].RD_CFLLedger = 0.0;
   mpi_printf("RD-IHIER-INIT time=%.8g triangles=%d vertices=%d\n", All.Time, RdRegN, NumGas);
 }
 
@@ -4081,8 +4087,8 @@ static void rd_ale_interval_event(tessellation *T)
   for(int b = 0; b < nf; b++)
     for(int v = 0; v < 3; v++)
       new_star[rd_reg_index(fresh[b].t.ccw[v])] += fresh[b].area / 3.0;
-  double max_ledger = 0.0, outside_dm = 0.0;
-  int n_refresh = 0, n_forced_refresh = 0;
+  double max_ledger = 0.0, outside_dm = 0.0, max_cfl_ledger = 0.0;
+  int n_refresh = 0, n_forced_refresh = 0, n_cfl_ledger_over = 0;
   for(int i = 0; i < NumGas; i++)
     {
       const int active = TimeBinSynchronized[P[i].TimeBinHydro];
@@ -4101,8 +4107,29 @@ static void rd_ale_interval_event(tessellation *T)
         }
       if(parent[i] < 0)
         outside_dm = dmax(outside_dm, fabs(new_star[i] - old_star[i]) / old_star[i]);
-      n_refresh += active || parent[i] >= 0;
-      n_forced_refresh += !active && parent[i] >= 0;
+      if(closed_star[i])
+        {
+#ifdef RD_RUSANOV_LOW_ORDER
+          const double ratio = SphP[i].RD_CFLLedger / SphP[i].DualArea;
+          max_cfl_ledger = dmax(max_cfl_ledger, ratio);
+          n_cfl_ledger_over += !live[i] && ratio > 1.0;
+          SphP[i].RD_CFLLedger = 0.0;
+#endif
+          /* Refresh: the trace of every closed star becomes Q/ledger. Active
+           * vertices are converted by update_primitive_variables(); the state
+           * is checked here for all of them. */
+          const double q[4] = {P[i].Mass, SphP[i].Momentum[0], SphP[i].Momentum[1], SphP[i].Energy};
+          double u[4];
+          for(int c = 0; c < 4; c++)
+            u[c] = q[c] / SphP[i].DualArea;
+          if(!rd_rusanov_admissible(u))
+            terminate_program("RD interval hierarchy: inadmissible refreshed state (ID=%llu live=%d active=%d cavity=%d)",
+                              (unsigned long long)P[i].ID, live[i], active, parent[i] >= 0);
+          if(!active && parent[i] < 0)
+            rd_reg_set_trace(i, u);
+          n_refresh++;
+          n_forced_refresh += !active;
+        }
     }
   if(outside_dm > 1e-10)
     terminate_program("RD interval hierarchy: nodal mass changed outside every cavity (rel %g)", outside_dm);
@@ -4233,10 +4260,10 @@ static void rd_ale_interval_event(tessellation *T)
   mpi_printf("RD-IHIER time=%.8g stage=event triangles=%d due=%d forced=%d nondyadic=%d live=%d closed=%d refresh=%d "
              "forced_refresh=%d removed=%d inserted=%d cavities=%d cavity_vertices=%d limited=%d theta_min=%.6g "
              "max_dU=%.3e transfer_rel=%.3e max_ledger=%.3e outside_dm=%.3e cons=%.3e coverage=%+.3e "
-             "work=[%lld,%lld,%lld,%lld]\n",
+             "cfl_ledger_max=%.3f cfl_ledger_over=%d work=[%lld,%lld,%lld,%lld]\n",
              All.Time, RdRegN, n_due, n_forced, n_nondyadic, n_live, n_closed, n_refresh, n_forced_refresh, removed, inserted,
              cavities, n_cavity_vertices, limited, theta_min, max_change, transfer_rel, max_ledger, outside_dm, cons, coverage,
-             RdRegWork[0], RdRegWork[1], RdRegWork[2], RdRegWork[3]);
+             max_cfl_ledger, n_cfl_ledger_over, RdRegWork[0], RdRegWork[1], RdRegWork[2], RdRegWork[3]);
 
   free(uout); free(work); free(uh); free(ul); free(u); free(dm); free(g);
   free(member); free(start); free(new_star); free(old_star);
@@ -7378,7 +7405,37 @@ void compute_residuals(tessellation *T)
   myfree(rd_lr_correction);
 #endif
 
-#ifdef RD_RUSANOV_LOW_ORDER
+#if defined(RD_RUSANOV_LOW_ORDER) && defined(RD_ALE_INTERVAL_HIERARCHY)
+  {
+    /* Interval hierarchy: every closed star is refreshed, so between two
+     * refreshes a vertex is either live for one RK2 interval (the equal-step
+     * convex-weight and stage-CFL checks below, with triangle_dt = h/2) or
+     * frozen in every interval (positivity needs the ledger of
+     * (h/2)(coeff^0+coeff^1) to stay below its refreshed mass, checked at
+     * refresh).  Partial stars hold partial ledgers and are not states. */
+    double max_cfl = 0.0, min_b = 1.0;
+    int live_checked = 0;
+    for(int index = 0; index < NumGas; index++)
+      {
+        SphP[index].RD_CFLLedger += rd_rus_coeff[index];
+        if(!RdIntervalLive[index])
+          continue;
+        const double area = SphP[index].DualArea;
+        const double a = rd_rus_coeff[NumGas + index] / area;
+        const double b = rd_stage == RD_RK_STAGE_PREDICTOR ? 1.0 : 1.5 - a;
+        const double cfl = (rd_stage == RD_RK_STAGE_PREDICTOR ? 2.0 : 1.0 / b) * rd_rus_coeff[index] / area;
+        if(!(area > 0.0) || !(b > 0.0) || b > 1.0 || !isfinite(cfl) || cfl > 1.0)
+          terminate_program("Interval low-order stage CFL/convex weight violated: stage=%d ID=%llu a=%.17g b=%.17g CFL=%.17g",
+                            rd_stage, (unsigned long long)P[index].ID, a, b, cfl);
+        max_cfl = dmax(max_cfl, cfl);
+        min_b = dmin(min_b, b);
+        live_checked++;
+      }
+    mpi_printf("RD-RUSANOV time=%.17g stage=%d interval live=%d CFL_max=%.17g b_min=%.17g\n", All.Time, rd_stage,
+               live_checked, max_cfl, min_b);
+  }
+  myfree(rd_rus_coeff);
+#elif defined(RD_RUSANOV_LOW_ORDER)
   {
     double min_rho = DBL_MAX, min_internal = DBL_MAX, max_cfl = 0.0, min_b = 1.0;
     for(int index = 0; index < NumGas; index++)
