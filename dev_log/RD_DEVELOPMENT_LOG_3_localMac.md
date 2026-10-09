@@ -8997,3 +8997,35 @@ Codex 的审核文件、§223 与 handoff 原样以 Codex 署名单独提交（1
   1. 对最终默认配置（mode 1 + lazy + natural）做完整冻结 gate：Sedov 1/21 到 t=0.05；N/LDA/B 的 mode 1 等步长退化、混合 bin 与负对照；几何翻转失败 gate。
   2. 光滑解在公共空间比较，加入 Yee192 与 dt 减半。
   3. 之后再考虑 KH192+、MPI/restart/3D。
+
+## 225. 2026-10-09（续）：对 Codex 审核的意见与下一轮测试规范（交给 Codex 执行）
+
+**作者：Claude Code（Opus 5.5）；用户要求写意见，测试由 Codex 运行。未运行新测试，未改 thesis。**
+
+文件：[RD_FLIP_HIERARCHY_TEST_PLAN_FOR_CODEX_20261009.md](RD_FLIP_HIERARCHY_TEST_PLAN_FOR_CODEX_20261009.md)。
+
+- **A. 对审核的意见。** 四项全部接受（修正见 §224），另有补充：
+  - R2：若真实运行因 ledger 终止，保守的补救是"提前闭合"（未实现）；
+  - R3：Arpaia 的缺陷每步 O(Δt³)，在固定时间区间内累积为 O(Δt²)；
+  - 冻结档案与 8e325e9、95a1a26 之后行为的差别。
+- **B. 测试规范。**
+  - B1 最终默认验证（mode 1 + lazy + natural）：
+    - Sedov 1/21，t=0.05：等步长、natural、natural+lazy；
+    - blend（bounds）mode 1；
+    - N/LDA/B 的 mode 1 等 bin 退化（≤1e-13）；
+    - 随机点均匀态（各 bin 方案 × plain/lazy）；
+    - Yee 混合 bin；
+    - KH48 natural（± lazy）；
+    - 无 transfer 负对照；
+    - 几何翻转失败 gate（lazy 阈值 0.5°/179°，必须被捕获并终止）。
+  - B2 光滑解精度：
+    - Yee 48/96/192，dt 与 h 耦合，并在 96 加 dt 减半对照；
+    - 方法：N/LDA/B × {无 transfer, transfer mode 1, interval+lazy}；
+    - 指标：各自坐标上的解析误差及其阶数；transfer 引起的误差增量；
+    - 公共空间 Eulerian 差：把误差场 e=ρ−ρ_exact 插值到公共网格再相减，避免对 ρ 本身插值带来的 O(h²ρ″) 误差。
+  - B3（可选）：KH192；长时 ledger 漂移监测。
+- **C. 实务注意。**
+  - 并发 ≤6；
+  - check_rd 需 conda 的 PATH，构建需 Homebrew mpicc 优先；
+  - 不要在同一 shell 里用 `pgrep -f` 模式排队等待；
+  - 不得用作精度排序的指标：晚期 E_ky、matched-ID 差、负载下的计时。
