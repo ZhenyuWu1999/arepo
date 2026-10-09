@@ -185,6 +185,15 @@ velocity noise, and has about 500 nodes with K below the initial minimum. Flip/r
 Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
 [report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
 
+**Codex review addressed (2026-10-09, log3 §224, commit 95a1a26):**
+- R1: explicit flip modes plus `tests/rd/flip_campaign_checks.py`.
+- R2: CFL ledger enforced (`RD_CFL_LEDGER_LIMIT`), gate `../local_runs/cfl_ledger_gate_20261009_v1` passes.
+- R3: Arpaia defect corrected in the report.
+- R4: matched-ID metric renamed; analytic-error increase added.
+
+Next: a final-default full freeze (mode 1 + lazy + natural, Sedov to t=.05, N/LDA/B degeneration and controls),
+then common-space Yee 48/96/192 with dt control.
+
 **Independent Codex review (2026-10-09, log3 §223):**
 Read `RD_FLIP_HIERARCHY_CODEX_REVIEW_20261009.md` alongside Claude's report below.
 Reviewed `eacc3f9..9672ad7`; supports the 2D periodic one-rank conservation path.

@@ -8958,3 +8958,42 @@ floor 比较有舍入级差异，原失败样本保留，未宣称 strict-floor 
 
 建议先修实验定义/CFL执行约束，再完成最终默认配置的完整 gates 和共同空间精度比较，
 随后再考虑 KH192+、MPI/restart/3D。原报告保持不动，以上为独立审核更正。
+
+## 224. 2026-10-09（续）：按 Codex 审核（§223）修正 R1–R4 与报告
+
+**作者：Claude Code（Opus 5.5）；用户要求核查 Codex 指出的错误。四项全部核实并接受。未改 thesis。**
+Codex 的审核文件、§223 与 handoff 原样以 Codex 署名单独提交（1000c67）；本节修正见 95a1a26。
+
+- **R1（模式别名）。**
+  - 所有驱动脚本的 transfer Config 现在显式写出 `RD_FLIP_HIGH_MODE`：原档案用旧默认值的写 0。
+  - 新增 `tests/rd/flip_campaign_checks.py`：prepare 时若缺少 mode 或两个方法的 Config 相同，即报错。
+  - campaign 元数据记录 `flip_high_mode`。
+  - 历史冻结档案不受影响。
+- **R2（CFL ledger 未强制）。**
+  - 冻结顶点的比值若非有限，或超过 `RD_CFL_LEDGER_LIMIT`（默认 1），现在直接终止。
+  - live 顶点的比值可合法达到 1.5，由其 stage 检查覆盖。
+  - 冻结 gate `../local_runs/cfl_ledger_gate_20261009_v1`（Sedov21，HLLC，natural，mode 1，t=0.005）：
+    - 默认限值：完成，ledger 最大 0.103；
+    - 限值 0.05：按预期终止（0.0688 > 0.05）。
+  - 仍没有自动重试或提前闭合。
+- **R3（Arpaia 推导）。**
+  - 我漏了步初的 rebase（SⁿUⁿ→DUⁿ）。无 flip 时的完整缺陷为 Σ ε(Uⁿ⁺¹−Uⁿ)，ε=Sⁿ⁺¹−D=Σc₂/12，每步 O(Δt³)；而不是只算末端的 Σ εUⁿ⁺¹。
+  - 我在对话中给用户的解释同样有误，已更正。
+  - "Sedov 中转换泄漏可忽略"只是对该问题的直接对照，不是一般结论。
+- **R4（matched-ID 指标）。**
+  - 原"transfer−无 transfer ρL1"是同 ID、不同末坐标的轨迹差，不是 Eulerian 场差，不能给出收敛阶。
+  - 已改名为 matched-ID difference，并记录平均位移；新增 analytic-error increase（各自坐标上的解析误差之差）。
+  - Yee 中 transfer 带来的误差增量，glass48→96 下降 3–7×（N 1.18e-4→3.4e-5），但只有两个分辨率、对照不守恒，因此不宣称阶数。
+  - 公共空间比较、第三分辨率（Yee192）与 dt 控制列为下一步。
+- **其他。**
+  - 守恒上限更正为约 3.5e-14。
+  - 混合时端点相等的值直接复制，mode 1 的 donor 对任意 θ 都逐位不变（kernel 测试已断言；check_rd 12/12）。
+  - "不需要限制"仅指 KH runs。
+  - lazy 阈值不是"不会翻转"的保证。
+  - KH 网格距离不是误差界。
+  - 2026-10-09 的计时不可引用。
+- **报告。** [RD_FLIP_HIERARCHY_REPORT_20261009.md](RD_FLIP_HIERARCHY_REPORT_20261009.md) 顶部新增勘误块，正文就地更正并标注 *(corrected)*。
+- **下一步（按 Codex 建议顺序）。**
+  1. 对最终默认配置（mode 1 + lazy + natural）做完整冻结 gate：Sedov 1/21 到 t=0.05；N/LDA/B 的 mode 1 等步长退化、混合 bin 与负对照；几何翻转失败 gate。
+  2. 光滑解在公共空间比较，加入 Yee192 与 dt 减半。
+  3. 之后再考虑 KH192+、MPI/restart/3D。
