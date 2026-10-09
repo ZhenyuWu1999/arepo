@@ -13,6 +13,9 @@ sedov_flip_gate_20261009_v1.  Variants, one rank, equal-step, Campoli + flip:
     sedov_kappa0.1    RD_FLIP_FLOOR_FRACTION=0.1
     sedov_entropy     RD_FLIP_ENTROPY_BOUND=1
     sedov_dmp0        RD_FLIP_DMP_RELAX=0.0
+  Receiver-only high endpoint on Sedov (HLLC-RD, 21- and 1-point):
+    sedov_h1, sedov1_h1   RD_FLIP_HIGH_MODE=1
+Use --only to freeze a subset of variants in a new archive.
 Same ICs (hash-checked) and parameter files as the default gates.
 """
 import argparse
@@ -41,17 +44,21 @@ VARIANTS = {
     'sedov_kappa1e-12': ('sedov', ['RD_FLIP_FLOOR_FRACTION=1e-12']),
     'sedov_kappa0.1': ('sedov', ['RD_FLIP_FLOOR_FRACTION=0.1']),
     'sedov_entropy': ('sedov', ['RD_FLIP_ENTROPY_BOUND=1']),
-    'sedov_dmp0': ('sedov', ['RD_FLIP_DMP_RELAX=0.0'])}
-DEFAULT = {'kh': (KH, 'N_flip', 'kh_N_flip'), 'sedov': (SEDOV, 'HLLC_flip', 'nearest21_HLLC_flip')}
+    'sedov_dmp0': ('sedov', ['RD_FLIP_DMP_RELAX=0.0']),
+    'sedov_h1': ('sedov', ['RD_FLIP_HIGH_MODE=1']),
+    'sedov1_h1': ('sedov1', ['RD_FLIP_HIGH_MODE=1'])}
+DEFAULT = {'kh': (KH, 'N_flip', 'kh_N_flip'), 'sedov': (SEDOV, 'HLLC_flip', 'nearest21_HLLC_flip'),
+           'sedov1': (SEDOV, 'HLLC_flip', 'nearest1_HLLC_flip')}
 
 
-def prepare(root):
+def prepare(root, only=None):
     root.mkdir(parents=True, exist_ok=False)
     freeze(root)
     for folder in ('configs', 'artifacts', 'runs', 'inputs'):
         (root / folder).mkdir()
     cases = []
-    for method, (problem, extra) in VARIANTS.items():
+    variants = {k: v for k, v in VARIANTS.items() if not only or k in only}
+    for method, (problem, extra) in variants.items():
         archive, default_method, default_case = DEFAULT[problem]
         base = (archive / 'configs' / f'{default_method}.sh').read_text()
         assert 'RD_ALE_FLIP_TRANSFER' in base and 'RD_ALE_CAMPOLI_MASS' in base
@@ -70,7 +77,7 @@ def prepare(root):
         (folder / 'param.txt').write_text(param)
         cases.append(dict(name=method, method=method, problem=problem, flags=extra, default=str(archive / 'runs' / default_case),
                           end=ref['end'], ic=str(ic), ic_sha256=sha(ic), param_sha256=sha(folder / 'param.txt'), ranks=1))
-    write(root / 'campaign.json', dict(test='flip_limiter_sensitivity', methods=list(VARIANTS), cases=cases, description=__doc__))
+    write(root / 'campaign.json', dict(test='flip_limiter_sensitivity', methods=list(variants), cases=cases, description=__doc__))
     shutil.copy2(__file__, root / Path(__file__).name)
     print('Prepared', len(cases), 'cases.', flush=True)
 
@@ -102,9 +109,10 @@ if __name__ == '__main__':
     p.add_argument('action', choices=('prepare', 'build', 'run'))
     p.add_argument('root', type=Path)
     p.add_argument('--workers', type=int, default=2)
+    p.add_argument('--only', nargs='+', choices=list(VARIANTS))
     a = p.parse_args(); root = a.root.resolve()
     if a.action == 'prepare':
-        prepare(root)
+        prepare(root, a.only)
     elif a.action == 'build':
         build(root, None)
     else:
