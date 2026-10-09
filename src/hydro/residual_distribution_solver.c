@@ -3595,6 +3595,8 @@ static int RdRegN = 0;
 static double RdRegTotal[4];
 static long long RdRegWork[4]; /* element updates, forced updates, non-dyadic intervals, events */
 static struct rd_reg_idmap *RdIdMap = NULL;
+static int *RdIdDirect = NULL; /* id -> local index when IDs are dense (max ID <= 4 NumGas), else NULL */
+static MyIDType RdIdDirectMax = 0;
 static char *RdIntervalClosed = NULL; /* local index -> whole star closed in this event */
 
 static int rd_reg_key_cmp(const MyIDType *a, const MyIDType *b)
@@ -3633,10 +3635,30 @@ static void rd_reg_build_idmap(void)
   for(int i = 1; i < NumGas; i++)
     if(RdIdMap[i].id == RdIdMap[i - 1].id)
       terminate_program("RD interval hierarchy requires unique particle IDs");
+  /* Dense IDs (the usual case): O(1) lookup instead of a binary search. */
+  free(RdIdDirect);
+  RdIdDirect = NULL;
+  RdIdDirectMax = NumGas > 0 ? RdIdMap[NumGas - 1].id : 0;
+  if(NumGas > 0 && RdIdDirectMax <= (MyIDType)4 * NumGas)
+    {
+      RdIdDirect = (int *)malloc((RdIdDirectMax + 1) * sizeof(int));
+      if(RdIdDirect == NULL)
+        terminate_program("RD interval hierarchy: ID table allocation failed");
+      for(MyIDType id = 0; id <= RdIdDirectMax; id++)
+        RdIdDirect[id] = -1;
+      for(int i = 0; i < NumGas; i++)
+        RdIdDirect[RdIdMap[i].id] = RdIdMap[i].index;
+    }
 }
 
 static int rd_reg_index(MyIDType id)
 {
+  if(RdIdDirect != NULL)
+    {
+      if(id > RdIdDirectMax || RdIdDirect[id] < 0)
+        terminate_program("RD interval hierarchy: registry vertex ID=%llu is not a local gas particle", (unsigned long long)id);
+      return RdIdDirect[id];
+    }
   int lo = 0, hi = NumGas - 1;
   while(lo <= hi)
     {
