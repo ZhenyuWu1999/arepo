@@ -335,6 +335,17 @@ static int rd_rusanov_local_index(const point *dp)
 #define RD_FLIP_HIGH_MODE 0
 #endif
 #endif
+#ifdef RD_ALE_LAZY_FLIP
+#ifndef RD_ALE_INTERVAL_HIERARCHY
+#error "RD_ALE_LAZY_FLIP adopts registry changes and requires RD_ALE_INTERVAL_HIERARCHY."
+#endif
+#ifndef RD_LAZY_MIN_ANGLE
+#define RD_LAZY_MIN_ANGLE 15.0 /* degrees: adopt a cavity once an old triangle is this thin */
+#endif
+#ifndef RD_LAZY_DELAUNAY_EXCESS
+#define RD_LAZY_DELAUNAY_EXCESS 20.0 /* degrees: ... or an old edge violates Delaunay by this much */
+#endif
+#endif
 #if defined(RD_ALE_INTERVAL_NO_TRANSFER) && !defined(RD_ALE_INTERVAL_HIERARCHY)
 #error "RD_ALE_INTERVAL_NO_TRANSFER is a negative control of RD_ALE_INTERVAL_HIERARCHY."
 #endif
@@ -3796,7 +3807,7 @@ static void rd_reg_init(tessellation *T)
   mpi_printf("RD-IHIER-INIT time=%.8g triangles=%d vertices=%d\n", All.Time, RdRegN, NumGas);
 }
 
-#ifdef RD_DEBUG_ASSERTS
+#if defined(RD_DEBUG_ASSERTS) && !defined(RD_ALE_LAZY_FLIP)
 /*! At the opening hook the registry must be exactly the live connectivity. */
 static void rd_reg_check_mesh(tessellation *T)
 {
@@ -3937,6 +3948,18 @@ static void rd_ale_interval_prepare(tessellation *T, struct rd_element_set *set,
     }
 }
 
+#ifdef RD_ALE_LAZY_FLIP
+static int rd_lazy_edge_compare(const void *pa, const void *pb)
+{
+  const MyIDType *a = (const MyIDType *)pa, *b = (const MyIDType *)pb; /* struct starts with the two IDs */
+  if(a[0] != b[0])
+    return a[0] < b[0] ? -1 : 1;
+  if(a[1] != b[1])
+    return a[1] < b[1] ? -1 : 1;
+  return 0;
+}
+#endif
+
 /*! One synchronisation event of the interval hierarchy (see block comment). */
 static void rd_ale_interval_event(tessellation *T)
 {
@@ -3976,6 +3999,89 @@ static void rd_ale_interval_event(tessellation *T)
           inserted++;
         }
     }
+  /* keep_new[b]: the new triangle enters the registry (always, unless lazy). */
+  char *keep_new = (char *)malloc(nf > 0 ? nf : 1);
+  if(keep_new == NULL)
+    terminate_program("RD interval hierarchy: allocation failed");
+  for(int b = 0; b < nf; b++)
+    keep_new[b] = 1;
+  int n_adopted = 0, n_deferred = 0;
+  double deferred_min_angle = 180.0, deferred_max_excess = -180.0;
+#ifdef RD_ALE_LAZY_FLIP
+  {
+    /* Lazy flipping: a changed component (its old and new triangles tile
+     * the same polygon) is adopted only once its old triangles are poor:
+     * minimum angle below RD_LAZY_MIN_ANGLE or an old interior edge whose
+     * opposite angles exceed pi by RD_LAZY_DELAUNAY_EXCESS.  Otherwise the
+     * old, still valid connectivity is kept: no forced closure, no transfer. */
+    struct rd_lazy_edge
+    {
+      MyIDType a, b;
+      double angle;
+      int root;
+    } *edges = malloc((3 * removed > 0 ? 3 * removed : 1) * sizeof(*edges));
+    double *root_angle = (double *)malloc(NumGas * sizeof(double)), *root_excess = (double *)malloc(NumGas * sizeof(double));
+    char *adopt = (char *)calloc(NumGas, 1);
+    int *croot = (int *)malloc(NumGas * sizeof(int));
+    if(edges == NULL || root_angle == NULL || root_excess == NULL || adopt == NULL || croot == NULL)
+      terminate_program("RD lazy flip: allocation failed");
+    for(int i = 0; i < NumGas; i++)
+      {
+        croot[i] = parent[i] >= 0 ? rd_reg_find(parent, i) : -1;
+        root_angle[i] = M_PI;
+        root_excess[i] = -M_PI;
+      }
+    int ne = 0;
+    for(int a = 0; a < RdRegN; a++)
+      if(dying[a])
+        {
+          int index[3];
+          double x[3][2];
+          rd_reg_coordinates(RdReg[a].ccw, index, x);
+          const int root = croot[index[0]];
+          for(int v = 0; v < 3; v++)
+            {
+              const int v1 = (v + 1) % 3, v2 = (v + 2) % 3;
+              const double ex = x[v1][0] - x[v][0], ey = x[v1][1] - x[v][1], fx = x[v2][0] - x[v][0], fy = x[v2][1] - x[v][1];
+              const double angle = atan2(fabs(ex * fy - ey * fx), ex * fx + ey * fy);
+              root_angle[root] = dmin(root_angle[root], angle);
+              MyIDType ia = RdReg[a].ccw[v1], ib = RdReg[a].ccw[v2];
+              edges[ne].a = ia < ib ? ia : ib;
+              edges[ne].b = ia < ib ? ib : ia;
+              edges[ne].angle = angle;
+              edges[ne].root = root;
+              ne++;
+            }
+        }
+    qsort(edges, ne, sizeof(*edges), rd_lazy_edge_compare);
+    for(int k = 1; k < ne; k++)
+      if(edges[k].a == edges[k - 1].a && edges[k].b == edges[k - 1].b)
+        root_excess[edges[k].root] = dmax(root_excess[edges[k].root], edges[k].angle + edges[k - 1].angle - M_PI);
+    const double min_angle = RD_LAZY_MIN_ANGLE * M_PI / 180.0, max_excess = RD_LAZY_DELAUNAY_EXCESS * M_PI / 180.0;
+    for(int i = 0; i < NumGas; i++)
+      if(croot[i] == i)
+        {
+          adopt[i] = root_angle[i] < min_angle || root_excess[i] > max_excess;
+          n_adopted += adopt[i];
+          n_deferred += !adopt[i];
+          if(!adopt[i])
+            {
+              deferred_min_angle = dmin(deferred_min_angle, root_angle[i] * 180.0 / M_PI);
+              deferred_max_excess = dmax(deferred_max_excess, root_excess[i] * 180.0 / M_PI);
+            }
+        }
+    for(int a = 0; a < RdRegN; a++)
+      if(dying[a] && !adopt[croot[rd_reg_index(RdReg[a].key[0])]])
+        dying[a] = 0;
+    for(int b = 0; b < nf; b++)
+      if(match[b] < 0 && !adopt[croot[rd_reg_index(fresh[b].t.key[0])]])
+        keep_new[b] = 0;
+    for(int i = 0; i < NumGas; i++)
+      if(croot[i] >= 0 && !adopt[croot[i]])
+        parent[i] = -1;
+    free(croot); free(adopt); free(root_excess); free(root_angle); free(edges);
+  }
+#endif
 
   /* 2. Closure set, vertex stars and the live predictor mask. */
   char *due = (char *)malloc(RdRegN > 0 ? RdRegN : 1);
@@ -4097,6 +4203,7 @@ static void rd_ale_interval_event(tessellation *T)
   double *old_star = (double *)calloc(NumGas, sizeof(double)), *new_star = (double *)calloc(NumGas, sizeof(double));
   if(old_star == NULL || new_star == NULL)
     terminate_program("RD interval hierarchy: allocation failed");
+  /* new_star: the next registry (kept old triangles and adopted new ones). */
   for(int r = 0; r < RdRegN; r++)
     {
       int index[3];
@@ -4106,11 +4213,16 @@ static void rd_ale_interval_event(tessellation *T)
       if(!(area > 0.0))
         terminate_program("RD interval registry triangle is inverted at the current time");
       for(int v = 0; v < 3; v++)
-        old_star[index[v]] += area / 3.0;
+        {
+          old_star[index[v]] += area / 3.0;
+          if(!dying[r])
+            new_star[index[v]] += area / 3.0;
+        }
     }
   for(int b = 0; b < nf; b++)
-    for(int v = 0; v < 3; v++)
-      new_star[rd_reg_index(fresh[b].t.ccw[v])] += fresh[b].area / 3.0;
+    if(match[b] < 0 && keep_new[b])
+      for(int v = 0; v < 3; v++)
+        new_star[rd_reg_index(fresh[b].t.ccw[v])] += fresh[b].area / 3.0;
   double max_ledger = 0.0, outside_dm = 0.0, max_cfl_ledger = 0.0;
   int n_refresh = 0, n_forced_refresh = 0, n_cfl_ledger_over = 0;
   for(int i = 0; i < NumGas; i++)
@@ -4249,14 +4361,36 @@ static void rd_ale_interval_event(tessellation *T)
 #endif
 
   /* 6. Commit: retained triangles keep their (possibly just closed) start. */
-  struct rd_reg_triangle *next = (struct rd_reg_triangle *)malloc((nf > 0 ? nf : 1) * sizeof(*next));
+  int n_next = 0;
+  for(int r = 0; r < RdRegN; r++)
+    n_next += !dying[r];
+  for(int b = 0; b < nf; b++)
+    n_next += match[b] < 0 && keep_new[b];
+  struct rd_reg_triangle *next = (struct rd_reg_triangle *)malloc((n_next > 0 ? n_next : 1) * sizeof(*next));
   if(next == NULL)
     terminate_program("RD interval hierarchy: allocation failed");
-  for(int b = 0; b < nf; b++)
-    next[b] = match[b] >= 0 ? RdReg[match[b]] : fresh[b].t;
+  int filled = 0;
+  for(int a = 0, b = 0; a < RdRegN || b < nf;)
+    {
+      if(b < nf && (match[b] >= 0 || !keep_new[b]))
+        {
+          b++; /* retained twins come from the registry; deferred new triangles are dropped */
+          continue;
+        }
+      if(a < RdRegN && dying[a])
+        {
+          a++;
+          continue;
+        }
+      const int take_old = b >= nf || (a < RdRegN && rd_reg_key_cmp(RdReg[a].key, fresh[b].t.key) < 0);
+      next[filled++] = take_old ? RdReg[a++] : fresh[b++].t;
+    }
+  if(filled != n_next || n_next != 2 * NumGas)
+    terminate_program("RD interval hierarchy: committed registry has %d triangles (expected %d, 2N=%d)", filled, n_next,
+                      2 * NumGas);
   free(RdReg);
   RdReg = next;
-  RdRegN = nf;
+  RdRegN = n_next;
 
   /* Totals are meaningful when every triangle has just been closed. */
   RdRegWork[0] += n_due;
@@ -4284,15 +4418,17 @@ static void rd_ale_interval_event(tessellation *T)
   mpi_printf("RD-IHIER time=%.8g stage=event triangles=%d due=%d forced=%d nondyadic=%d live=%d closed=%d refresh=%d "
              "forced_refresh=%d removed=%d inserted=%d cavities=%d cavity_vertices=%d limited=%d theta_min=%.6g "
              "max_dU=%.3e transfer_rel=%.3e max_ledger=%.3e outside_dm=%.3e cons=%.3e coverage=%+.3e "
-             "cfl_ledger_max=%.3f cfl_ledger_over=%d work=[%lld,%lld,%lld,%lld]\n",
+             "cfl_ledger_max=%.3f cfl_ledger_over=%d adopted=%d deferred=%d deferred_min_angle=%.2f "
+             "deferred_max_excess=%.2f work=[%lld,%lld,%lld,%lld]\n",
              All.Time, RdRegN, n_due, n_forced, n_nondyadic, n_live, n_closed, n_refresh, n_forced_refresh, removed, inserted,
              cavities, n_cavity_vertices, limited, theta_min, max_change, transfer_rel, max_ledger, outside_dm, cons, coverage,
-             max_cfl_ledger, n_cfl_ledger_over, RdRegWork[0], RdRegWork[1], RdRegWork[2], RdRegWork[3]);
+             max_cfl_ledger, n_cfl_ledger_over, n_adopted, n_deferred, deferred_min_angle, deferred_max_excess, RdRegWork[0],
+             RdRegWork[1], RdRegWork[2], RdRegWork[3]);
 
   free(uout); free(work); free(uh); free(ul); free(u); free(dm); free(g);
   free(member); free(start); free(new_star); free(old_star);
   free(closed_star); free(live); free(smax); free(smin); free(closed); free(degree); free(rindex); free(due);
-  free(parent); free(dying); free(match); free(fresh);
+  free(parent); free(keep_new); free(dying); free(match); free(fresh);
 }
 #endif /* RD_ALE_INTERVAL_HIERARCHY */
 
@@ -4977,7 +5113,7 @@ void rd_step_begin(tessellation *T)
 #ifdef RD_ALE_INTERVAL_HIERARCHY
   if(RdReg == NULL)
     rd_reg_init(T);
-#ifdef RD_DEBUG_ASSERTS
+#if defined(RD_DEBUG_ASSERTS) && !defined(RD_ALE_LAZY_FLIP)
   else
     rd_reg_check_mesh(T);
 #endif
