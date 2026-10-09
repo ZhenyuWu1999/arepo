@@ -60,11 +60,14 @@ static lapack_int solve_system(int n, double *A, double *b);
 #error "RD_RUSANOV_LOW_ORDER requires full-mesh, equal-step N/lumped RK2 and tree timesteps."
 #endif
 #if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_ELEMENT_COMOVING_FRAME) || defined(RD_ALE_CONTOUR_RESIDUAL) || \
-    defined(RD_ALE_CAMPOLI_MASS) || defined(RD_DIAG_NO_KICK) || \
+    defined(RD_DIAG_NO_KICK) || \
     defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(MHD) || \
     defined(PASSIVE_SCALARS) || defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || \
     defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
-#error "RD_RUSANOV_LOW_ORDER is periodic, hydro-only, lab-frame static/Arpaia ALE."
+#error "RD_RUSANOV_LOW_ORDER is periodic, hydro-only, lab-frame static or Arpaia/Campoli ALE."
+#endif
+#if defined(RD_ALE_CAMPOLI_MASS) && !defined(RD_ALE_EQUALSTEP)
+#error "RD_RUSANOV_LOW_ORDER with Campoli mass is an equal-step ALE option."
 #endif
 #ifdef RD_LOW_ORDER_HLLC
 /* Replaces only the element kernel and its per-vertex stage coefficient;
