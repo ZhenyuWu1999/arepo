@@ -8688,3 +8688,76 @@ Kuzmin+2010、Guermond 凸限制；无“分层+中途重连”文献。设计�
 规划代理补充：旧修复 KH −20.6% 可能部分源于 N/LDA 预测器用未修复 primitive 的 bug，应先只修 refresh 重跑；
 分层中强制刷新可不改时间箱（每点 CFL ledger）。下一步：修多 flip 测试→加入 check_rd→registry/cavity（C）→
 RD_ALE_FLIP_TRANSFER 接线+全方案 primitive refresh→Campoli 全方案→原生 gate。未改 thesis。
+
+## 218. 2026-10-09：Phase 1 实现——RD_ALE_FLIP_TRANSFER、全方案 primitive refresh、Campoli 全方案；KH 三方对比与 Sedov 首批结果
+
+**作者：Claude Code（Opus 5.5）；分支 `feature/ale-flip-conservation-hierarchy`，提交 46632e7…9de3bb3。未改 thesis。**
+
+**代码。**
+- 多 flip 测试改为逐腔体有效性（取向、面积平铺、非凸包点、g⁺>0），295 个 Delaunay 腔体（156 个 >4 点）。
+  `test_flip_transfer.py` 与 `test_lda_rusanov.py`、`test_hllc_positivity.py`、`test_lda_hllc_blend.py` 加入
+  `make check_rd`（9 项全过）。
+- 新增 `RD_ALE_FLIP_TRANSFER`（仅等步长、单 rank）：
+  - 旧三角形捕获升为生产代码，以排序 ID 三元组为键。
+  - 新三角形回拉到 x^n，排序合并求对称差；对变化三角形的顶点做 union-find 得到精确腔体。
+  - g=DualArea，δm=pullback−DualArea；断言腔外 |δm|/g≤1e-10、腔内守恒 ≤1e-12。
+  - 调用内核后写回 ale_uold，并刷新 primitive。
+  - `RD-FLIP` 诊断行；Campoli+transfer 时 `RD-ALE-FINISH` 改为硬断言（每步 endpoint_change ≤1e-11 相对）。
+  - 与旧修复互斥，需 EQUALSTEP。
+- **Bug 修复（全方案）：** 旧拓扑修复后只有 Rusanov 路径刷新 Density/Vel/Pressure，N/LDA/B 的 stage-0
+  用的是未修复的 primitive。现改为所有方案都刷新；`RD_ALE_REPAIR_STALE_PRIMITIVES` 可重现旧行为供对比。
+- Campoli 现可用于 Rusanov/HLLC（等步长）及 LDA/HLLC blend（含 transfer）。低阶校正器
+  (a−½)Uⁿ+b[…] 中 a=时间质量/除数，b=3/2−a；两种质量都有运行时检查。
+- 内核新增 `high_mode=1`（`RD_FLIP_HIGH_MODE`）：donor 不动，线性精确修正只加在 receiver 上，L1 变化同为 |D|。
+  - 两种模式都通过全部测试；随机单 flip 中 mode 1 受限 1912 次，mode 0 为 2894 次。
+  - 新增驻定接触测试（v=0、p 均匀、ρ 跳变至 1e6）：任何 θ 下 v 精确为 0、p 均匀到舍入。
+  - 熵测试容差加入 K_min 自身的舍入（冷点 e/E≈6e-8，单例 41）。
+- **最优性说明：** 在 L∞ 与集中质量 L2 意义下，均匀平移都是满足守恒的最小修正：
+  min Σg⁺ΔU² s.t. Σg⁺ΔU=−D 给出 ΔU=常数。
+  - 单个 2-2 flip（正方形边长 h）：D=−H_xy h⁴/6，每点变化 O(h²U'')。
+  - KH glass48 中 tanh 宽 .025≈1.2h，界面处单次 flip 的密度变化约 3%；glass96 应降为约 1/4。
+
+**KH t=10（glass48，Arpaia N，`run_kh_repair_refresh.py`）。**
+- 归档 `../local_runs/kh_repair_refresh_20261009_v1`；分析 `examples/gresho_2d/analyze_kh_repair_refresh.py`。
+- 三个方法：control（无修复）、stale（旧修复+旧 primitive）、refresh（旧修复+刷新）。
+
+| 方法 | E_ky 峰值（时刻） | 相对 control | 质量漂移 | 能量漂移 |
+|---|---|---|---|---|
+| control | 0.0585 (t=8.0) | — | +1.35e-3 | −5.3e-4 |
+| stale | 0.0729 (t=9.0) | +24.7% | −7.0e-6 | −1.0e-7 |
+| refresh | 0.0887 (t=10，仍在增长) | +51.6% | −2.4e-8 | −1.3e-8 |
+
+- 结论：**修 refresh 后差异没有变小，反而变大。**
+- 时间序列显示：
+  - 初始 seed 模式先振荡衰减（t<2.5），t=1.2 处三者只差 5–6%。
+  - 此后增长从噪声级 seed 重新开始，起始时间对小扰动敏感（control≈3.0、stale≈3.2、refresh≈3.6）。
+  - 因此 glass48 的晚期 E_ky 峰值主要反映起始时间，不是稳健的精度指标。
+- 已启动分辨率研究（见下）。
+
+**Sedov HLLC-RD moving + Campoli + transfer（scratch 开发运行，非冻结）。**
+
+| 注入方式 | 到达时刻 | 腔体 | θ<1 | θ_min | 总量漂移 |
+|---|---|---|---|---|---|
+| 21 点 | t=0.05 | 4720 | 93 | 0.034 | ≤1.3e-15 |
+| 1 点 | t=0.0488（被参数 TimeLimitCPU=1800 截停） | 4664 | 88 | 0.038 | ≤1.2e-14 |
+
+- 两例都保持正性；旧修复在此情形因负压中止。
+- 对照 thesis 的 Arpaia 运行，t=0.0375 时 Arpaia 漂移为：
+  - 21 点：质量 −0.28%、能量 +0.33%；
+  - 1 点：质量 −0.29%、能量 −1.97%。
+- 剖面差 L1(ρ)≈0.0076；壳峰 3.40 vs 3.34。
+- LDA/HLLC blend + Campoli + transfer 冒烟（pos/bounds）：t≈0.006–0.01 内每步守恒约 1e-16，b_min≈0.495，
+  约 30% 腔体 θ<1。
+
+**冻结 gate 活动（进行中）。**
+- `../local_runs/flip_gates_20261009_v1`（`tests/rd/run_flip_gates.py`、`analyze_flip_gates.py`）：
+  - 方法：{N,LDA,B,HLLC}×{Campoli, Campoli+transfer}，外加 N_flip_h1，γ=1.4。
+  - uniform 组 18/18 通过：glass48 t=1/32 无 flip；随机点均匀态 t=1/4 有 1278 个腔体、θ=1，
+    状态缺陷 ≤5e-15，总量精确不变。
+  - Sod 与 Yee48/96（science 组）、KH t=10（kh 组）待跑。
+- `../local_runs/kh_flip_resolution_20261009_v1`（`examples/gresho_2d/run_kh_flip_resolution.py`）：
+  - N {arpaia, campoli, flip, flip_h1} × glass48/96。
+  - glass48 IC 逐位重现归档 IC；glass96 为 2×2 平铺。
+  - glass96 每例约 1 天。
+- 待做：Sedov 冻结 gate（`examples/Sedov_2d/run_flip_sedov.py`，HLLC 与 blend，有/无 transfer）；
+  限制器敏感性（floor κ、DMP、熵界）。

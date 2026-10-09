@@ -185,18 +185,37 @@ velocity noise, and has about 500 nodes with K below the initial minimum. Flip/r
 Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
 [report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
 
-**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-08, log3 §217):**
-Work is on branch `feature/ale-flip-conservation-hierarchy` (base `eacc3f9`,
-the committed develop snapshot). Plan:
-`~/.claude/plans/i-have-already-submitted-tender-spindle.md`; design
-`RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md`; detailed steps
-`RD_FLIP_HIERARCHY_IMPLEMENTATION_PLAN_20261008.md`. Done: kernel
-`src/hydro/rd_flip_transfer.h` + `tests/rd/test_flip_transfer.py` (single
-flips pass). Resume at: fix the multi-flip Delaunay section of that test
-(validity filter rejects all samples), add it to `check_rd`, then Phase 1
-registry/cavities in C, `RD_ALE_FLIP_TRANSFER` wiring, primitive refresh
-for all schemes (also re-run old KH repair with only the refresh fix),
-Campoli for all schemes, native gates. Python: 21cmfast env; OMP/BLAS=1.
+**CURRENT HANDOFF — flip element + moving hierarchy (2026-10-09, log3 §§217–218):**
+Branch `feature/ale-flip-conservation-hierarchy` (last commit 9de3bb3). Plan:
+`~/.claude/plans/i-have-already-submitted-tender-spindle.md`; design and detailed
+steps in `RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md`,
+`RD_FLIP_HIERARCHY_IMPLEMENTATION_PLAN_20261008.md`.
+
+Phase 1 is implemented:
+- `RD_ALE_FLIP_TRANSFER`: exact ID-triple cavities, kernel
+  `rd_flip_transfer.h` (`RD_FLIP_HIGH_MODE` 0/1), hard per-step conservation
+  assert with Campoli.
+- Primitive refresh for all schemes (bug fix).
+- Campoli for HLLC and the LDA/HLLC blend.
+
+Results so far:
+- Uniform gates pass.
+- Sedov HLLC with flip transfer + Campoli is positive and conserves to round-off.
+- In KH glass48 the old repair changes E_ky by +25% (stale) / +52% (refresh)
+  vs control. This is onset timing after the seed decays, so it is not robust.
+
+Running (check `*.science.log` and `*.run.log`):
+- `../local_runs/flip_gates_20261009_v1`: science group (Sod, Yee).
+  Then run `--group kh` and `tests/rd/analyze_flip_gates.py`.
+- `../local_runs/kh_flip_resolution_20261009_v1`: KH glass48/96, about 1 day.
+
+Next:
+- Freeze and run the Sedov gate (`examples/Sedov_2d/run_flip_sedov.py`, not
+  yet prepared).
+- Limiter sensitivity.
+- Then Phase 2A (registry + actual intervals, N).
+
+Python: 21cmfast env; OMP/BLAS=1. Do not edit the thesis.
 
 **Chapter4 Sedov figures inserted (2026-10-02, log3 §§212–213):** user moved the
 FV-RD derivation to Chapter3 §3.2.5 (`section:FV_RD_schemes`, DR2017 Fig.2 copy)
