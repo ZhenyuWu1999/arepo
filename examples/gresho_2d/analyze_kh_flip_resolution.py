@@ -3,7 +3,7 @@
 
 For each resolution and method: E_ky(t) peak and time, mass/energy drift,
 entropy excursion (analyze_kh_repair_refresh.series).  The convergence test of
-the flip transfer: mass-weighted rho, v_y and p binned on a common 32x32 grid,
+the flip transfer: mass-weighted rho, v_y and p binned on a common 16x16 grid (glass48 has ~9 points per cell),
 and the L1 grid difference between each method and the Campoli run (same
 resolution, no topology treatment) at t = 1, 2, 3.  If the transfer is an
 O(h^2) perturbation, the glass96 differences are about 4 times smaller.
@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from analyze_kh_repair_refresh import series   # noqa: E402
 
-NG = 32
+NG = 16
 TIMES = (1.0, 2.0, 3.0)
 
 
