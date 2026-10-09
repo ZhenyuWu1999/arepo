@@ -72,8 +72,20 @@ where a_i and b_i are the old and new lumped P1 masses. This residual:
 |---|---|
 | Uniform glass48 (8 steps) and uniform random points (t = 1/4, 1278 cavities) | 18/18 runs: state exact to ≤5e-15, totals unchanged |
 | Sod glass Nx64, t = 0.08, N | Campoli without transfer drifts −2.2e-4 (mass) and −6.1e-4 (energy). With transfer: 1.4e-15 and 9.7e-16, over 4773 cavities, all θ = 1. Flip − no-flip density L1 = 6e-4. |
-| Remaining Sod and Yee cases | pending |
+| Sod, all schemes (27/27 science runs complete) | With transfer every scheme conserves to ≤1.4e-15. Campoli without transfer drifts (mass/energy): N −2.2e-4/−6.1e-4, LDA −7.2e-4/−1.1e-3, B −4.7e-4/−1.0e-3, HLLC −1.3e-4/−3.8e-4. Flip − no-flip density L1: N 6.0e-4, LDA 1.7e-3, B 8.8e-4, HLLC 3.8e-4. All θ = 1. |
 | KH t = 10 | pending |
+
+**Yee vortex: convergence of the transfer perturbation.** Each pair has the same resolution and dt; the difference is with transfer minus without (Campoli only). Without transfer the totals drift by ≈2e-5; with it they are exact.
+
+| Scheme | ρ L1 difference, glass48 | glass96 | ratio | change of ρ L1 error vs analytic, 48 → 96 |
+|---|---|---|---|---|
+| N | 1.17e-4 | 3.5e-5 | 3.3 | +4.2 % → +2.1 % |
+| LDA | 1.43e-4 | 4.1e-5 | 3.5 | +5.4 % → +2.6 % |
+| B | 1.29e-4 | 3.6e-5 | 3.6 | +9.0 % → +5.9 % |
+| HLLC-RD | 1.00e-4 | 4.0e-5 | 2.5 | +2.4 % → +1.4 % |
+| N, high mode 1 | 1.37e-4 | 3.6e-5 | 3.8 | +4.1 % → +2.1 % |
+
+The flip perturbation converges at close to second order (O(h²) predicts a ratio of 4), and its share of the error against the exact solution halves under refinement. In smooth flow the transfer therefore costs only the O(h²) that conservation requires. Receiver-only high mode 1 behaves like the uniform shift.
 
 ### 3.3 Sedov gate `local_runs/sedov_flip_gate_20261009_v1` (γ = 5/3)
 
