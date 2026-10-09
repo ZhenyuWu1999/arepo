@@ -192,7 +192,18 @@ Equal bins, glass48:
 | Uniform random | 1249 → 407 | state exact (6e-15) |
 | Yee t = 1 | 245 → 64 | ρ/v/p L1 −1.4/+1.2/−1.0 % |
 
-KH t = 10 (plain vs lazy): running.
+KH glass48, t = 10, equal bins:
+
+| Run | Flip cavities | E_ky peak (t) | Mass drift | Entropy excursion |
+|---|---|---|---|---|
+| Arpaia, no topology treatment | — | 5.85e-2 (8.0) | +1.35e-3 | 0.42 |
+| Interval + transfer, all flips | 76 858 | 6.86e-2 (6.6) | −1.9e-15 | 0.66 |
+| Interval + transfer, lazy | 18 180 | 7.71e-2 (7.0) | 2.2e-15 | 0.48 |
+
+- Up to t ≈ 1.8, all three runs agree within 3 %.
+- The onset of the noise-seeded secondary growth differs in every pair of runs, so late E_ky peaks do not rank accuracy.
+- Lazy flipping cuts events 4.2× and lowers the entropy excursion (0.66 → 0.48).
+- With the entropy bound off (the default), the uniform-shift transfer raises the entropy excursion. The entropy-bounded limiter therefore has to be tested on KH (decision D2).
 
 ## 6. Open items
 
