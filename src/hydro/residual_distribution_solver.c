@@ -1824,6 +1824,26 @@ static void rd_ale_set_particle_q(int i, double area, const double u[4])
   if(SphP[i].DualArea > 0.0)
     SphP[i].Momentum[2] *= area / SphP[i].DualArea;
 }
+
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
+/* After a connectivity transfer the stage-0 residual reads SphP/P primitives,
+ * while RD_Ustage0 is recovered later from Q/DualArea.  Set the primitives
+ * from the transferred conservative density so both use the same state.
+ * No floors; the mesh velocity of this interval is left unchanged. */
+static void rd_ale_refresh_primitives(int i, const double u[4])
+{
+  const double internal = u[3] - 0.5 * (u[1] * u[1] + u[2] * u[2]) / u[0];
+  if(!(u[0] > 0.0) || !(internal > 0.0) || !isfinite(internal))
+    terminate_program("RD topology transfer produced an inadmissible state: ID=%llu rho=%g e=%g",
+                      (unsigned long long)P[i].ID, u[0], internal);
+  SphP[i].Density = u[0];
+  P[i].Vel[0] = u[1] / u[0];
+  P[i].Vel[1] = u[2] / u[0];
+  SphP[i].Utherm = internal / u[0];
+  SphP[i].Pressure = GAMMA_MINUS1 * internal;
+  SphP[i].Csnd = sqrt(GAMMA * SphP[i].Pressure / u[0]);
+}
+#endif
 #ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
 #define RD_ALE_TOPOLOGY_SUPPORT_FACTOR 65536.0
 #define RD_ALE_TOPOLOGY_AUDIT_FACTOR 262144.0
@@ -2757,23 +2777,16 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
     }
 #ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
   rd_ale_apply_topology_repair(T, set);
-#ifdef RD_RUSANOV_LOW_ORDER
+#ifndef RD_ALE_REPAIR_STALE_PRIMITIVES
   /* The predictor residual and its saved initial state must use the same
-   * repaired U. Recover only primitive fields: do not invoke floors or
-   * change the mesh velocities that defined this interval's geometry.
-   * The existing unlimited topology map can still fail admissibility. */
+   * repaired U, for every distribution scheme (before 2026-10-09 only the
+   * Rusanov build did this; N/LDA/B evaluated the predictor from the
+   * unrepaired primitives).  RD_ALE_REPAIR_STALE_PRIMITIVES reproduces the
+   * old behaviour for comparison. */
   for(int i = 0; i < NumGas; i++)
-    {
-      const double *u = set->ale_uold[i];
-      if(!rd_rusanov_admissible(u))
-        terminate_program("Rusanov topology input is not admissible");
-      SphP[i].Density = u[0];
-      P[i].Vel[0] = u[1] / u[0];
-      P[i].Vel[1] = u[2] / u[0];
-      SphP[i].Utherm = rd_rusanov_internal(u) / u[0];
-      SphP[i].Pressure = GAMMA_MINUS1 * rd_rusanov_internal(u);
-      SphP[i].Csnd = sqrt(GAMMA * SphP[i].Pressure / u[0]);
-    }
+    rd_ale_refresh_primitives(i, set->ale_uold[i]);
+#elif defined(RD_RUSANOV_LOW_ORDER)
+#error "RD_ALE_REPAIR_STALE_PRIMITIVES is a comparison switch for N/LDA/B only."
 #endif
 #endif
 
