@@ -499,6 +499,10 @@ check_rd:
 	@$(PYTHON) tests/rd/test_n_frame_covariance.py
 	@$(PYTHON) tests/rd/test_ale_shear_eigenvalue_floor.py
 	@$(PYTHON) tests/rd/test_rusanov_positivity.py
+	@$(PYTHON) tests/rd/test_lda_rusanov.py
+	@$(PYTHON) tests/rd/test_hllc_positivity.py
+	@$(PYTHON) tests/rd/test_lda_hllc_blend.py
+	@$(PYTHON) tests/rd/test_flip_transfer.py
 
 $(CONFIG_CHECK): $(TO_CHECK) $(CONFIG) check.py
 	@$(PYTHON) check.py 2 $(CONFIG) $(CONFIG_CHECK) defines_extra $(TO_CHECK)

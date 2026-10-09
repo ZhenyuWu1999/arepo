@@ -142,7 +142,7 @@ def check_case(g, dm, u, worst, rng_tag):
 
 def main():
     rng = np.random.default_rng(20261008)
-    worst = dict(conservation=0., reference=0., theta_min=1., limited=0, cases=0, multi=0)
+    worst = dict(conservation=0., reference=0., theta_min=1., limited=0, cases=0, multi=0, multi_big=0)
 
     # 1. single convex 2-2 flips, nodes a,b,c,d (old ac, new bd)
     for trial in range(4000):
@@ -157,24 +157,38 @@ def main():
         u = euler_states(4, rng)
         check_case(g, dm, u, worst, trial); worst['cases'] += 1
 
-    # 2. multi-flip cavities from real Delaunay rebuilds of moving jittered points
-    for trial in range(60):
+    # 2. multi-flip cavities from real Delaunay rebuilds of moving jittered points.  The transfer is
+    #    evaluated at the new positions (convention B).  Validity is required per cavity, not per
+    #    sample: jittered grids contain thin triangles that invert somewhere for almost any motion.
+    for trial in range(80):
         n = 12; h = 1 / n
         base = np.stack(np.meshgrid(np.arange(n), np.arange(n)), -1).reshape(-1, 2) * h + h / 2
         x0 = base + rng.uniform(-.3, .3, base.shape) * h
-        x1 = x0 + rng.normal(size=x0.shape) * .25 * h
-        t0 = Delaunay(x0).simplices; t1 = Delaunay(x1).simplices
-        # the flip is applied at time 1 positions: old connectivity t0 pulled to x1 must be valid
-        if np.any(np.abs(tri_area(x1, t0)) < 1e-12) or np.any(np.sign(tri_area(x1, t0)) != np.sign(tri_area(x0, t0))):
-            continue
+        x1 = x0 + rng.normal(size=x0.shape) * .15 * h
+        d0, d1 = Delaunay(x0), Delaunay(x1)
+        t0, t1 = d0.simplices, d1.simplices
+        hull = set(d0.convex_hull.ravel()) | set(d1.convex_hull.ravel())
+        orient0 = {tuple(sorted(t)): np.sign(tri_area(x0, np.array([t]))[0]) for t in t0}
         u_all = euler_states(len(x1), rng, contrast=2)
         m_old = np.zeros(len(x1))
         for t in t0:
             m_old[t] += abs(tri_area(x1, np.array([t]))[0]) / 3
+        key = lambda t: tuple(sorted(t))
+        old_keys = {key(t) for t in t0}; new_keys = {key(t) for t in t1}
         for nodes, a, b in cavities(x1, t0, t1):
+            node_set = set(nodes.tolist())
+            if node_set & hull:
+                continue
+            gone = [t for t in t0 if key(t) not in new_keys and set(t) <= node_set]
+            if any(np.sign(tri_area(x1, np.array([t]))[0]) != orient0[key(t)] for t in gone):
+                continue                                     # an old cavity triangle inverted
+            if abs(a.sum() - b.sum()) > 1e-12 * a.sum():
+                continue
+            if np.any(m_old[nodes] + (b - a) <= 0):
+                continue
             check_case(m_old[nodes], b - a, u_all[nodes], worst, ('multi', trial))
             worst['multi'] += 1
-
+            worst['multi_big'] += len(nodes) > 4
     # 3. uniform state and affine conserved fields are unchanged with theta = 1
     for trial in range(500):
         ang = np.sort(rng.uniform(0, 2 * np.pi, 4)); x = np.c_[np.cos(ang), np.sin(ang)]
@@ -207,7 +221,7 @@ def main():
             # the uniform shift removes D_E/M from the cold nodes: inadmissible, so theta < 1
             assert diag[0] < 1, name
 
-    print(f"PASS: {worst['cases']} single flips + {worst['multi']} Delaunay cavities; conservation "
+    print(f"PASS: {worst['cases']} single flips + {worst['multi']} Delaunay cavities ({worst['multi_big']} with >4 nodes); conservation "
           f"{worst['conservation']:.2e}, reference {worst['reference']:.2e}, limited {int(worst['limited'])} "
           f"(min theta {worst['theta_min']:.3g}); uniform/affine unchanged with theta=1; high endpoint invertible; "
           "extreme contrasts admissible within density hull and entropy minimum")
