@@ -206,6 +206,28 @@ static int rd_rusanov_local_index(const point *dp)
 #if defined(RD_ALE_EXACT_PATCH_DIAGNOSTIC) && !defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC)
 #error "RD_ALE_EXACT_PATCH_DIAGNOSTIC requires RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC."
 #endif
+#if defined(RD_ALE_FLIP_TRANSFER) && !defined(RD_ALE_EQUALSTEP)
+#error "RD_ALE_FLIP_TRANSFER requires RD_ALE_EQUALSTEP; the moving hierarchy uses its own interval transfer."
+#endif
+#if defined(RD_ALE_FLIP_TRANSFER) && defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC)
+#error "Use the flip-element transfer or the old uniform-shift repair, not both."
+#endif
+#ifdef RD_ALE_FLIP_TRANSFER
+/* Flip element (dev_log/RD_FLIP_ELEMENT_AND_MOVING_HIERARCHY_DESIGN_20261008.md).
+ * FLOOR_FRACTION: rho and internal energy may not fall below this fraction of
+ * the cavity input minima; DMP_RELAX < 0 disables the relaxed density hull;
+ * ENTROPY_BOUND requests K = p/rho^gamma >= the cavity minimum. */
+#include "rd_flip_transfer.h"
+#ifndef RD_FLIP_FLOOR_FRACTION
+#define RD_FLIP_FLOOR_FRACTION 0.5
+#endif
+#ifndef RD_FLIP_DMP_RELAX
+#define RD_FLIP_DMP_RELAX (-1.0)
+#endif
+#ifndef RD_FLIP_ENTROPY_BOUND
+#define RD_FLIP_ENTROPY_BOUND 0
+#endif
+#endif
 #if defined(RD_ALE_CFL_TIMESTEP) && (!defined(RD_ALE_EQUALSTEP) || !defined(TREE_BASED_TIMESTEPS))
 #error "RD_ALE_CFL_TIMESTEP currently requires RD_ALE_EQUALSTEP and TREE_BASED_TIMESTEPS."
 #endif
@@ -1438,7 +1460,7 @@ struct rd_element_set
 #ifdef RD_ALE_EQUALSTEP
   struct rd_ale_triangle_geometry *ale_geometry;
   double *ale_endpoint_area;
-#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
   double *ale_pullback_area;
 #endif
   double *ale_divisor;
@@ -1577,7 +1599,7 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
   set->ale_geometry = NULL;
   set->ale_endpoint_area = NULL;
   set->ale_divisor = NULL;
-#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
   set->ale_pullback_area = NULL;
 #endif
 #ifdef RD_ALE_CFL_DIAGNOSTIC
@@ -1658,7 +1680,7 @@ static void rd_free_element_set(struct rd_element_set *set)
 #endif
   if(set->ale_divisor != NULL)
     myfree(set->ale_divisor);
-#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
   if(set->ale_pullback_area != NULL)
     myfree(set->ale_pullback_area);
 #endif
@@ -1696,7 +1718,7 @@ static int rd_ale_local_point_index(const point *dp)
   return index;
 }
 
-#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+#if defined(RD_ALE_EXACT_PATCH_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
 /*! A physical triangle key for the deliberately one-rank diagnostic.
  *
  * Sorted particle IDs are sufficient unless the same three particles form
@@ -2580,6 +2602,223 @@ static void rd_ale_apply_topology_repair(tessellation *T, struct rd_element_set 
 
 /*! Construct the post-rebuild new-connectivity geometry and switch the
  *  temporary AREPO storage from endpoint Q=m_old U_old to Qbar=mbar U_old. */
+#ifdef RD_ALE_FLIP_TRANSFER
+struct rd_flip_id_index
+{
+  MyIDType id;
+  int index;
+};
+
+static int rd_flip_id_index_compare(const void *a, const void *b)
+{
+  const MyIDType x = ((const struct rd_flip_id_index *)a)->id, y = ((const struct rd_flip_id_index *)b)->id;
+  return (x > y) - (x < y);
+}
+
+static int rd_flip_index_of(const struct rd_flip_id_index *map, MyIDType id)
+{
+  int lo = 0, hi = NumGas - 1;
+  while(lo <= hi)
+    {
+      const int mid = (lo + hi) / 2;
+      if(map[mid].id == id)
+        return map[mid].index;
+      if(map[mid].id < id)
+        lo = mid + 1;
+      else
+        hi = mid - 1;
+    }
+  terminate_program("RD flip transfer: old triangle vertex ID=%llu is not a local gas particle", (unsigned long long)id);
+  return -1;
+}
+
+static int rd_flip_find(int *parent, int i)
+{
+  while(parent[i] != i)
+    {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+  return i;
+}
+
+/*! Flip element at the old time t^n (equal-step, one rank).
+ *
+ * The old triangles are the keys captured from the live mesh before it was
+ * freed (Delaunay of x^n, areas at x^n).  The new triangles are this step's
+ * connectivity pulled back to x^n.  Every connected component of the symmetric
+ * difference is a changed cavity C.  With old full nodal masses g_i (the stored
+ * endpoint DualArea) and new pulled-back masses g_i^+, the cavity residual is
+ * D_C = sum_C (g_i^+ - g_i) U_i; rd_flip_transfer distributes it so that
+ * sum_C g_i^+ U_i^+ = sum_C g_i U_i exactly and every state stays admissible.
+ * Vertices outside cavities keep U; their g^+ - g is round-off, which is
+ * asserted.  Primitives of changed vertices are refreshed. */
+static void rd_ale_apply_flip_transfer(tessellation *T, struct rd_element_set *set)
+{
+  if(NTask != 1)
+    terminate_program("RD_ALE_FLIP_TRANSFER is restricted to one MPI rank");
+  if(!rd_ale_exact_old_snapshot_valid)
+    terminate_program("RD_ALE_FLIP_TRANSFER found no old triangle snapshot");
+
+  /* New triangle keys with pulled-back (old-position) areas. */
+  struct rd_ale_exact_triangle_record *fresh =
+      (struct rd_ale_exact_triangle_record *)malloc((set->n > 0 ? set->n : 1) * sizeof(*fresh));
+  struct rd_flip_id_index *map = (struct rd_flip_id_index *)malloc(NumGas * sizeof(*map));
+  int *parent = (int *)malloc(NumGas * sizeof(int));
+  if(fresh == NULL || map == NULL || parent == NULL)
+    terminate_program("RD flip transfer: allocation failed");
+  for(int slot = 0; slot < set->n; slot++)
+    rd_ale_exact_make_record(T, set->element[slot], set->ale_geometry[slot].normals[RD_ALE_OLD].area, &fresh[slot]);
+  qsort(fresh, set->n, sizeof(*fresh), rd_ale_exact_triangle_compare);
+  rd_ale_exact_assert_unique_keys(fresh, set->n, "new");
+
+  for(int i = 0; i < NumGas; i++)
+    {
+      map[i].id = P[i].ID;
+      map[i].index = i;
+      parent[i] = -1; /* not in a cavity */
+    }
+  qsort(map, NumGas, sizeof(*map), rd_flip_id_index_compare);
+  for(int i = 1; i < NumGas; i++)
+    if(map[i].id == map[i - 1].id)
+      terminate_program("RD flip transfer requires unique particle IDs");
+
+  /* Sort-merge the two key lists; union the vertices of every changed triangle. */
+  int removed = 0, inserted = 0, a = 0, b = 0;
+  const int n_old = rd_ale_exact_old_triangle_count, n_new = set->n;
+  while(a < n_old || b < n_new)
+    {
+      const struct rd_ale_exact_triangle_record *changed = NULL;
+      int cmp = a >= n_old ? 1 : (b >= n_new ? -1 : rd_ale_exact_triangle_compare(&rd_ale_exact_old_triangle[a], &fresh[b]));
+      if(cmp == 0)
+        {
+          a++;
+          b++;
+          continue;
+        }
+      if(cmp < 0)
+        {
+          changed = &rd_ale_exact_old_triangle[a++];
+          removed++;
+        }
+      else
+        {
+          changed = &fresh[b++];
+          inserted++;
+        }
+      int v[3];
+      for(int k = 0; k < 3; k++)
+        {
+          v[k] = rd_flip_index_of(map, changed->id[k]);
+          if(parent[v[k]] < 0)
+            parent[v[k]] = v[k];
+        }
+      for(int k = 1; k < 3; k++)
+        {
+          int r0 = rd_flip_find(parent, v[0]), rk = rd_flip_find(parent, v[k]);
+          if(r0 != rk)
+            parent[rk] = r0;
+        }
+    }
+
+  /* Group cavity vertices by root (CSR). */
+  int *start = (int *)calloc(NumGas + 1, sizeof(int));
+  int *member = (int *)malloc(NumGas * sizeof(int));
+  if(start == NULL || member == NULL)
+    terminate_program("RD flip transfer: allocation failed");
+  int n_cavity_vertices = 0;
+  for(int i = 0; i < NumGas; i++)
+    if(parent[i] >= 0)
+      {
+        start[rd_flip_find(parent, i) + 1]++;
+        n_cavity_vertices++;
+      }
+  for(int i = 0; i < NumGas; i++)
+    start[i + 1] += start[i];
+  int *fill = (int *)malloc((NumGas + 1) * sizeof(int));
+  memcpy(fill, start, (NumGas + 1) * sizeof(int));
+  for(int i = 0; i < NumGas; i++)
+    if(parent[i] >= 0)
+      member[fill[rd_flip_find(parent, i)]++] = i;
+  free(fill);
+
+  /* Vertices outside the cavities must have unchanged nodal masses. */
+  double outside_dm = 0.0;
+  for(int i = 0; i < NumGas; i++)
+    if(parent[i] < 0)
+      outside_dm = dmax(outside_dm, fabs(set->ale_pullback_area[i] - SphP[i].DualArea) / SphP[i].DualArea);
+  if(outside_dm > 1e-10)
+    terminate_program("RD flip transfer: nodal mass changed outside every cavity (rel %g)", outside_dm);
+
+  int max_n = 1;
+  for(int root = 0; root < NumGas; root++)
+    max_n = imax(max_n, start[root + 1] - start[root]);
+  double *g = (double *)malloc(max_n * sizeof(double)), *dm = (double *)malloc(max_n * sizeof(double));
+  double(*u)[4] = malloc(max_n * sizeof(*u)), (*ul)[4] = malloc(max_n * sizeof(*ul)), (*uh)[4] = malloc(max_n * sizeof(*uh));
+  double(*work)[4] = malloc(max_n * sizeof(*work)), (*uout)[4] = malloc(max_n * sizeof(*uout));
+  if(!g || !dm || !u || !ul || !uh || !work || !uout)
+    terminate_program("RD flip transfer: allocation failed");
+
+  struct rd_flip_options options = {GAMMA, RD_FLIP_FLOOR_FRACTION, RD_FLIP_DMP_RELAX, RD_FLIP_ENTROPY_BOUND};
+  int cavities = 0, limited = 0, low_only = 0;
+  double theta_min = 1.0, theta_sum = 0.0, max_defect = 0.0, max_change = 0.0;
+  double before[4] = {0, 0, 0, 0}, after[4] = {0, 0, 0, 0}, scale[4] = {0, 0, 0, 0};
+  for(int root = 0; root < NumGas; root++)
+    {
+      const int n = start[root + 1] - start[root];
+      if(n == 0)
+        continue;
+      for(int k = 0; k < n; k++)
+        {
+          const int i = member[start[root] + k];
+          g[k] = SphP[i].DualArea;
+          dm[k] = set->ale_pullback_area[i] - SphP[i].DualArea;
+          for(int c = 0; c < 4; c++)
+            u[k][c] = set->ale_uold[i][c];
+        }
+      struct rd_flip_diagnostics diag;
+      int status = rd_flip_transfer(n, g, dm, (const double(*)[4])u, &options, ul, uh, work, uout, &diag);
+      if(status != RD_FLIP_OK)
+        terminate_program("RD flip transfer failed with status %d on a cavity of %d vertices (first ID=%llu)", status, n,
+                          (unsigned long long)P[member[start[root]]].ID);
+      for(int k = 0; k < n; k++)
+        {
+          const int i = member[start[root] + k];
+          for(int c = 0; c < 4; c++)
+            {
+              before[c] += g[k] * u[k][c];
+              after[c] += (g[k] + dm[k]) * uout[k][c];
+              scale[c] += g[k] * fabs(u[k][c]);
+              set->ale_uold[i][c] = uout[k][c];
+            }
+          rd_ale_refresh_primitives(i, set->ale_uold[i]);
+        }
+      cavities++;
+      limited += diag.theta < 1.0;
+      low_only += diag.theta == 0.0;
+      theta_min = dmin(theta_min, diag.theta);
+      theta_sum += diag.theta;
+      max_defect = dmax(max_defect, diag.defect_scale);
+      max_change = dmax(max_change, diag.max_change);
+    }
+
+  double transfer_rel = 0.0;
+  for(int c = 0; c < 4; c++)
+    if(scale[c] > 0.0)
+      transfer_rel = dmax(transfer_rel, fabs(after[c] - before[c]) / scale[c]);
+  if(transfer_rel > 1e-12)
+    terminate_program("RD flip transfer lost conservation within the cavities (rel %g)", transfer_rel);
+
+  mpi_printf("RD-FLIP time=%.8g removed=%d inserted=%d cavities=%d vertices=%d max_cavity=%d limited=%d low_only=%d "
+             "theta_min=%.6g theta_mean=%.6g max_defect=%.3e max_dU=%.3e transfer_rel=%.3e outside_dm=%.3e\n",
+             All.Time, removed, inserted, cavities, n_cavity_vertices, cavities ? max_n : 0, limited, low_only, theta_min,
+             cavities ? theta_sum / cavities : 1.0, max_defect, max_change, transfer_rel, outside_dm);
+
+  free(uout); free(work); free(uh); free(ul); free(u); free(dm); free(g);
+  free(member); free(start); free(parent); free(map); free(fresh);
+}
+#endif
+
 static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
 {
   if(NTask != 1)
@@ -2595,7 +2834,7 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
   set->ale_geometry = (struct rd_ale_triangle_geometry *)mymalloc_movable(
       &set->ale_geometry, "RD_ALEGeometry", set->n * sizeof(*set->ale_geometry));
   set->ale_endpoint_area = (double *)mymalloc("RD_ALEEndpointArea", NumGas * sizeof(*set->ale_endpoint_area));
-#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
   set->ale_pullback_area = (double *)mymalloc("RD_ALEPullbackArea", NumGas * sizeof(*set->ale_pullback_area));
 #endif
   set->ale_divisor = (double *)mymalloc("RD_ALEDivisor", NumGas * sizeof(*set->ale_divisor));
@@ -2604,7 +2843,7 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
 #endif
   set->ale_uold = (double(*)[4])mymalloc("RD_ALEUOld", NumGas * sizeof(*set->ale_uold));
   memset(set->ale_endpoint_area, 0, NumGas * sizeof(*set->ale_endpoint_area));
-#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
   memset(set->ale_pullback_area, 0, NumGas * sizeof(*set->ale_pullback_area));
 #endif
   memset(set->ale_divisor, 0, NumGas * sizeof(*set->ale_divisor));
@@ -2734,7 +2973,7 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
         {
           int index = rd_ale_local_point_index(&DP[DT[triangle].p[vertex]]);
           set->ale_endpoint_area[index] += area_new / 3.0;
-#ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
+#if defined(RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
           set->ale_pullback_area[index] += area_old / 3.0;
 #endif
 #ifdef RD_ALE_CAMPOLI_MASS
@@ -2775,6 +3014,9 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
       if(umax[component] - umin[component] > 4096.0 * DBL_EPSILON * scale)
         set->ale_uniform_initial = 0;
     }
+#ifdef RD_ALE_FLIP_TRANSFER
+  rd_ale_apply_flip_transfer(T, set);
+#endif
 #ifdef RD_ALE_TOPOLOGY_REPAIR_DIAGNOSTIC
   rd_ale_apply_topology_repair(T, set);
 #ifndef RD_ALE_REPAIR_STALE_PRIMITIVES
@@ -2810,7 +3052,7 @@ static void rd_ale_prepare_step(tessellation *T, struct rd_element_set *set)
 static void rd_ale_finish_step(struct rd_element_set *set)
 {
   double temporary_total[4] = {0.0, 0.0, 0.0, 0.0};
-  double new_total[4] = {0.0, 0.0, 0.0, 0.0};
+  double new_total[4] = {0.0, 0.0, 0.0, 0.0}, new_abs[4] = {0.0, 0.0, 0.0, 0.0};
   double max_uniform_error = 0.0, max_uniform_scale = 1.0;
 
   for(int i = 0; i < NumGas; i++)
@@ -2831,7 +3073,10 @@ static void rd_ale_finish_step(struct rd_element_set *set)
       double qnew[4];
       rd_ale_q_from_particle(i, qnew);
       for(int component = 0; component < 4; component++)
-        new_total[component] += qnew[component];
+        {
+          new_total[component] += qnew[component];
+          new_abs[component] += fabs(qnew[component]);
+        }
     }
 
   double max_conservation_defect = 0.0, conservation_scale = 1.0;
@@ -2844,6 +3089,16 @@ static void rd_ale_finish_step(struct rd_element_set *set)
       max_conservation_defect = dmax(max_conservation_defect, fabs(endpoint_change[component]));
       conservation_scale = dmax(conservation_scale, fabs(set->ale_old_total[component]));
     }
+
+#if defined(RD_ALE_FLIP_TRANSFER) && defined(RD_ALE_CAMPOLI_MASS)
+  /* Campoli storage has no endpoint rebase and the flip element conserves
+   * every cavity: the whole step must close to round-off for ANY state. */
+  for(int component = 0; component < 4; component++)
+    if(fabs(endpoint_change[component]) > 1e-11 * dmax(new_abs[component], DBL_MIN))
+      terminate_program("RD flip transfer + Campoli: step conservation failed, component %d change %g (scale %g)",
+                        component, endpoint_change[component], new_abs[component]);
+#endif
+  (void)new_abs;
 
   if(set->ale_uniform_initial)
     {

@@ -275,7 +275,7 @@ void run(void)
           write_cpu_log(); /* output some CPU usage log-info (accounts for everything needed up to completion of the current
                               sync-point) */
 
-#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+#if defined(RD_ALE_EXACT_PATCH_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
           /* Retain the old owned triangle keys and areas while this mesh is
            * still live.  The next rebuilt mesh consumes the snapshot only for
            * a non-invasive exact-patch comparison. */

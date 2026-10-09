@@ -14,7 +14,7 @@ extern "C"{
 void reset_dualarea(tessellation *T);
 void rd_step_begin(tessellation *T);
 void rd_step_end(tessellation *T);
-#ifdef RD_ALE_EXACT_PATCH_DIAGNOSTIC
+#if defined(RD_ALE_EXACT_PATCH_DIAGNOSTIC) || defined(RD_ALE_FLIP_TRANSFER)
 void rd_ale_topology_capture_old_mesh(tessellation *T);
 #endif
 #if defined(RD_HIERARCHICAL_TIMESTEPS) || (defined(RD_RK2_SPLIT_STAGES) && !defined(RD_ALE_EQUALSTEP))
