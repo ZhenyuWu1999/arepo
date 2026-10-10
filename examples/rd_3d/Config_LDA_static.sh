@@ -1,5 +1,5 @@
-# Static tetra LDA/F1 RK2 gate: periodic, one rank, static full mesh, equal steps.
-# No lazy or repair; moving 3D and hierarchical timesteps remain guarded.
+# Static tetra LDA RK2, periodic full mesh, equal steps; MPI gates 1/2/4.
+# For experimental natural bins use the dedicated hierarchical configuration.
 GAMMA=1.4
 READ_MASS_AS_DENSITY_IN_INPUT
 VORONOI_STATIC_MESH

@@ -122,7 +122,85 @@ patch supplies genuine different CFL clocks in the final campaign.
 `regression2d_before/after/`: frozen ce0433d versus the final hierarchy source,
 N/LDA static controlled two-bin Yee48 and uniform random, t=1/32, two ranks.
 All four final primitive/mass/coordinate/total comparisons are byte-identical.
+An additional audit verifies **every PartType0 dataset in all 12 saved
+snapshots** byte-for-byte after ID sorting; see
+`regression2d_particle_dataset_audit.json`.
 This covers the shared hierarchy edits; it does not resolve the deferred
 moving LDA/B K-refactor reproducibility issue. Full-mesh support is explicit;
 active-only 3D mesh reconstruction and checkpointing an open RK stage remain
 unsupported. No large-grid scaling or long-time convergence claim is made.
+
+## 6. Reduced SWIFT-family results and unresolved cold-blast diagnostic
+
+`swift_v2/` contains 11 attempted cases: 8 complete (including uniform volume
+probe) and 3 cold Sedov attempts stop. These are **16³ jittered unit-cube
+adaptations**, not SWIFT runs or equal-resolution solver comparisons. The
+same deterministic seed928 coordinates are used for all families; gamma5/3,
+CFL=.1, cap=1/2048. Injection replaces the internal energy of 15 nearest
+vertices with constant specific energy E0/sum_hot_dual_volume. Measured hot
+volume=.0035820883858286557, u_hot=279.16675756973734; removed background
+energy=5.3731325787e-9. Initial total energy=1.0000014946268678. The frozen
+uniform probe establishes the dual volumes and preserves all node IDs.
+
+| Completed one-rank test | End | Steps | Weighted error | Min rho / p |
+|---|---:|---:|---|---|
+| Sod N | .08 | 256 | central-half L1 rho .07759, vx .19136, p .10178 | .17851 / .19014 |
+| Sod LDA | .08 | 256 | central-half L1 rho .06481, vx .23676, p .06847 | .06217 / .01875 |
+| Gresho N | .1 | 512 | vector-velocity L1 .04436, pressure L1 .03666 | .99403 / 5.21497 |
+| Gresho LDA | .1 | 512 | vector-velocity L1 .01614, pressure L1 .01323 | .99689 / 5.06408 |
+
+Errors use median-dual volumes. Sod's central-half window excludes the
+periodic seam wave, which has not reached it at .08; its reference is the
+repository's analytic gamma5/3 Riemann solver in **actual unit-box coordinates**.
+The box differs from SWIFT's 2 x .5 x .5, and sampling differs on both sides.
+LDA's lower rho/p errors do not imply uniformly better shock quality: vx error
+is larger and density undershoots the right-state .125. Positivity on this
+coarse case is not a monotonicity or general positivity proof. Gresho's radial
+reference is stationary and cylindrical; it alone is not a fully 3D flow.
+
+Completed-case normalized conserved-total drift <=4.542e-15. N one/two-rank
+field differences are 5.441e-15 (Sod) and 1.244e-14 (Gresho). Actual equal timesteps are .08/256 for Sod and .1/512 for Gresho,
+rather than the nominal cap. The two-rank N
+Sod hierarchy remains equal-bin because the cap controls the clock: this is
+another degeneration check, not mixed-bin shock validation.
+
+Cold Sedov **does not pass**:
+
+- N, one rank: stops at the second endpoint t=.0001171875, stage0;
+  solve defect=1.7196068e-33, conservation defect=1.7195162e-33,
+  absolute-product scale=1.8192238e-21.
+- LDA, one rank: stops at t=.00005859375, stage1;
+  solve defect=8.2850358e-34, conservation defect=8.2850017e-34,
+  scale=7.9781740e-22.
+- N, two ranks: stops at that first endpoint, stage1;
+  solve defect=1.3961782e-33, conservation defect=1.3961817e-33,
+  scale=7.5974487e-22.
+
+The successful preceding predictor/stage has positive rho and p>=1e-6. These
+failures are the pure-kernel **raw solve/distribution audit**, not a detected
+negative-pressure or mass failure, nor sufficient evidence of an incorrect
+K formula. Their defects are close to or above the existing 4096 epsilon
+product-scale limit despite extremely small absolute values. Singular-value
+selection and the appropriateness of that product-scale bound for a cold,
+strongly scaled Euler SVD need a focused follow-up with captured element
+inputs. The inputs/rank spectra were not captured here, so no dominant cause
+is claimed. Different ranks stopping on different elements do not establish
+large physical MPI error. No threshold, floor, conservation repair or timestep
+acceptance policy was changed to make this benchmark pass.
+
+`swift_v1/` preserves the parameter-setup rejection: the volume probe's cap
+exceeded its total runtime. v2 fixes only that cap. Initial v2 analysis products
+are retained; `analysis_v2/` contains the corrected dense analytic profiles,
+explicit failed-Sedov panel, JSON summary and final analysis script. The CLI
+now exits **2** after saving results when any benchmark fails; the independent
+analysis returned that expected failure status. Archived numerical runs used
+the hierarchy source before the additional adapter stage-sum assertion; all
+shared Euler/CFL/state modules and hierarchy update algebra are identical.
+The definitive final feature suite and 2D regression use the final assertion.
+`final_source_audit.json` records source-file comparison for each archive.
+
+Only small local functional checks were run. Per user's steering, larger
+resolution sequences, long integrations and MPI performance studies belong
+on COSMA/Cuillin. The Mac drivers preserve frozen inputs/configs/source but
+still use the local `otool` build helper; Linux provenance/linkage adaptation
+and the host's documented SYSTYPE are required before cluster builds.

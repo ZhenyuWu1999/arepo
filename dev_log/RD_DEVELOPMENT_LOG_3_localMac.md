@@ -9319,3 +9319,33 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   `../local_runs/rd_3d_extension_20261010_v1/`。Moving 3D、B、active-only 3D
   mesh rebuild 和 open-stage checkpoint 仍不支持。下一节点整理 SWIFT-family
   小网格 benchmark 的成功与失败证据；本地不增加更大网格或性能扫描。
+
+## 237. 2026-10-10：SWIFT-family 三维小网格基准与本轮收尾
+
+**作者：Codex。**
+
+- 新 `tests/rd/run_3d_swift_benchmarks.py`，固定 SWIFT v2026.04 的官方
+  SodShock_3D/SedovBlast_3D/GreshoVortex_3D 参数族；使用 16³ seed928 jittered
+  AREPO unit cube、gamma5/3、CFL.1，明确不同于 SWIFT glass 和 Sod 长方盒。
+  原参考源、YAML、manifest 保存于统一档案 `references/`。
+- `swift_v2/` 11 次尝试中 8 次完成：uniform dual-volume probe，N/LDA Sod
+  t=.08、Gresho t=.1，以及 N 两 rank 对照和一个 equal-bin N hierarchy。
+  总量归一化误差≤4.542e-15，N 的 MPI 场差≤1.244e-14。LDA Gresho速度 L1
+  .01614，N .04436；Sod LDA 的 rho/p 误差较低但 vx 误差较高且 rho有undershoot，
+  不宣称粗网格震荡已解决或一般 positivity。
+- 冷 Sedov 三例均未通过：E1 按实测15热节点 median-dual volume归一化，
+  p背景1e-6；在前两步 raw solve/conservation compatibility audit 触发
+  info−3，绝对 defect~1e-33、scale~1e-21。先前阶段 rho/p 为正；这不是
+  已观察到的负压失败。需要后续捕获 offending element/rank spectrum，
+  审核冷 Euler SVD 的尺度与 product-bound，未定位主因，未放宽阈值或加floor。
+- `swift_v1/` 参数错误（probe cap>runtime）原样保存。改进分析写入新目录
+  `analysis_v2/`，含dense analytic曲线、明确Sedov失败的图、summary/JSON；
+  CLI遇失败返回2，避免把campaign完成当成所有case通过。
+- SWIFT二进制对应加入最终adapter stage-sum检查之前的hierarchy源，shared
+  Euler/CFL/state与update algebra相同；最终50feature gates和2D回归含该检查。
+  `final_source_audit.json`记录所有src文件比较，不伪称所有档案来自同一binary。
+- 全套 final `make check_rd` 通过；更新README、两种hierarchy配置和context。
+  无thesis/standalone修改，无push。后续大算力收敛/长时/效率测试按用户要求
+  放COSMA/Cuillin；当前Mac helper的otool/linkage需在Linux适配后使用host SYSTYPE。
+- 详细数学、结果、失败和范围见 `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`；
+  统一档案 `../local_runs/rd_3d_extension_20261010_v1/`。

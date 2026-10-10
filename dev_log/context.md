@@ -65,13 +65,17 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
-**2026-10-10 addition:** initial native **static 3D N** is now available behind
-`RD_3D_STATIC`, restricted to periodic gas-only, one rank and equal-step lumped
-RK2. Common Euler/LU/SVD, simplex geometry and state modules support the port;
-the mathematical audit and seven native 3D gates are documented in
-`dev_log/RD_3D_KERNEL_MATHEMATICS_20261010.md` and log 3 §§230–231. This does not
-establish moving 3D, 3D LDA/B, hierarchical or MPI support. The following
-historical completion statements concern **2D**, not all dimensions.
+**2026-10-10 addition:** native **static 3D N/LDA** now supports periodic
+gas-only full meshes, equal steps or the experimental frozen-dU hierarchy,
+with small double-precision 1/2/4-rank MPI gates. Fifty final 8³/16³ gates
+pass, including actual natural mixed bins and equal-bin degeneration. See
+`RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`, `examples/rd_3d/README.md` and log3
+§§234–237. SWIFT-inspired 16³ Sod/Gresho tests complete; cold Sedov stops at
+the solve-compatibility audit and remains unvalidated. Moving 3D, B,
+active-only 3D rebuild and open-stage restart remain unsupported. User deferred
+the 2D K-refactor trajectory-compatibility fix. Local work is limited to simple
+checks; larger convergence/stability/scaling runs belong on COSMA/Cuillin.
+The following historical completion statements concern **2D**, not all dimensions.
 
 *(This section was written on 2026-07-27 and revised on 2026-08-05. The
 authoritative running record is the development log; this is only an
@@ -91,7 +95,7 @@ Of the five items originally listed here:
 
 2. **Resolved.** The time integration is no longer AREPO's MUSCL-Hancock scheme. `RD_RK2_TOTAL_RESIDUAL` implements the Arpaia & Ricchiuto two-step explicit RK with the F1 mass matrix, with both stages inside a single solver call. Production LDA uses standard GL+F1; a rate-consistent Heun variant exists as a thesis discussion topic only. See `dev_log/LDA_F1_Heun_vs_standard_LDA_RK2.md`.
 
-3. **Still open.** We have only implemented 2D RD in AREPO. The standalone 3D code is in `/Users/zhenyuwu/rdsolver/rd` on this Mac (historical cluster path `/home/zwu/rdsolver/rd`). The earlier exclusion of 3D from the moving-mesh phase was **superseded by the user on 2026-10-10**: include early 3D feasibility/testing now, with a dimension-aware interface. See [3D feasibility](RD_3D_FEASIBILITY_20261010.md), log3 §228. This authorizes the feasibility work; it does not mean native AREPO 3D RD has been implemented.
+3. **Partly implemented.** Static 3D N/LDA and small hierarchy/MPI gates are now available; moving 3D remains open. The standalone 3D code is in `/Users/zhenyuwu/rdsolver/rd` on this Mac (historical cluster path `/home/zwu/rdsolver/rd`). The earlier exclusion of 3D from the moving-mesh phase was **superseded by the user on 2026-10-10**: include early 3D feasibility/testing now, with a dimension-aware interface. See [3D feasibility](RD_3D_FEASIBILITY_20261010.md), log3 §228. Subsequent static implementation and validation are documented in log3 §§230–237; this does not establish moving tetra support.
 
 4. **Largely resolved.** MPI rank invariance by particle ID is established for the static equal-timestep and hierarchical cases. The remaining risk is that a round-off-sensitive branch could make results depend on the domain decomposition; one such branch is identified in `RD_DEVELOPMENT_LOG_2.md` §3.4.
 

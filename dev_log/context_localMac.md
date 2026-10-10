@@ -5,6 +5,17 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-10
 
+**Reduced 3D benchmark record (2026-10-10, log3 §237):**
+Pinned SWIFT-family 16³ gamma5/3 Sod/Gresho N/LDA tests complete; N also agrees
+on 1/2 ranks. Eight of eleven attempts complete. Cold Sedov does not pass:
+three attempts stop at raw solve-compatibility defects ~1e-33 against product
+scales ~1e-21 in the first two steps; preceding stages remain positive.
+Root cause/rank spectra are not isolated. No floor or audit relaxation added.
+See `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md` and
+`../local_runs/rd_3d_extension_20261010_v1/swift_v2/analysis_v2/`.
+Final check_rd passes. Large native tests stay on COSMA/Cuillin; current Mac
+build/provenance helper needs Linux linkage adaptation before cluster use.
+
 **3D static hierarchy milestone (2026-10-10, log3 §236):**
 N/LDA frozen-dU static full-mesh hierarchy now passes 50 final 8³/16³ gates,
 including equal-bin degeneration, controlled and actual natural two bins on
