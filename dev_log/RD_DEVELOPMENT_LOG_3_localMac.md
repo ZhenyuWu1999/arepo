@@ -9259,3 +9259,25 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   完整四例实验、精确 patch、source/binary/Config/IC/参数哈希、linkage、
   日志、快照以及全部 particle fields 的逐字节验证；原参考二进制已从
   Claude 临时目录核验哈希后复制保留。本轮未重跑三维测试。
+
+## 234. 2026-10-10：三维静态 LDA/F1，第一个扩展节点
+
+**作者：Codex；用户要求继续 LDA、hierarchical timestep、MPI，并参考 SWIFT 三维测试。二维重构兼容性问题按用户决定暂缓。**
+
+- 在独立 `rd_euler` 模块加入 dimension-generic LDA/F1；面积法向采用 inward
+  unit normal、A_face/3，空间总残差为 exact P1-Z flux divergence。
+  Full-rank F1 用 beta 分配任意 temporal target；降秩时保留 element-local
+  lumped fallback，空间 solve compatibility 和 raw conservation 仍需通过。
+- 700 个 triangle/tetra 代数测试扩展到 LDA/F1，以 complex-step Jacobian、
+  spectral polynomial 和 face quadrature 独立核查。全套 `make check_rd` 通过。
+- `lda_v2/` 12 个原生 8³/16³ equal-step one-rank 算例全部到 t=1/32；包括
+  stationary pressure perturbation、uniform、oblique advection、LU/SVD、实际
+  dt 减半。五分量守恒≤2.443e-15。N8/N16 与此前 native_static_v3 最终场
+  按 ID 逐字节相同。首个 enum 编译失败保存在 `lda_v1/`。
+- 新配置 `Config_LDA_static.sh`，复现入口 `run_3d_feature_gates.py`；
+  数学/范围报告 `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`。
+- SWIFT 官方 Sod/Sedov/Gresho 初值固定 v2026.04 并保存源文件；将明确
+  区分 benchmark-family adaptation 与 SWIFT 同采样同分辨率运行。
+- 档案：`../local_runs/rd_3d_extension_20261010_v1/`。下一个节点接入 MPI
+  分布式 CFL 与三维 static hierarchy。本节点未改变 2D adapter 算术、
+  默认 Config、thesis 或 standalone code，未 push。

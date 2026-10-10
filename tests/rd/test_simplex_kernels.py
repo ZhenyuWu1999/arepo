@@ -34,6 +34,9 @@ def main():
         lib.rd_euler_n_residual.argtypes = [ctypes.c_int, ptr, ptr, ptr, ctypes.c_double, ctypes.c_double,
                                            ctypes.c_int, ptr, ptr, ctypes.POINTER(Diagnostics)]
         lib.rd_euler_n_residual.restype = ctypes.c_int
+        lib.rd_euler_lda_residual.argtypes = [ctypes.c_int, ptr, ptr, ptr, ctypes.c_double, ctypes.c_double,
+                                             ctypes.c_int, ptr, ptr, ptr, ptr, ctypes.POINTER(Diagnostics)]
+        lib.rd_euler_lda_residual.restype = ctypes.c_int
         defects = dict(closure=0., gradient=0., phi_integral=0., conservation=0., solve=0.)
         stagnant = 0
         for d in (2, 3):
@@ -77,6 +80,35 @@ def main():
                 defects['solve'] = max(defects['solve'], diag.solve_defect/scale)
                 np.testing.assert_allclose(residual.sum(axis=0), phi, atol=2e-13*scale)
 
+                # Independent LDA/F1 oracle: complex-step flux Jacobian and
+                # spectral polynomials, avoiding production matrix entries.
+                z = np.column_stack([np.sqrt(rho), np.sqrt(rho)[:, None]*velocity, (energy+pressure)/np.sqrt(rho)])
+                mean = z.mean(axis=0); vel = mean[1:-1]/mean[0]; h = mean[-1]/mean[0]
+                cs = np.sqrt((gamma-1)*(h-.5*vel@vel)); eye = np.eye(nc)
+                roe = np.r_[1., vel, (h+(gamma-1)/2*(vel@vel))/gamma]
+                plus, minus = [], []
+                for nn, aa in zip(normal, area):
+                    jac = np.column_stack([np.imag(flux(roe.astype(complex)+1e-30j*eye[k], nn, gamma))/1e-30 for k in range(nc)])
+                    b = (jac-vel@nn*eye)/cs
+                    projectors = [.5*(b@b+b), .5*(b@b-b), eye-b@b]
+                    lam = np.array([vel@nn+cs, vel@nn-cs, vel@nn])
+                    plus.append(aa/d*sum(ll*pp for ll, pp in zip(np.maximum(lam, 0), projectors)))
+                    minus.append(aa/d*sum(ll*pp for ll, pp in zip(np.minimum(lam, 0), projectors)))
+                sm = sum(minus); target = np.ascontiguousarray(rng.normal(size=nc))
+                lda_phi = np.empty(nc); lda = np.empty((nv, nc)); f1 = np.empty_like(lda); ld = Diagnostics()
+                assert lib.rd_euler_lda_residual(d, u, normal, area, gamma, -1., 0, target,
+                                               lda_phi, lda, f1, ctypes.byref(ld)) == 0
+                np.testing.assert_allclose(lda_phi, phi, atol=2e-13*scale)
+                want = np.array([-kp@np.linalg.lstsq(sm, phi, rcond=None)[0] for kp in plus])
+                np.testing.assert_allclose(lda, want, atol=2e-11*scale, rtol=2e-10)
+                np.testing.assert_allclose(lda.sum(axis=0), phi, atol=2e-12*scale)
+                if ld.solve.rank == nc:
+                    want_time = np.array([-kp@np.linalg.solve(sm, target) for kp in plus])
+                    np.testing.assert_allclose(f1, want_time, atol=2e-10*max(1., abs(want_time).max()), rtol=2e-10)
+                    np.testing.assert_allclose(f1.sum(axis=0), target, atol=2e-11)
+                else:
+                    np.testing.assert_array_equal(f1, 0.)
+
                 # Euler flux is quadratic in Z, so face Gaussian quadrature
                 # is an independent exact integral of its divergence.
                 z = np.column_stack([np.sqrt(rho), np.sqrt(rho)[:, None]*velocity, (energy+pressure)/np.sqrt(rho)])
@@ -99,7 +131,7 @@ def main():
             assert lib.rd_simplex_geometry(d, np.zeros_like(x), vol, normal, area) != 0
             assert lib.rd_euler_n_residual(d, u, np.ascontiguousarray(2*normal), area, gamma, -1., 0,
                                            phi, residual, ctypes.byref(diag)) != 0
-        print(f'PASS: 700 production triangle/tetra geometries and N residuals; {stagnant} zero-velocity cases (rank 3 in 2D, rank 4 in 3D); {defects}')
+        print(f'PASS: 700 production triangle/tetra geometries and N/LDA/F1 residuals; {stagnant} zero-velocity cases (rank 3 in 2D, rank 4 in 3D); {defects}')
 
 
 if __name__ == '__main__':

@@ -186,12 +186,12 @@ static int rd_rusanov_local_index(const point *dp)
 #endif
 
 #if !defined(TWODIMS)
-#if !defined(RD_3D_STATIC) || !defined(VORONOI_STATIC_MESH) || !defined(N_SCHEME) || \
+#if !defined(RD_3D_STATIC) || !defined(VORONOI_STATIC_MESH) || (!defined(N_SCHEME) && !defined(LDA_SCHEME)) || \
     !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(CREATE_FULL_MESH) || !defined(FORCE_EQUAL_TIMESTEPS) || \
     !defined(TREE_BASED_TIMESTEPS)
-#error "3D RD requires explicit RD_3D_STATIC: static full-mesh, equal-step N/lumped RK2 with tree timesteps."
+#error "3D RD requires explicit RD_3D_STATIC: static full-mesh, equal-step N/lumped or LDA/F1 RK2 with tree timesteps."
 #endif
-#if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_RK2_SPLIT_STAGES) || defined(RD_ELEMENT_COMOVING_FRAME) || \
+#if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_RK2_SPLIT_STAGES) || defined(RD_LDA_COMMON_BETA) || defined(RD_ELEMENT_COMOVING_FRAME) || \
     defined(RD_ALE_CONTOUR_RESIDUAL) || defined(RD_ALE_ENTROPY_DISSIPATION) || defined(RD_ALE_SHEAR_EIGENVALUE_FLOOR) || \
     defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND) || defined(RD_ALE_CONDITION_DIAGNOSTIC) || \
     defined(RD_ALE_CFL_DIAGNOSTIC) || defined(RD_DIAG_NO_KICK) || defined(RD_DIAG_PREDICTOR_ONLY) || \
@@ -199,7 +199,7 @@ static int rd_rusanov_local_index(const point *dp)
     defined(EXTERNALGRAVITY) || defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(MHD) || defined(PASSIVE_SCALARS) || \
     defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || \
     defined(REFLECTIVE_Z) || defined(COOLING) || defined(ONEDIMS)
-#error "RD_3D_STATIC currently supports periodic source-free N hydro without stage-altering diagnostics."
+#error "RD_3D_STATIC supports periodic source-free N/LDA hydro without stage-altering diagnostics."
 #endif
 #elif defined(RD_3D_STATIC)
 #error "RD_3D_STATIC must not be combined with TWODIMS."
@@ -7301,7 +7301,7 @@ void compute_residuals(tessellation *T)
       }
 #endif
 
-#else /* native static tetra N; common stages and particle update below */
+#else /* static tetra distributions; common stages and particle update below */
       double Phi[5], nodal[4][5], Flux_RD[5][4];
       struct rd_n_diagnostics diagnostic;
 #ifdef RD_ALWAYS_PSEUDOINVERSE
@@ -7309,11 +7309,30 @@ void compute_residuals(tessellation *T)
 #else
       const int always_svd = 0;
 #endif
+#ifdef LDA_SCHEME
+      double temporal[5] = {0}, f1[4][5];
+      if(rd_stage == 1)
+        for(k = 0; k < RD_NVAR; k++)
+          for(j = 0; j < RD_NVERT; j++)
+            temporal[k] += tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
+      const int info = rd_euler_lda_residual(3, &U_fluid[0][0], &tri_normals_list[i].normal[0][0],
+                                            tri_normals_list[i].mag, GAMMA, RD_SVD_RCOND, always_svd,
+                                            rd_stage == 1 ? temporal : NULL,
+                                            Phi, &nodal[0][0], &f1[0][0], &diagnostic);
+      if(rd_stage == 1 && diagnostic.solve.rank != RD_NVAR)
+        {
+          RD_stat_f1_lumped++;
+          for(j = 0; j < RD_NVERT; j++)
+            for(k = 0; k < RD_NVAR; k++)
+              f1[j][k] = tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
+        }
+#else
       const int info = rd_euler_n_residual(3, &U_fluid[0][0], &tri_normals_list[i].normal[0][0],
                                           tri_normals_list[i].mag, GAMMA, RD_SVD_RCOND, always_svd,
                                           Phi, &nodal[0][0], &diagnostic);
+#endif
       if(info != 0)
-        terminate_program("RD tetra N failed: tetra=%d stage=%d info=%d solve=%.17g conservation=%.17g scale=%.17g",
+        terminate_program("RD tetra distribution failed: tetra=%d stage=%d info=%d solve=%.17g conservation=%.17g scale=%.17g",
                           thistask_triangles[i], rd_stage, info, diagnostic.solve_defect,
                           diagnostic.conservation_defect, diagnostic.roundoff_scale);
       RD_stat_elements++;
@@ -7330,7 +7349,11 @@ void compute_residuals(tessellation *T)
       for(j = 0; j < DIMS + 1; j++)
         for(k = 0; k < DIMS + 2; k++)
           Flux_RD[k][j] = rd_stage == 0 ? nodal[j][k] :
+#ifdef LDA_SCHEME
+              f1[j][k] + 0.5 * nodal[j][k];
+#else
               tri_normals_list[i].area / (DIMS + 1) * dU_vertex[j][k] / triangle_dt + 0.5 * nodal[j][k];
+#endif
 #endif /* TWODIMS: distribution */
 
       for(j = 0; j < DIMS + 1; j++)

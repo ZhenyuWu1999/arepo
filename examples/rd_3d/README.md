@@ -49,3 +49,11 @@ ordinary primitive recovery can apply a floor. Norms use median-dual volume
 weights. The recorded two-grid trend is not a formal convergence result or a
 positivity proof. Strong shocks, long integrations and parallel agreement have
 not yet been tested for this 3D path.
+
+
+Static LDA/F1 is now available through `Config_LDA_static.sh`. Reproduce its
+one-rank gates with `tests/rd/run_3d_feature_gates.py all ARCHIVE --suite lda`
+using the NumPy/h5py Python environment. See
+`dev_log/RD_3D_FEATURES_AND_BENCHMARKS_20261010.md` for rank-deficient F1
+lumping and exact evidence. MPI/hierarchy extension gates are being added;
+these should not be inferred from the one-rank suite.

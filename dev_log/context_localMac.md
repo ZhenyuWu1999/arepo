@@ -5,6 +5,15 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-10
 
+**3D LDA/F1 milestone (2026-10-10, log3 §234):**
+Static periodic full-mesh equal-step LDA is implemented and tested alongside N;
+12 native 8³/16³ cases in `../local_runs/rd_3d_extension_20261010_v1/lda_v2/`
+pass, including nonzero pressure perturbations at rest, LU/SVD and actual
+halved timestep. N8/N16 remain byte-identical to the earlier baseline.
+See `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`. User deferred the 2D
+floating-point compatibility fix; next work is static 3D MPI/hierarchy and
+SWIFT-inspired benchmark families. Moving tetrahedra and B remain unsupported.
+
 **2D compatibility finding confirmed (2026-10-10, log3 §233):**
 Claude's longer moving LDA/B Yee48 comparison is correct: old/new density
 differences reach 1.323e-6 / 6.453e-5 at t=1, beyond the scope of the earlier

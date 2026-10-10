@@ -70,9 +70,9 @@ int rd_euler_spectral_matrix(int ndim, const double *velocity, double enthalpy, 
   return 0;
 }
 
-int rd_euler_n_residual(int ndim, const double *u, const double *normal, const double *measure,
-                       double gamma, double rcond, int always_svd, double *phi, double *residual,
-                       struct rd_n_diagnostics *diag)
+static int rd_euler_residual(int ndim, const double *u, const double *normal, const double *measure,
+                             double gamma, double rcond, int always_svd, int lda, const double *temporal,
+                             double *phi, double *residual, double *f1, struct rd_n_diagnostics *diag)
 {
   memset(diag, 0, sizeof(*diag));
   if((ndim != 2 && ndim != 3) || !(gamma > 1.0) || !isfinite(gamma))
@@ -151,6 +151,8 @@ int rd_euler_n_residual(int ndim, const double *u, const double *normal, const d
             diag->roundoff_scale += (fabs(full[k]) + fabs(minus[k])) * fabs(uhat[i][c]);
           }
     }
+  if(lda)
+    memcpy(rhs, phi, nc * sizeof(double));
   memcpy(original, rhs, nc * sizeof(double));
   if(rd_upwind_solve(nc, sm, rhs, 1, rcond, always_svd, &diag->solve) != 0)
     return -2;
@@ -169,7 +171,7 @@ int rd_euler_n_residual(int ndim, const double *u, const double *normal, const d
           double value = 0.0;
           for(int c = 0; c < nc; c++)
             {
-              value += plus[i][r * nc + c] * (uhat[i][c] - rhs[c]);
+              value += plus[i][r * nc + c] * (lda ? -rhs[c] : uhat[i][c] - rhs[c]);
               diag->roundoff_scale += fabs(plus[i][r * nc + c]) * (fabs(uhat[i][c]) + fabs(rhs[c]));
             }
           residual[i * nc + r] = value;
@@ -177,9 +179,57 @@ int rd_euler_n_residual(int ndim, const double *u, const double *normal, const d
         }
       diag->conservation_defect = fmax(diag->conservation_defect, fabs(sum - phi[r]));
     }
+  if(lda && temporal)
+    {
+      memset(f1, 0, nv * nc * sizeof(double));
+      if(diag->solve.rank == nc)
+        {
+          double target[5];
+          struct rd_solve_info time_solve;
+          memcpy(target, temporal, nc * sizeof(double));
+          if(rd_upwind_solve(nc, sm, target, 1, rcond, always_svd, &time_solve) != 0 || time_solve.rank != nc)
+            return -2;
+          for(int r = 0; r < nc; r++)
+            {
+              double defect = -temporal[r], sum = 0.0;
+              for(int c = 0; c < nc; c++)
+                {
+                  defect += sm[r * nc + c] * target[c];
+                  diag->roundoff_scale += fabs(sm[r * nc + c] * target[c]);
+                }
+              diag->solve_defect = fmax(diag->solve_defect, fabs(defect));
+              for(int i = 0; i < nv; i++)
+                {
+                  for(int c = 0; c < nc; c++)
+                    {
+                      f1[i * nc + r] -= plus[i][r * nc + c] * target[c];
+                      diag->roundoff_scale += fabs(plus[i][r * nc + c] * target[c]);
+                    }
+                  sum += f1[i * nc + r];
+                }
+              diag->conservation_defect = fmax(diag->conservation_defect, fabs(sum - temporal[r]));
+            }
+        }
+    }
   const double tolerance = 4096.0 * DBL_EPSILON * fmax(diag->roundoff_scale, DBL_MIN);
   if(!isfinite(diag->roundoff_scale) || !isfinite(diag->solve_defect) || !isfinite(diag->conservation_defect) ||
      diag->solve_defect > tolerance || diag->conservation_defect > tolerance)
     return -3;
   return 0;
+}
+
+int rd_euler_n_residual(int ndim, const double *u, const double *normal, const double *measure,
+                       double gamma, double rcond, int always_svd, double *phi, double *residual,
+                       struct rd_n_diagnostics *diag)
+{
+  return rd_euler_residual(ndim, u, normal, measure, gamma, rcond, always_svd, 0, NULL,
+                           phi, residual, NULL, diag);
+}
+
+int rd_euler_lda_residual(int ndim, const double *u, const double *normal, const double *measure,
+                         double gamma, double rcond, int always_svd, const double *temporal,
+                         double *phi, double *residual, double *f1, struct rd_n_diagnostics *diag)
+{
+  return rd_euler_residual(ndim, u, normal, measure, gamma, rcond, always_svd, 1, temporal,
+                           phi, residual, f1, diag);
 }

@@ -35,4 +35,15 @@ int rd_euler_n_residual(int ndim, const double *u, const double *unit_normal,
                        const double *face_measure, double gamma, double rcond,
                        int always_svd, double *phi, double *residual, struct rd_n_diagnostics *diagnostics);
 
+/* Static LDA: phi_i = -K_i^+ (sum K^-)_solve phi. If temporal != NULL,
+ * full-rank F1 applies the same distribution to temporal[nvar]. f1 is then
+ * required [nvert][nvar]. For deficient rank f1 is zero: the caller MUST use
+ * conservative element-local lumping, since an arbitrary temporal target
+ * need not lie in range(sum K^-). Spatial compatibility is always checked.
+ * Geometry and error conventions are identical to rd_euler_n_residual. */
+int rd_euler_lda_residual(int ndim, const double *u, const double *unit_normal,
+                         const double *face_measure, double gamma, double rcond,
+                         int always_svd, const double *temporal, double *phi,
+                         double *residual, double *f1, struct rd_n_diagnostics *diagnostics);
+
 #endif
