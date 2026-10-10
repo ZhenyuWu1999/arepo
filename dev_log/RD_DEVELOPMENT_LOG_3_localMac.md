@@ -9296,3 +9296,26 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
 - 档案、范围和复现见 `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`。
   这是小规模周期 full-mesh 静态 MPI 验证，非 moving 3D 或强扩展效率证据。
   下一个节点是完整五分量 static hierarchy 与混合 bins 原生测试。
+
+## 236. 2026-10-10：三维 static hierarchical N/LDA 与 MPI 联合验证
+
+**作者：Codex；本地仅作小规模功能检查，大量算力工作按用户补充要求留给 COSMA/Cuillin。**
+
+- 将 static hierarchy 的 predictor reset/export/import、W* 恢复、三维动能
+  和 persistent volume coverage 补齐为 RD_NVAR/RD_NVERT；复用已有 element
+  finest clock、complete-star live/frozen policy 和 endpoint 检查。
+- N 使用两次 h_T/2 spatial 更新；LDA closing 加 2(F1−lumped)，equal-bin
+  退化到 equal-step F1。增加 actual stage deposit 的 raw conservation 检查。
+  仍是已有 frozen-dU experimental multirate 方法，未宣称混合 bin 的收敛阶。
+- `hierarchy_final/` 50 例全部通过：equal bins、controlled two bins、真正由
+  压力 patch CFL 产生的 natural two bins，N/LDA、1/2/4 ranks；守恒≤2.443e-15，
+  uniform≤6.662e-16，MPI/degeneration 场差≤8.882e-15，dt 序列一致。
+- 初始 `hierarchy_v1/` 自然平流其实只用一个 bin。`natural_v1/` 保留 coverage
+  assertion 的失败；没有放宽该检查，改用 rho1、p=1+8 exp(−r²/.12²) 的
+  8³ pressure patch，actual finest dt=1/1024，star ratio=2。
+- 二维 common hierarchy 回归：冻结 ce0433d vs final source，N/LDA、uniform
+  random/Yee48、2 ranks、t=1/32，四例最终 primitive/Q/坐标/总量逐字节相同。
+- 范围报告 `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`；统一档案
+  `../local_runs/rd_3d_extension_20261010_v1/`。Moving 3D、B、active-only 3D
+  mesh rebuild 和 open-stage checkpoint 仍不支持。下一节点整理 SWIFT-family
+  小网格 benchmark 的成功与失败证据；本地不增加更大网格或性能扫描。

@@ -85,3 +85,44 @@ is below 3e-15. `mpi_v1/` preserves the build-check failure from the new header
 guard missing in `defines_extra`; that registration was fixed before v2.
 This establishes small periodic full-mesh static MPI gates, not moving-MPI or
 large-scale efficiency. Domain decomposition is enabled in the native run.
+
+## 5. Static hierarchical milestone
+
+The tetra adapter now uses the existing static finest-element-bin clock and
+complete-star predictor policy for **all five** conserved components. Vertex
+predictors and remote predictor deposits use RD_NVAR. Corrector primitives
+include z momentum/kinetic energy. Persistent median-dual coverage includes
+boxSize_Z. Opening/closing endpoint checks and star-bin exports are inherited
+from the existing static hierarchy.
+
+For a tetra clock h_T, both calls carry h_T/2. N uses the two spatial residuals;
+LDA closing adds 2(T_F1 - V dU_i/(4 h_T)). Its element sum is zero, and equal
+bins reduce to the concentrated equal-step F1 update. Vertices with a faster
+incident star stay frozen in the stage state; their integrated conserved
+ledger still receives all deposits. This is the existing **experimental
+frozen-dU hierarchy**, not a new proof of multirate convergence order. The
+actual final stage residual sum is now checked independently against Phi
+(hierarchy), or Phi/2 + temporal target (equal-step corrector).
+
+`hierarchy_final/`: **50 cases** pass. N/LDA equal-bin degeneration, controlled
+one-level refinement and an actually mixed natural-bin pressure patch each
+run on 1/2/4 ranks. All five totals at saved common endpoints are conserved to
+<=2.443e-15; uniform defect <=6.662e-16; maximum MPI/equal-bin field difference
+8.882e-15 and step sequences match. The natural patch uses rho=1,
+p=1+8 exp(-|x-.5|²/.12²), v=(.3,-.2,.4), 8³, cap=1/64, CFL=.2,
+t=1/32. Its actual finest dt=1/1024 and max star ratio=2, proving the cap
+did not merely force equal bins. Controlled split uses x<.5 with cap=1/512.
+
+`hierarchy_v1/` also passed 56 cases, but its natural advection/uniform setups
+remained equal-bin. `natural_v1/` preserves a deliberately failed **test
+coverage assertion**: increasing the cap alone still produced one bin on
+those 8³ fields. No solver error or assertion loosening was used; the pressure
+patch supplies genuine different CFL clocks in the final campaign.
+
+`regression2d_before/after/`: frozen ce0433d versus the final hierarchy source,
+N/LDA static controlled two-bin Yee48 and uniform random, t=1/32, two ranks.
+All four final primitive/mass/coordinate/total comparisons are byte-identical.
+This covers the shared hierarchy edits; it does not resolve the deferred
+moving LDA/B K-refactor reproducibility issue. Full-mesh support is explicit;
+active-only 3D mesh reconstruction and checkpointing an open RK stage remain
+unsupported. No large-grid scaling or long-time convergence claim is made.

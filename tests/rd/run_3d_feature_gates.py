@@ -12,9 +12,20 @@ import re
 import subprocess
 import time
 
+import h5py
 import numpy as np
 from run_3d_static_gates import REPO, initial_conditions, density, VELOCITY, state, freeze
 from run_n_gauss3_split import ENV, write, rewrite, sha, build
+
+
+def feature_ic(path, n, problem):
+    if problem != 'pressure_patch':
+        return initial_conditions(path, n, problem)
+    initial_conditions(path, n, 'uniform')
+    with h5py.File(path, 'r+') as f:
+        x = f['PartType0/Coordinates'][:]
+        pressure = 1 + 8*np.exp(-np.sum((x-.5)**2, axis=1)/.12**2)
+        f['PartType0/InternalEnergy'][:] = pressure/.4
 
 
 def prepare(root, suite):
@@ -24,7 +35,7 @@ def prepare(root, suite):
     ncfg = (REPO/'examples/rd_3d/Config_N_static.sh').read_text()
     lcfg = (REPO/'examples/rd_3d/Config_LDA_static.sh').read_text()
     configs = {'N': ncfg, 'LDA': lcfg, 'LDA_svd': lcfg+'\nRD_ALWAYS_PSEUDOINVERSE\n'}
-    if suite == 'features':
+    if suite in ('features','natural'):
         for scheme, cfg in [('N', ncfg), ('LDA', lcfg)]:
             configs[scheme+'_hier_equal'] = cfg+'\nRD_HIERARCHICAL_TIMESTEPS\n'
             configs[scheme+'_hier_pattern'] = cfg.replace('FORCE_EQUAL_TIMESTEPS\n', '')+'\nRD_HIERARCHICAL_TIMESTEPS\nRD_HIERARCHICAL_TEST_PATTERN\n'
@@ -34,7 +45,10 @@ def prepare(root, suite):
     if suite != 'lda':
         specs += [(8,p,m,1/512,r) for m in ('N','LDA') for r in (2,4) for p in ('uniform','advection')]
     if suite == 'features':
-        specs += [(8,p,m,1/512,r) for scheme in ('N','LDA') for m in (scheme+'_hier_equal',scheme+'_hier_pattern',scheme+'_hier_natural') for r in (1,2,4) for p in ('uniform','advection')]
+        specs += [(8,p,m,1/512,r) for scheme in ('N','LDA') for m in (scheme+'_hier_equal',scheme+'_hier_pattern') for r in (1,2,4) for p in ('uniform','advection')]
+        specs += [(8,'pressure_patch',m,1/64,r) for m in ('N_hier_natural','LDA_hier_natural') for r in (1,2,4)]
+    if suite == 'natural':
+        specs = [(8,'pressure_patch',m,1/64,r) for m in ('N_hier_natural','LDA_hier_natural') for r in (1,2,4)]
     used = sorted(set(x[2] for x in specs))
     for method in used:
         (root/'configs'/f'{method}.sh').write_text(configs[method])
@@ -44,7 +58,7 @@ def prepare(root, suite):
     for n,problem,method,cap,ranks in specs:
         name=f'{problem}_{n}_{method}_dt{round(1/cap)}_np{ranks}'; folder=root/'runs'/name; folder.mkdir()
         ic=root/'inputs'/f'{problem}_{n}.hdf5'
-        if not ic.exists(): initial_conditions(ic,n,problem)
+        if not ic.exists(): feature_ic(ic,n,problem)
         param=rewrite((REPO/'examples/rd_3d/param.txt').read_text(),dict(InitCondFile=ic.with_suffix(''),OutputDir=str(folder/'output')+'/',MaxSizeTimestep=cap))
         (folder/'param.txt').write_text(param)
         cases.append(dict(name=name,n=n,problem=problem,method=method,ranks=ranks,cap=cap,end=.03125,ic=str(ic),ic_sha256=sha(ic),param_sha256=sha(folder/'param.txt')))
@@ -95,7 +109,7 @@ def analyse(root, selected):
             exact=density(b['x']-VELOCITY*b['time']); r['density_L1']=float(np.sum(b['dual']*abs(b['rho']-exact)))
             r['density_L2']=float(np.sqrt(np.sum(b['dual']*(b['rho']-exact)**2)))
         r['max_bin_ratio']=max([int(x) for x in re.findall(r'max_ratio=(\d+)',log)] or [1])
-        if 'pattern' in case['method']: assert r['max_bin_ratio']>=2,r
+        if 'pattern' in case['method'] or case['problem']=='pressure_patch': assert r['max_bin_ratio']>=2,r
         results.append(r); finals[name]=b; print(r,flush=True)
     comparisons={}
     if not selected:
@@ -109,14 +123,15 @@ def analyse(root, selected):
                 np.testing.assert_array_equal(steps[name],steps[reference])
                 comparisons[name]=dict(reference=reference,max_field_difference=diff)
         byname={r['case']:r for r in results}
-        coarse=byname['advection_8_LDA_dt512_np1']['density_L1']; fine=byname['advection_16_LDA_dt512_np1']['density_L1']
-        assert fine<coarse
-        comparisons['LDA_two_grid']=dict(coarse_L1=coarse,fine_L1=fine,observed_order=float(np.log2(coarse/fine)),caveat='Initial trend only, not an asymptotic-order proof.')
-        np.testing.assert_array_equal(steps['advection_16_LDA_dt4096_np1'],np.repeat(steps['advection_16_LDA_dt512_np1']/2,2))
-        comparisons['LDA_dt_difference']={k:float(abs(finals['advection_16_LDA_dt4096_np1'][k]-finals['advection_16_LDA_dt512_np1'][k]).max()) for k in ('rho','p','v')}
-        for p in ('rest','uniform','pressure_rest','advection'):
-            diff=max(float(abs(finals[f'{p}_8_LDA_dt512_np1'][k]-finals[f'{p}_8_LDA_svd_dt512_np1'][k]).max()) for k in ('rho','p','v'))
-            assert diff<1e-10; comparisons[p+'_LU_SVD']=diff
+        if 'advection_8_LDA_dt512_np1' in byname:
+            coarse=byname['advection_8_LDA_dt512_np1']['density_L1']; fine=byname['advection_16_LDA_dt512_np1']['density_L1']
+            assert fine<coarse
+            comparisons['LDA_two_grid']=dict(coarse_L1=coarse,fine_L1=fine,observed_order=float(np.log2(coarse/fine)),caveat='Initial trend only, not an asymptotic-order proof.')
+            np.testing.assert_array_equal(steps['advection_16_LDA_dt4096_np1'],np.repeat(steps['advection_16_LDA_dt512_np1']/2,2))
+            comparisons['LDA_dt_difference']={k:float(abs(finals['advection_16_LDA_dt4096_np1'][k]-finals['advection_16_LDA_dt512_np1'][k]).max()) for k in ('rho','p','v')}
+            for p in ('rest','uniform','pressure_rest','advection'):
+                diff=max(float(abs(finals[f'{p}_8_LDA_dt512_np1'][k]-finals[f'{p}_8_LDA_svd_dt512_np1'][k]).max()) for k in ('rho','p','v'))
+                assert diff<1e-10; comparisons[p+'_LU_SVD']=diff
         write(root/'comparisons.json',comparisons)
     write(root/('results_selected.json' if selected else 'results.json'),results)
 
@@ -124,7 +139,7 @@ def analyse(root, selected):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action',choices=['prepare','build','run','analyse','all']); parser.add_argument('root',type=Path)
-    parser.add_argument('--suite',choices=['lda','mpi','features'],default='features'); parser.add_argument('--select',nargs='+')
+    parser.add_argument('--suite',choices=['lda','mpi','features','natural'],default='features'); parser.add_argument('--select',nargs='+')
     args=parser.parse_args(); root=args.root.resolve()
     if args.action in ('prepare','all'): prepare(root,args.suite)
     if args.action in ('build','all'): build(root,args.select)

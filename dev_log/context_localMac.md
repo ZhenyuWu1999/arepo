@@ -5,6 +5,17 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-10
 
+**3D static hierarchy milestone (2026-10-10, log3 §236):**
+N/LDA frozen-dU static full-mesh hierarchy now passes 50 final 8³/16³ gates,
+including equal-bin degeneration, controlled and actual natural two bins on
+1/2/4 MPI ranks. Five-component conservation <=2.443e-15; MPI/equal-bin fields
+<=8.882e-15. Shared 2D N/LDA hierarchy remains byte-identical in four native
+2-rank comparisons against ce0433d. See `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`
+and `../local_runs/rd_3d_extension_20261010_v1/hierarchy_final/`.
+User wants only simple local checks; large convergence/long-time/scaling work
+belongs on COSMA or Cuillin. Moving 3D, B, active-only 3D reconstruction and
+open-stage restart remain unsupported; mixed-bin order is not proved.
+
 **3D static MPI milestone (2026-10-10, log3 §235):**
 N/LDA full-mesh equal-step native gates now pass on 1/2/4 ranks. Distributed
 spectral CFL is in `rd_timestep.c`; stage diagnostics are global. Archive:

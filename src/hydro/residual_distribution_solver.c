@@ -188,11 +188,12 @@ static int rd_rusanov_local_index(const point *dp)
 
 #if !defined(TWODIMS)
 #if !defined(RD_3D_STATIC) || !defined(VORONOI_STATIC_MESH) || (!defined(N_SCHEME) && !defined(LDA_SCHEME)) || \
-    !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(CREATE_FULL_MESH) || !defined(FORCE_EQUAL_TIMESTEPS) || \
+    !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(CREATE_FULL_MESH) || (!defined(FORCE_EQUAL_TIMESTEPS) && !defined(RD_HIERARCHICAL_TIMESTEPS)) || \
     !defined(TREE_BASED_TIMESTEPS)
-#error "3D RD requires explicit RD_3D_STATIC: static full-mesh, equal-step N/lumped or LDA/F1 RK2 with tree timesteps."
+#error "3D RD requires explicit RD_3D_STATIC: static full-mesh N/lumped or LDA/F1 RK2 with tree timesteps."
 #endif
-#if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_RK2_SPLIT_STAGES) || defined(RD_LDA_COMMON_BETA) || defined(RD_ELEMENT_COMOVING_FRAME) || \
+#if defined(B_SCHEME) || defined(RD_RK2_SPLIT_STAGES) || defined(RD_RK2_RATE_CONSISTENT_HEUN) || \
+    defined(RD_LDA_COMMON_BETA) || defined(RD_ELEMENT_COMOVING_FRAME) || \
     defined(RD_ALE_CONTOUR_RESIDUAL) || defined(RD_ALE_ENTROPY_DISSIPATION) || defined(RD_ALE_SHEAR_EIGENVALUE_FLOOR) || \
     defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND) || defined(RD_ALE_CONDITION_DIAGNOSTIC) || \
     defined(RD_ALE_CFL_DIAGNOSTIC) || defined(RD_DIAG_NO_KICK) || defined(RD_DIAG_PREDICTOR_ONLY) || \
@@ -472,7 +473,7 @@ static struct FluxRD_list_data
   double dMomentum_Dual[3];
   double dEnergy_Dual;
 #ifdef RD_HIERARCHICAL_TIMESTEPS
-  double dPredictor[4]; /* full-weight integrated predictor; zero in the corrector call */
+  double dPredictor[RD_NVAR]; /* full-weight integrated predictor; zero in the corrector call */
 #endif
 
 } *FluxRD_list;
@@ -729,7 +730,7 @@ static void rd_open_vertex_predictors(void)
 #ifdef RD_ALE_INTERVAL_HIERARCHY
   for(int i = 0; i < NumGas; i++)
     {
-      for(int k = 0; k < 4; k++)
+      for(int k = 0; k < RD_NVAR; k++)
         SphP[i].RD_dU[k] = 0.0;
       SphP[i].RD_PredictorEnd = RdIntervalLive[i] ? All.Ti_Current : -1;
     }
@@ -739,13 +740,13 @@ static void rd_open_vertex_predictors(void)
     {
       if(SphP[i].RD_StarTimeBin < P[i].TimeBinHydro)
         {
-          for(int k = 0; k < 4; k++)
+          for(int k = 0; k < RD_NVAR; k++)
             SphP[i].RD_dU[k] = 0.0;
           SphP[i].RD_PredictorEnd = -1;
         }
       else if(TimeBinSynchronized[P[i].TimeBinHydro])
         {
-          for(int k = 0; k < 4; k++)
+          for(int k = 0; k < RD_NVAR; k++)
             SphP[i].RD_dU[k] = 0.0;
 #ifdef RD_ALE_HIERARCHICAL
           SphP[i].RD_PredictorEnd = All.Ti_Current;
@@ -5146,6 +5147,9 @@ void compute_residuals(tessellation *T)
     MPI_Allreduce(&local_area, &global_area, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     double box_area = boxSize_X * boxSize_Y;
+#ifndef TWODIMS
+    box_area *= boxSize_Z;
+#endif
     if(fabs(global_area - box_area) > 1.0e-10 * box_area)
       terminate_program("RD hierarchy persistent DualArea coverage changed after domain decomposition");
   }
@@ -5605,13 +5609,16 @@ void compute_residuals(tessellation *T)
                       terminate_program("RD hierarchy consumed a stale or missing predictor");
                     }
 
-                  for(k = 0; k < 4; k++)
+                  for(k = 0; k < RD_NVAR; k++)
                     U_fluid[j][k] += dU_vertex[j][k];
                 }
 
               double stage_rho = U_fluid[j][0];
               double stage_mom2 = U_fluid[j][1] * U_fluid[j][1] + U_fluid[j][2] * U_fluid[j][2];
-              double stage_press = GAMMA_MINUS1 * (U_fluid[j][3] - 0.5 * stage_mom2 / stage_rho);
+#ifndef TWODIMS
+              stage_mom2 += U_fluid[j][3] * U_fluid[j][3];
+#endif
+              double stage_press = GAMMA_MINUS1 * (U_fluid[j][RD_ENERGY] - 0.5 * stage_mom2 / stage_rho);
 
               if(!isfinite(stage_rho) || !isfinite(stage_press) || stage_rho <= 0.0 || stage_press <= 0.0)
                 {
@@ -7313,14 +7320,49 @@ void compute_residuals(tessellation *T)
         }
       RD_stat_max_cons_defect_abs = dmax(RD_stat_max_cons_defect_abs, diagnostic.conservation_defect);
       RD_stat_max_phi = dmax(RD_stat_max_phi, diagnostic.max_phi);
-      for(j = 0; j < DIMS + 1; j++)
-        for(k = 0; k < DIMS + 2; k++)
+      for(j = 0; j < RD_NVERT; j++)
+        for(k = 0; k < RD_NVAR; k++)
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+          {
+            Flux_RD[k][j] = nodal[j][k];
+#ifdef LDA_SCHEME
+            if(rd_stage == 1)
+              Flux_RD[k][j] += 2.0 * (f1[j][k] - tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt);
+#endif
+          }
+#else
           Flux_RD[k][j] = rd_stage == 0 ? nodal[j][k] :
 #ifdef LDA_SCHEME
               f1[j][k] + 0.5 * nodal[j][k];
 #else
-              tri_normals_list[i].area / (DIMS + 1) * dU_vertex[j][k] / triangle_dt + 0.5 * nodal[j][k];
+              tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / triangle_dt + 0.5 * nodal[j][k];
 #endif
+#endif /* RD_HIERARCHICAL_TIMESTEPS */
+      /* Check the actual stage deposit, including the F1/lumped difference.
+       * No correction is applied to make an incompatible distribution pass. */
+      for(k = 0; k < RD_NVAR; k++)
+        {
+          double target = Phi[k], sum = 0.0, scale = diagnostic.roundoff_scale;
+#ifndef RD_HIERARCHICAL_TIMESTEPS
+          if(rd_stage == 1)
+            {
+              target *= 0.5;
+              for(j = 0; j < RD_NVERT; j++)
+                target += tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
+            }
+#endif
+          for(j = 0; j < RD_NVERT; j++)
+            {
+              sum += Flux_RD[k][j];
+              scale += fabs(Flux_RD[k][j]);
+              if(rd_stage == 1)
+                scale += tri_normals_list[i].area / RD_NVERT * fabs(dU_vertex[j][k]) / full_triangle_dt;
+            }
+          if(!isfinite(sum) || fabs(sum - target) >
+              RD_CONSERVATION_ROUNDOFF_FACTOR * DBL_EPSILON * dmax(scale, DBL_MIN))
+            terminate_program("RD tetra stage conservation failed: tetra=%d stage=%d component=%d defect=%.17g scale=%.17g",
+                              thistask_triangles[i], rd_stage, k, sum - target, scale);
+        }
 #endif /* TWODIMS: distribution */
 
       for(j = 0; j < DIMS + 1; j++)
@@ -7356,10 +7398,8 @@ void compute_residuals(tessellation *T)
               if(rd_stage == RD_RK_STAGE_PREDICTOR &&
                  rd_point_stage_live(&DP[DT[thistask_triangles[i]].p[j]]))
                 {
-                  SphP[SphP_index].RD_dU[0] += (-1.0) * full_triangle_dt * Flux_RD[0][j];
-                  SphP[SphP_index].RD_dU[1] += (-1.0) * full_triangle_dt * Flux_RD[1][j];
-                  SphP[SphP_index].RD_dU[2] += (-1.0) * full_triangle_dt * Flux_RD[2][j];
-                  SphP[SphP_index].RD_dU[3] += (-1.0) * full_triangle_dt * Flux_RD[3][j];
+                  for(k = 0; k < RD_NVAR; k++)
+                    SphP[SphP_index].RD_dU[k] += (-1.0) * full_triangle_dt * Flux_RD[k][j];
                 }
 #endif
             }
@@ -7381,16 +7421,14 @@ void compute_residuals(tessellation *T)
 #endif
               FluxRD_list[N_FluxRD_export].dEnergy_Dual      = (-1.0) * triangle_dt * Flux_RD[DIMS + 1][j];
 #ifdef RD_HIERARCHICAL_TIMESTEPS
-              for(k = 0; k < 4; k++)
+              for(k = 0; k < RD_NVAR; k++)
                 FluxRD_list[N_FluxRD_export].dPredictor[k] = 0.0;
 
               if(rd_stage == RD_RK_STAGE_PREDICTOR &&
                  rd_point_stage_live(&DP[DT[thistask_triangles[i]].p[j]]))
                 {
-                  FluxRD_list[N_FluxRD_export].dPredictor[0] = (-1.0) * full_triangle_dt * Flux_RD[0][j];
-                  FluxRD_list[N_FluxRD_export].dPredictor[1] = (-1.0) * full_triangle_dt * Flux_RD[1][j];
-                  FluxRD_list[N_FluxRD_export].dPredictor[2] = (-1.0) * full_triangle_dt * Flux_RD[2][j];
-                  FluxRD_list[N_FluxRD_export].dPredictor[3] = (-1.0) * full_triangle_dt * Flux_RD[3][j];
+                  for(k = 0; k < RD_NVAR; k++)
+                    FluxRD_list[N_FluxRD_export].dPredictor[k] = (-1.0) * full_triangle_dt * Flux_RD[k][j];
                 }
 #endif
 
@@ -7647,18 +7685,27 @@ void compute_residuals(tessellation *T)
               if(TimeBinSynchronized[P[i].TimeBinHydro])
                 {
 #endif
-                  for(k = 0; k < 4; k++)
+                  for(k = 0; k < RD_NVAR; k++)
                     SphP[i].RD_dU[k] /= SphP[i].DualArea;
 
                   double u0 = SphP[i].Density + SphP[i].RD_dU[0];
                   double u1 = SphP[i].Density * P[i].Vel[0] + SphP[i].RD_dU[1];
                   double u2 = SphP[i].Density * P[i].Vel[1] + SphP[i].RD_dU[2];
+#ifdef TWODIMS
                   double u3 = SphP[i].Pressure / GAMMA_MINUS1 +
                               0.5 * SphP[i].Density *
                                   (P[i].Vel[0] * P[i].Vel[0] + P[i].Vel[1] * P[i].Vel[1]) +
                               SphP[i].RD_dU[3];
                   double predictor_press = GAMMA_MINUS1 * (u3 - 0.5 * (u1 * u1 + u2 * u2) / u0);
 
+#else
+                  double mom2 = u1 * u1 + u2 * u2;
+                  double old_speed2 = P[i].Vel[0] * P[i].Vel[0] + P[i].Vel[1] * P[i].Vel[1] + P[i].Vel[2] * P[i].Vel[2];
+                  double mz = SphP[i].Density * P[i].Vel[2] + SphP[i].RD_dU[3];
+                  mom2 += mz * mz;
+                  double energy = SphP[i].Pressure / GAMMA_MINUS1 + 0.5 * SphP[i].Density * old_speed2 + SphP[i].RD_dU[RD_ENERGY];
+                  double predictor_press = GAMMA_MINUS1 * (energy - 0.5 * mom2 / u0);
+#endif
                   if(!isfinite(u0) || !isfinite(predictor_press) || u0 <= 0.0 || predictor_press <= 0.0)
                     {
                       printf("RD hierarchy predictor invalid after assembly: task=%d i=%d ID=%llu rho=%.17g press=%.17g\n",
@@ -8013,7 +8060,7 @@ void apply_FluxRD_list(void)
       SphP[p].Momentum[2] += FluxListGet[i].dMomentum_Dual[2];
       SphP[p].Energy += FluxListGet[i].dEnergy_Dual;
 #ifdef RD_HIERARCHICAL_TIMESTEPS
-      for(int component = 0; component < 4; component++)
+      for(int component = 0; component < RD_NVAR; component++)
         SphP[p].RD_dU[component] += FluxListGet[i].dPredictor[component];
 #endif
     }
