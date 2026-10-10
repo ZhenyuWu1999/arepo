@@ -3,7 +3,7 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-10-02
+Updated: 2026-10-10
 
 **Chapter3 wording correction (2026-10-02, log3 §210):**
 User explicitly wants their original FV–RD sentences preserved; only typeset
@@ -184,6 +184,41 @@ reached t=.05. It overshoots (ρmax 4.8/5.3), shows about 5× HLLC
 velocity noise, and has about 500 nodes with K below the initial minimum. Flip/rebase conservation is now the bottleneck.
 Archive `../local_runs/sedov_lda_hllc_20260930_v1/`,
 [report](RD_SEDOV_LDA_HLLC_BLEND_20260930.md). Uncommitted.
+
+**Current baseline and early 3D scope (user decision 2026-10-10, log3 §228):**
+Lazy is now **off** for the baseline. Use explicit mode-1 Campoli + conservative
+transfer; equal-step is the primary reference, natural interval hierarchy a
+separate comparison. Eight ready 2D Configs and their scope are in
+`examples/rd_moving_baseline/README.md`. Historical lazy/mode-0 archives keep
+their original meaning. The earlier suggestions below to default to lazy and
+defer 3D are superseded by this user decision.
+
+Read [3D feasibility](RD_3D_FEASIBILITY_20261010.md). Standalone `rdsolver` at
+`adfbe55` builds and completes a frozen 512-vertex/3072-tetra static x-only
+Gaussian run to .05, but its real tetra kernel aborts at exactly zero velocity
+with the old singular inverse. Do not port its clipping/inverse/main loop.
+AREPO has native tetrahedra; RD remains explicitly 2D. New independent models:
+1000 3D geometry cases pass Gauss2 GCL/interval additivity; midpoint fails;
+2000 five-component manufactured 2↔3 transfer cases conserve below 1e-15.
+Evidence: `../local_runs/rd_3d_feasibility_20261010_v1/`.
+Next implementation target: native AREPO geometry adapter + static N, then
+early moving-uniform/remap gates, single rank/equal steps/no lazy. This review
+did not implement native 3D RD or rerun the full 2D baseline campaign.
+
+**Claude comments independently reviewed (2026-10-10, log3 §226):**
+At `7c2d949`, accepted the implemented R1–R4 fixes and donor-copy change.
+See [review](RD_FLIP_HIERARCHY_COMMENTS_CODEX_REVIEW_20261010.md) before executing
+the next test specification. Three P2 test-definition issues: interpolating
+nodal errors defines an analytic-baseline-corrected reconstruction, not the
+original P1 field difference; lazy needs actual registry connectivity rather
+than a new Delaunay reconstruction; low lazy thresholds do not deterministically
+inject inversion. Self-node interpolation does not validate off-node accuracy.
+Rechecked 1049 frozen source hashes and both CFL gate artifacts; default really
+reaches t=.005, maximum logged common-closure defect 1.246e-14, maximum mixed
+live/frozen CFL ratio .116 (not .103). Controlled .05 abort verified.
+Targeted flip kernel tests pass for both modes. Evidence:
+`../local_runs/codex_claude_comments_review_20261010_v1/`.
+No solver/thesis edits or full B1–B3 campaign in this review.
 
 **Codex review addressed (2026-10-09, log3 §224, commit 95a1a26):**
 - R1: explicit flip modes plus `tests/rd/flip_campaign_checks.py`.

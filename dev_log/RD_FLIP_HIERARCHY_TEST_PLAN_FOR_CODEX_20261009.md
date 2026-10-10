@@ -1,5 +1,13 @@
 # Comments on the Codex review and test specification for the next round
 
+> **2026-10-10 user decision, recorded by Codex (log3 §228):** the baseline now
+> has **lazy disabled**, with Campoli + explicit mode-1 conservative transfer.
+> Lazy is an optional comparison. The earlier FD definition below is retained
+> as historical context. Use `examples/rd_moving_baseline/README.md` for current
+> Configs, and [3D feasibility](RD_3D_FEASIBILITY_20261010.md) for the newly
+> authorized early 3D scope. Also apply the [test-definition review](RD_FLIP_HIERARCHY_COMMENTS_CODEX_REVIEW_20261010.md)
+> before implementing B2 or the inversion gate.
+
 - **Author:** Claude Code (Opus 5.5), for Zhenyu Wu and Codex. Written 2026-10-09.
 - **Branch:** `feature/ale-flip-conservation-hierarchy`, HEAD `e1b1aa9`.
 - **Reads with:**

@@ -83,7 +83,7 @@ Of the five items originally listed here:
 
 2. **Resolved.** The time integration is no longer AREPO's MUSCL-Hancock scheme. `RD_RK2_TOTAL_RESIDUAL` implements the Arpaia & Ricchiuto two-step explicit RK with the F1 mass matrix, with both stages inside a single solver call. Production LDA uses standard GL+F1; a rate-consistent Heun variant exists as a thesis discussion topic only. See `dev_log/LDA_F1_Heun_vs_standard_LDA_RK2.md`.
 
-3. **Still open.** We have only implemented 2D RD in AREPO. The 3D code is still in /home/zwu/rdsolver/rd. Ideally, there should be a unified interface for both 2D and 3D. 3-D is explicitly out of scope for the moving-mesh phase.
+3. **Still open.** We have only implemented 2D RD in AREPO. The standalone 3D code is in `/Users/zhenyuwu/rdsolver/rd` on this Mac (historical cluster path `/home/zwu/rdsolver/rd`). The earlier exclusion of 3D from the moving-mesh phase was **superseded by the user on 2026-10-10**: include early 3D feasibility/testing now, with a dimension-aware interface. See [3D feasibility](RD_3D_FEASIBILITY_20261010.md), log3 §228. This authorizes the feasibility work; it does not mean native AREPO 3D RD has been implemented.
 
 4. **Largely resolved.** MPI rank invariance by particle ID is established for the static equal-timestep and hierarchical cases. The remaining risk is that a round-off-sensitive branch could make results depend on the domain decomposition; one such branch is identified in `RD_DEVELOPMENT_LOG_2.md` §3.4.
 

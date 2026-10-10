@@ -9029,3 +9029,95 @@ Codex 的审核文件、§223 与 handoff 原样以 Codex 署名单独提交（1
   - check_rd 需 conda 的 PATH，构建需 Homebrew mpicc 优先；
   - 不要在同一 shell 里用 `pgrep -f` 模式排队等待；
   - 不得用作精度排序的指标：晚期 E_ky、matched-ID 差、负载下的计时。
+
+## 226. 2026-10-10：独立审核 Claude 对 Codex 的回应与下一轮测试规范
+
+**作者：Codex；用户要求“审核 claude 的评论”。审核 HEAD `7c2d949` 与修正 `95a1a26`。未改 solver、Claude 原文或 thesis，未启动 B1–B3 全套计算。**
+
+完整审核：[RD_FLIP_HIERARCHY_COMMENTS_CODEX_REVIEW_20261010.md](RD_FLIP_HIERARCHY_COMMENTS_CODEX_REVIEW_20261010.md)。
+
+- R1–R4 的现有修正接受。生成的 24 份 N/LDA/B/HLLC 配置显式 mode 且互异；
+  frozen CFL 超限会终止；Arpaia 完整缺陷推导已更正；matched-ID 已改名。
+- 重跑 targeted `test_flip_transfer.py`，mode 0/1 均通过，最大守恒误差
+  6.16e-16/6.17e-16；新增 mode 1 donor 逐位保持断言通过。
+- 下一轮规范有三项 P2：
+  1. B2.2 将 `I_A e_A−I_B e_B` 等同于原 P1 场差，遗漏解析场在两网格上的
+     插值差。它可作为解析基线校正后的诊断，需明确命名。四角精确采样 `1+xy`
+     的不同对角线反例：节点误差差为零，实际 P1 场中心差 .5、L1 差 1/6。
+     自节点回插精确不能验证离节点插值；小振幅也不约束网格尺度曲率。
+  2. lazy 实际使用 registry 连接，末坐标重新 Delaunay 化不能替代真实 P1 基底。
+     建议输出 registry 连接/周期像，并补 interval equal 无 lazy 对照。
+  3. B1.8 的 .5°/179° 阈值并不保证发生倒置，不能要求任意 KH/均匀态必然终止。
+     应加确定性线性轨迹负对照及有效轨迹正对照。报告给出端点/中点正面积、
+     区间内部负面积的制造例，本轮仅验证代数，未冒充 native guard 测试。
+- CFL 档案 1049 个源文件及 source tar/binary/Config/IC/参数哈希均核验通过；
+  默认 run 末快照 t=.005，公共闭合误差 ≤1.246e-14。全程混合 live/frozen
+  `cfl_ledger_max` 为 **.116**，并非 §224/测试规范的 .103；低限值在
+  .0687702>.05 时按预期终止。没有验证超出物理限值 1 后的恢复。
+- early closure 是合理的待研究方向，但 .8 阈值加“下一事件”不保证避免超限；
+  需要前瞻增量/几何约束、完整 star closure 与 refresh 论证。
+- 次要问题：mode 校验器仍接受 2；新平均位移未取周期最短像；live ratio 不能
+  套 frozen <=1 gate；误差范数增量不能当作解的距离；一次 dt 减半仅是敏感性检查。
+
+可复现证据：`../local_runs/codex_claude_comments_review_20261010_v1/{audit.py,audit.json,test_flip_transfer.txt}`。
+先修测试定义，再冻结执行 B1/B2，研究主线保持不变。
+
+## 227. 2026-10-10：澄清 lazy、transfer、旧 repair 与误差插值的含义
+
+**作者：Codex；回应用户对当前方法与 §226 第一项的追问。只读核验，无新模拟或 solver/thesis 改动。**
+
+- 当前拟定最终组合是 Campoli + interval hierarchy + lazy + mode 1 conservative
+  transfer。lazy 决定何时采用新连接，transfer 在真正重连时守恒地迁移状态；两者配合。
+  旧 uniform-shift diagnostic repair 保留作对照，不是该组合所用路径。
+- §223 的 `confirmation/artifacts/{N,HLLC}_natural_lazy_h1/Config.sh` 确实开启 lazy；
+  Claude 新 CFL gate 的两份 Config 没有 lazy。因此不能说所有近期结果都来自 lazy。
+- §226 C1 的含义是 `I_X e_X = rho_h^X − I_X rho_exact`，两次运行相减会扣除
+  两网格对解析解的插值差。这个校正指标可用，但不等于原始 P1 场差。
+  一维例：精确函数 `1+x²`，网格 A={0,1}、B={0,.5,1}，节点值全精确，
+  节点误差插值均为零；x=.5 处两 P1 场却分别为 1.5、1.25。
+
+## 228. 2026-10-10：用户选择无 lazy baseline，提前研究 AREPO 3D RD
+
+**作者：Codex；用户要求 baseline 先关闭 lazy，并研究利用 `/Users/zhenyuwu/rdsolver` 提前开展 3D 测试的可行性。**
+
+报告：[RD_3D_FEASIBILITY_20261010.md](RD_3D_FEASIBILITY_20261010.md)。AREPO 代码基于 `7c2d949`；standalone `dev` 的 `adfbe55`。未改 solver/thesis，standalone 原目录保持干净。
+
+- baseline 具体配置：`examples/rd_moving_baseline/`，N/LDA/B/HLLC × equal/natural，
+  Campoli + 显式 mode1，lazy 全关闭；旧 repair 不启用。八份 Config 通过互异/mode 检查。
+  equal-step 作基本参照，natural hierarchy 单独比较。未重跑整套 baseline。
+- 3D 可行，现阶段就应做小规模几何、静态 N 和 moving-uniform/remap gates。
+  AREPO 自带 3D tetra/flip；RD 本身仍有 TWODIMS guard、四分量状态、三顶点二维法向、
+  固定 4×4 求解与 predictor 通信。不能直接复制 standalone main 或只去掉 guard。
+- 独立冻结 standalone 编译成功：周期 8³ 点/3072 tetra 的静态 GAUSS3D 到 t=.05，
+  保存快照均 finite、rho/p>0，12 位原生日志的 mass/energy 首末相同。
+  GAUSS3D 实为 x-only 脉冲且横向速度 1e-8，不构成完整三维/运动验证。
+- 调用旧实际 tetra kernel 的严格零速度探针触发 singular inverse，并以 exit(0) 结束；
+  无完成标记。移植需五分量 LU/SVD 兼容性处理，不能带入旧 clipping/inverse。
+- 独立三维几何模型 1000 例：Gauss2 GCL≤1.14e-15、区间可加性≤1.35e-16；
+  中点规则不成立。线性顶点运动时体积为 cubic、面面积向量为 quadratic。
+- 制造双锥 2↔3 cavity，双方向/两 high mode 共2000 个随机五分量状态转移：
+  守恒≤9.46e-16、正性通过，mode1 donor 逐位不变；uniform/affine 变化≤5.33e-15。
+  这是 NumPy 代数模型，不是 AREPO native 3D 实现。
+- 必须提前设计：维数/顶点数/变量数分离、signed volume 与时间 mass 分离、
+  三维 face/time quadrature、cavity 与周期像、cubic 区间倒置检查、状态/通信布局。
+  AREPO `calculate_tetra_volume` 返回 determinant=6V，adapter 需处理这一约定。
+- 下一实施顺序：真实 AREPO tetra adapter → 单 rank 静态 N → 尽早 moving uniform/
+  transfer → 三维斜向平流、LDA/B → HLLC/Sedov、hierarchy/MPI。关闭 lazy 保持基准清晰。
+
+证据：`../local_runs/rd_3d_feasibility_20261010_v1/`，包含冻结源、Config、native 编译/运行/失败日志、
+binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶部已记录用户决定，原历史结果保留。
+
+## 229. 2026-10-10：3D 实施前保存本地改动，确定模块拆分建议
+
+**作者：Codex；用户明确要求先 commit 本地 AREPO 改动、保证干净，再开始 3D。**
+
+- 审核未提交内容：均为本轮系列审核文档、context/log 更新和八份无 lazy baseline
+  配置；没有 solver 源码改动，也没有其他作者已暂存的工作。保留当前分支。
+- 独立 Claude 评论审核报告已提交为 `69eb3aa`。其余 baseline、可行性报告、交接与
+  本条记录另作一次提交；本轮不开始 3D 源码改造。
+- 文件组织建议见 [3D 可行性报告 §7](RD_3D_FEASIBILITY_20261010.md#7-进入-3d-前的文件组织建议尚未实施)：
+  8286 行主文件保留推进/AREPO 接口，渐进抽取 Euler/线性求解与 simplex/ALE 几何；
+  纯 transfer 与 registry/cavity/hierarchy 生命周期分开。2D/3D 共享接口，不复制整份 solver。
+- 八份配置通过已有配置校验：彼此区分、显式 high mode 1、无 lazy/旧 repair，
+  所用宏已注册。已检查配置和新增报告的空白以及 `git diff --check`。
+  本轮只有文档/配置变化，未重复进行水动力运行；§228 的证据范围与限制不变。
