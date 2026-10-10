@@ -34,6 +34,9 @@ def main():
     helper = source[helper_start:helper_end].replace('static void', 'void', 1)
     wrapper = r'''
 #include <math.h>
+#include <stdlib.h>
+#include "rd_euler.h"
+#define terminate_program(message) abort()
 #include <string.h>
 #define GAMMA 1.4
 #define GAMMA_MINUS1 (GAMMA-1.0)
@@ -50,7 +53,7 @@ void build(double *rd_stage_average, double *rd_beta_average,
     with tempfile.TemporaryDirectory(prefix='rd_common_beta_') as tmp:
         tmp = Path(tmp)
         (tmp/'probe.c').write_text(wrapper)
-        subprocess.run(['cc','-std=c99','-O2','-shared','-fPIC',str(tmp/'probe.c'),'-o',str(tmp/'probe.so')],check=True)
+        subprocess.run(['cc','-std=c99','-O2','-shared','-fPIC',str(tmp/'probe.c'),str(REPO/'src/hydro/rd_euler.c'),'-I'+str(REPO/'src/hydro'),'-o',str(tmp/'probe.so')],check=True)
         lib = ctypes.CDLL(str(tmp/'probe.so'))
         ptr = np.ctypeslib.ndpointer(dtype=np.float64,flags='C_CONTIGUOUS')
         lib.build.argtypes = [ptr]*6

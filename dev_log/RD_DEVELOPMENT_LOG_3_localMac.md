@@ -9121,3 +9121,25 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
 - 八份配置通过已有配置校验：彼此区分、显式 high mode 1、无 lazy/旧 repair，
   所用宏已注册。已检查配置和新增报告的空白以及 `git diff --check`。
   本轮只有文档/配置变化，未重复进行水动力运行；§228 的证据范围与限制不变。
+
+## 230. 2026-10-10：3D 接入节点一，共用 Euler K 与 LU/SVD kernel
+
+**作者：Codex；用户授权开始整合三维代码，核对 thesis/Paardekooper2017/Morton2023，并在关键节点提交。**
+
+- 新增纯 C `rd_euler.c/.h`、`rd_linalg.c/.h`。现有二维主路径与 frame 诊断改用共用
+  spectral matrix；原四分量 LU/SVD 政策抽出并支持五分量。主文件减少 147 行。
+- 数学约定与来源校核见 [RD_3D_KERNEL_MATHEMATICS_20261010.md](RD_3D_KERNEL_MATHEMATICS_20261010.md)。
+  三维 K 的因子是 face area/3；median mass 是 volume/4。论文的单位法向和几何因子、
+  R 的逆矩阵次序、重复 eigenvalue 标签不能逐字照搬；完整 shear 子空间必须保留。
+- 编译真实 C kernel，对独立 complex-step Euler Jacobian/多项式谱投影做 800 组
+  2D/3D 测试，覆盖旋转、尺度、ALE eigenvalue shift、二维退化、4/5 分量多 RHS
+  LU/SVD。首次最大归一化 K 缺陷 1.903e-15；原 `make check_rd` 回归通过。
+- 冻结 `4b40f75` 与候选源码，分别编译 static N/LDA、moving N equal/natural；
+  2304 点 uniform random 与 Yee48 均到 t=.015625，共 16 个成功 native runs。
+  candidate uniform 缺陷≤1.45e-15；前后按 ID 的 rho/v/p 最大差≤2.45e-15，
+  总量最大绝对差≤4.45e-16。仅短时回归，不宣称完整精度/长期稳定性。
+- 首个原基线启动因静态 Config 不接受两个 mesh-regularisation 参数失败；保留
+  `*_rejected_parameters` 日志，删除这些无效参数后按同规则运行两版本。
+- 档案：`../local_runs/rd_3d_integration_20261010_v1/`，含复现脚本、冻结源、Config、
+  source/binary/IC/参数哈希、linkage、日志及比较 JSON。原论文 PDF 与公式页亦归档。
+  本节点仍未打开 native 3D；下一节点接入 tetra geometry 与 static N。

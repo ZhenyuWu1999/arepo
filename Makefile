@@ -315,7 +315,8 @@ OBJS    += mesh/voronoi/voronoi_2d.o
 endif
 
 ifeq (RESIDUAL_DISTRIBUTION,$(findstring RESIDUAL_DISTRIBUTION,$(CONFIGVARS)))
-OBJS    += hydro/residual_distribution_solver.o
+OBJS    += hydro/residual_distribution_solver.o hydro/rd_euler.o hydro/rd_linalg.o
+INCL    += hydro/rd_euler.h hydro/rd_linalg.h
 INCL    += hydro/rd_rusanov.h
 INCL    += hydro/rd_hllc.h
 INCL    += hydro/rd_lda_rusanov.h
@@ -494,6 +495,7 @@ check_docs: $(DOCS_CHECK)
 
 .PHONY: check_rd
 check_rd:
+	@$(PYTHON) tests/rd/test_euler_dimensions.py
 	@$(PYTHON) tests/rd/test_lda_f1_rank_deficiency.py
 	@$(PYTHON) tests/rd/test_lda_common_beta.py
 	@$(PYTHON) tests/rd/test_n_frame_covariance.py

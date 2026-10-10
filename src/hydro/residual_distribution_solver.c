@@ -13,9 +13,8 @@
 #include "../mesh/mesh.h"
 #include "../mesh/rd_ale_geometry.h"
 #include "../mesh/voronoi/voronoi.h"
-/* The LU diagonal-pivot spread is only a cheap trigger for switching to the
- * more reliable SVD solver.  It is not a numerical-rank decision. */
-#define RD_LU_FALLBACK_PIVOT_RATIO 1e-12
+#include "rd_euler.h"
+#include "rd_linalg.h"
 
 /* DGELSD makes the authoritative numerical-rank decision.  Its machine-
  * precision default preserves every resolvable direction and therefore the
@@ -904,10 +903,6 @@ static void rd_build_characteristic_matrices(double velx, double vely, double en
                                              const double normal_y[3], const double magnitude[3],
                                              double lambda[3][4], double Kmatrix[4][4][3][3])
 {
-  double velx_c = velx / cs, vely_c = vely / cs, h_c = enthalpy / cs;
-  double alpha = 0.5 * GAMMA_MINUS1 * (velx * velx + vely * vely);
-  double alpha_c = alpha / cs;
-
   for(int vertex = 0; vertex < 3; vertex++)
     {
       double vel_dot_n = velx * normal_x[vertex] + vely * normal_y[vertex];
@@ -939,51 +934,16 @@ static void rd_build_characteristic_matrices(double velx, double vely, double en
               value3 = lambda[vertex][2];
             }
 
-          double value12 = 0.5 * (value1 - value2);
-          double value123 = 0.5 * (value1 + value2 - 2.0 * value3);
-          double nx = normal_x[vertex], ny = normal_y[vertex];
-          double scale = 0.5 * magnitude[vertex];
-
-          Kmatrix[0][0][vertex][split] = scale * (alpha_c * value123 / cs - vel_dot_n * value12 / cs + value3);
-          Kmatrix[0][1][vertex][split] = scale * (-GAMMA_MINUS1 * velx_c * value123 / cs + nx * value12 / cs);
-          Kmatrix[0][2][vertex][split] = scale * (-GAMMA_MINUS1 * vely_c * value123 / cs + ny * value12 / cs);
-          Kmatrix[0][3][vertex][split] = scale * (GAMMA_MINUS1 * value123 / (cs * cs));
-
-          Kmatrix[1][0][vertex][split] =
-              scale * ((alpha_c * velx_c - vel_dot_n * nx) * value123 +
-                       (alpha_c * nx - velx_c * vel_dot_n) * value12);
-          Kmatrix[1][1][vertex][split] =
-              scale * ((nx * nx - GAMMA_MINUS1 * velx_c * velx_c) * value123 -
-                       (GAMMA - 2.0) * velx_c * nx * value12 + value3);
-          Kmatrix[1][2][vertex][split] =
-              scale * ((nx * ny - GAMMA_MINUS1 * velx_c * vely_c) * value123 +
-                       (velx_c * ny - GAMMA_MINUS1 * vely_c * nx) * value12);
-          Kmatrix[1][3][vertex][split] =
-              scale * (GAMMA_MINUS1 * velx_c * value123 / cs + GAMMA_MINUS1 * nx * value12 / cs);
-
-          Kmatrix[2][0][vertex][split] =
-              scale * ((alpha_c * vely_c - vel_dot_n * ny) * value123 +
-                       (alpha_c * ny - vely_c * vel_dot_n) * value12);
-          Kmatrix[2][1][vertex][split] =
-              scale * ((nx * ny - GAMMA_MINUS1 * velx_c * vely_c) * value123 +
-                       (vely_c * nx - GAMMA_MINUS1 * velx_c * ny) * value12);
-          Kmatrix[2][2][vertex][split] =
-              scale * ((ny * ny - GAMMA_MINUS1 * vely_c * vely_c) * value123 -
-                       (GAMMA - 2.0) * vely_c * ny * value12 + value3);
-          Kmatrix[2][3][vertex][split] =
-              scale * (GAMMA_MINUS1 * vely_c * value123 / cs + GAMMA_MINUS1 * ny * value12 / cs);
-
-          Kmatrix[3][0][vertex][split] =
-              scale * ((alpha_c * h_c - vel_dot_n * vel_dot_n) * value123 +
-                       vel_dot_n * (alpha_c - h_c) * value12);
-          Kmatrix[3][1][vertex][split] =
-              scale * ((vel_dot_n * nx - velx - alpha_c * velx_c) * value123 +
-                       (h_c * nx - GAMMA_MINUS1 * velx_c * vel_dot_n) * value12);
-          Kmatrix[3][2][vertex][split] =
-              scale * ((vel_dot_n * ny - vely - alpha_c * vely_c) * value123 +
-                       (h_c * ny - GAMMA_MINUS1 * vely_c * vel_dot_n) * value12);
-          Kmatrix[3][3][vertex][split] =
-              scale * (GAMMA_MINUS1 * h_c * value123 / cs + GAMMA_MINUS1 * vel_dot_n * value12 / cs + value3);
+          const double velocity[2] = {velx, vely};
+          const double normal[2] = {normal_x[vertex], normal_y[vertex]};
+          const double eigenvalues[3] = {value1, value2, value3};
+          double matrix[4][4];
+          if(rd_euler_spectral_matrix(2, velocity, enthalpy, cs, GAMMA, normal, magnitude[vertex],
+                                      eigenvalues, &matrix[0][0]) != 0)
+            terminate_program("Invalid RD characteristic matrix input");
+          for(int row = 0; row < 4; row++)
+            for(int col = 0; col < 4; col++)
+              Kmatrix[row][col][vertex][split] = matrix[row][col];
         }
     }
 }
@@ -1147,87 +1107,22 @@ static void rd_apply_shear_eigenvalue_floor(double velx, double vely, double cs,
  */
 static lapack_int rd_solve_upwind_system(const double S[4][4], double *rhs, lapack_int nrhs, lapack_int *rank)
 {
-  double A[16];
-  lapack_int ipiv[4];
-  int use_pseudo_inverse = 0;
-
-  *rank = -1;
-
-  memcpy(A, &S[0][0], sizeof(A));
-
+  struct rd_solve_info result;
 #ifdef RD_ALWAYS_PSEUDOINVERSE
-  /* Reference path: skip the LU shortcut entirely and always take the
-   * minimum-norm solution. Slower, but free of the pivot-ratio branch, so the
-   * result is independent of the domain decomposition. Use it to confirm that
-   * the fast path below has not changed the answer. */
-  lapack_int info    = 0;
-  use_pseudo_inverse = 1;
+  const int always_svd = 1;
 #else
-  lapack_int info = LAPACKE_dgetrf(LAPACK_ROW_MAJOR, 4, 4, A, 4, ipiv);
-
-  if(info != 0)
+  const int always_svd = 0;
+#endif
+  const int info = rd_upwind_solve(4, &S[0][0], rhs, nrhs, RD_SVD_RCOND, always_svd, &result);
+  *rank = result.rank;
+  RD_stat_exact_singular += result.exact_singular;
+  RD_stat_min_pivot_ratio = dmin(RD_stat_min_pivot_ratio, result.pivot_ratio);
+  RD_stat_pinv_fallback += result.used_svd;
+  if(result.used_svd && info == 0)
     {
-      use_pseudo_inverse          = 1; /* exactly singular pivot */
-      RD_stat_exact_singular++;
-      RD_stat_min_pivot_ratio = 0.0;
+      RD_stat_min_svd_rank = imin(RD_stat_min_svd_rank, result.rank);
+      RD_stat_svd_rank_count[result.rank]++;
     }
-  else
-    {
-      /* The spread of the diagonal pivots of U is a cheap scale-free trigger,
-       * not a condition-number estimate and not the authoritative rank test.
-       * A backward-stable LU can return a small residual while producing a
-       * solution whose near-null-space component is enormous, so DGELSD is
-       * asked to determine the numerical rank when this proxy is small. */
-      double pivot_max = fabs(A[0]);
-      double pivot_min = fabs(A[0]);
-
-      for(int n = 1; n < 4; n++)
-        {
-          double pivot = fabs(A[n * 4 + n]);
-          pivot_max    = dmax(pivot_max, pivot);
-          pivot_min    = dmin(pivot_min, pivot);
-        }
-
-      double ratio = (pivot_max > 0.0) ? pivot_min / pivot_max : 0.0;
-
-      if(ratio < RD_stat_min_pivot_ratio)
-        RD_stat_min_pivot_ratio = ratio;
-
-      if(!(ratio >= RD_LU_FALLBACK_PIVOT_RATIO))
-        use_pseudo_inverse = 1;
-    }
-#endif /* #ifdef RD_ALWAYS_PSEUDOINVERSE */
-
-  if(!use_pseudo_inverse)
-    {
-      lapack_int trs_info = LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', 4, nrhs, A, 4, ipiv, rhs, nrhs);
-
-      if(trs_info == 0)
-        *rank = 4;
-
-      return trs_info;
-    }
-
-  /* Minimum-norm least-squares solution.  RD_SVD_RCOND=-1 asks DGELSD to use
-   * its machine-precision cut-off.  The LU threshold above selects the solver;
-   * it must not also discard a resolvable singular direction. */
-  double singular_values[4];
-  lapack_int svd_rank;
-
-  memcpy(A, &S[0][0], sizeof(A));
-  info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 4, 4, nrhs, A, 4, rhs, nrhs, singular_values, RD_SVD_RCOND, &svd_rank);
-
-  RD_stat_pinv_fallback++;
-  if(info == 0)
-    {
-      *rank = svd_rank;
-
-      if(svd_rank < RD_stat_min_svd_rank)
-        RD_stat_min_svd_rank = svd_rank;
-      if(svd_rank >= 0 && svd_rank <= 4)
-        RD_stat_svd_rank_count[svd_rank]++;
-    }
-
   return info;
 }
 
@@ -5931,18 +5826,10 @@ void compute_residuals(tessellation *T)
 #endif
 
       // compute residual: Reassign variables to local equivalents
-#ifndef RD_LDA_COMMON_BETA
-      double velx_c  = velx_avg / Cs_avg;
-      double vely_c  = vely_avg / Cs_avg;
-      double h_c     = h_avg / Cs_avg;
-      double alpha   = GAMMA_MINUS1 * (velx_avg * velx_avg + vely_avg * vely_avg) / 2.0;
-      double alpha_c = alpha / Cs_avg;
-#endif
-
       // compute residual: Calculate K+,K- and K matrices for each vertex
       double vel_dot_n, velvertex_dot_n;
       double Lambda[3][4], Lambda_plus[3][4], Lambda_minus[3][4];
-      double Value1, Value2, Value3, Value4, Value12, Value123;
+      double Value1, Value2, Value3;
       double Kmatrix[4][4][3][3];  // Kmatrix[4][4][j=0,1,2(vertices)][p=0(K+),1(K-),2(K)]
 #if defined(RD_ALE_EQUALSTEP) && defined(RD_ALE_SPLIT_MESH_VELOCITY)
       double rd_ale_mesh_velocity_correction[4] = {0.0, 0.0, 0.0, 0.0};
@@ -5974,8 +5861,6 @@ void compute_residuals(tessellation *T)
                * The split pair uses one common opening-state distribution. */
               const double *average = (p == kfull) ? rd_stage_average : rd_beta_average;
               double velx_avg = average[0], vely_avg = average[1], h_avg = average[2], Cs_avg = average[3];
-              double velx_c = velx_avg / Cs_avg, vely_c = vely_avg / Cs_avg, h_c = h_avg / Cs_avg;
-              double alpha_c = (GAMMA_MINUS1 * (velx_avg * velx_avg + vely_avg * vely_avg) / 2.0) / Cs_avg;
               double vel_dot_n = velx_avg * N_X[j] + vely_avg * N_Y[j];
               double lambda1 = vel_dot_n + Cs_avg - velvertex_dot_n;
               double lambda2 = vel_dot_n - Cs_avg - velvertex_dot_n;
@@ -5983,73 +5868,41 @@ void compute_residuals(tessellation *T)
               Value1 = p == kplus ? dmax(0.0, lambda1) : (p == kminus ? dmin(0.0, lambda1) : lambda1);
               Value2 = p == kplus ? dmax(0.0, lambda2) : (p == kminus ? dmin(0.0, lambda2) : lambda2);
               Value3 = p == kplus ? dmax(0.0, lambda3) : (p == kminus ? dmin(0.0, lambda3) : lambda3);
-              Value4 = Value3;
+
 #else
               if(p == 0)
                 {  // Identify and select positive eigenvalues
                   Value1 = Lambda_plus[j][0];
                   Value2 = Lambda_plus[j][1];
                   Value3 = Lambda_plus[j][2];
-                  Value4 = Lambda_plus[j][3];
+
                 }
               else if(p == 1)
                 {  // Identify and select negative eigenvalues
                   Value1 = Lambda_minus[j][0];
                   Value2 = Lambda_minus[j][1];
                   Value3 = Lambda_minus[j][2];
-                  Value4 = Lambda_minus[j][3];
+
                 }
               else
                 {  // Select all eigenvalues
                   Value1 = Lambda[j][0];
                   Value2 = Lambda[j][1];
                   Value3 = Lambda[j][2];
-                  Value4 = Lambda[j][3];
+
                 }
 
 #endif /* RD_LDA_COMMON_BETA */
-              Value12  = (Value1 - Value2) / 2.0;
-              Value123 = (Value1 + Value2 - 2.0 * Value3) / 2.0;
-
-              Kmatrix[0][0][j][p] = 0.5 * Mag[j] * (alpha_c * Value123 / Cs_avg - vel_dot_n * Value12 / Cs_avg + Value3);
-              Kmatrix[0][1][j][p] = 0.5 * Mag[j] * (-1.0 * GAMMA_MINUS1 * velx_c * Value123 / Cs_avg + N_X[j] * Value12 / Cs_avg);
-              Kmatrix[0][2][j][p] = 0.5 * Mag[j] * (-1.0 * GAMMA_MINUS1 * vely_c * Value123 / Cs_avg + N_Y[j] * Value12 / Cs_avg);
-              Kmatrix[0][3][j][p] = 0.5 * Mag[j] * (GAMMA_MINUS1 * Value123 / (Cs_avg * Cs_avg));
-
-              Kmatrix[1][0][j][p] =
-                  0.5 * Mag[j] *
-                  ((alpha_c * velx_c - vel_dot_n * N_X[j]) * Value123 + (alpha_c * N_X[j] - velx_c * vel_dot_n) * Value12);
-              Kmatrix[1][1][j][p] = 0.5 * Mag[j] *
-                                    ((N_X[j] * N_X[j] - GAMMA_MINUS1 * velx_c * velx_c) * Value123 -
-                                     ((GAMMA - 2.0) * velx_c * N_X[j] * Value12) + Value3);
-              Kmatrix[1][2][j][p] = 0.5 * Mag[j] *
-                                    ((N_X[j] * N_Y[j] - GAMMA_MINUS1 * velx_c * vely_c) * Value123 +
-                                     (velx_c * N_Y[j] - GAMMA_MINUS1 * vely_c * N_X[j]) * Value12);
-              Kmatrix[1][3][j][p] =
-                  0.5 * Mag[j] * (GAMMA_MINUS1 * velx_c * Value123 / Cs_avg + GAMMA_MINUS1 * N_X[j] * Value12 / Cs_avg);
-
-              Kmatrix[2][0][j][p] =
-                  0.5 * Mag[j] *
-                  ((alpha_c * vely_c - vel_dot_n * N_Y[j]) * Value123 + (alpha_c * N_Y[j] - vely_c * vel_dot_n) * Value12);
-              Kmatrix[2][1][j][p] = 0.5 * Mag[j] *
-                                    ((N_X[j] * N_Y[j] - GAMMA_MINUS1 * velx_c * vely_c) * Value123 +
-                                     (vely_c * N_X[j] - GAMMA_MINUS1 * velx_c * N_Y[j]) * Value12);
-              Kmatrix[2][2][j][p] = 0.5 * Mag[j] *
-                                    ((N_Y[j] * N_Y[j] - GAMMA_MINUS1 * vely_c * vely_c) * Value123 -
-                                     ((GAMMA - 2.0) * vely_c * N_Y[j] * Value12) + Value3);
-              Kmatrix[2][3][j][p] =
-                  0.5 * Mag[j] * (GAMMA_MINUS1 * vely_c * Value123 / Cs_avg + GAMMA_MINUS1 * N_Y[j] * Value12 / Cs_avg);
-
-              Kmatrix[3][0][j][p] =
-                  0.5 * Mag[j] * ((alpha_c * h_c - vel_dot_n * vel_dot_n) * Value123 + vel_dot_n * (alpha_c - h_c) * Value12);
-              Kmatrix[3][1][j][p] = 0.5 * Mag[j] *
-                                    ((vel_dot_n * N_X[j] - velx_avg - alpha_c * velx_c) * Value123 +
-                                     (h_c * N_X[j] - GAMMA_MINUS1 * velx_c * vel_dot_n) * Value12);
-              Kmatrix[3][2][j][p] = 0.5 * Mag[j] *
-                                    ((vel_dot_n * N_Y[j] - vely_avg - alpha_c * vely_c) * Value123 +
-                                     (h_c * N_Y[j] - GAMMA_MINUS1 * vely_c * vel_dot_n) * Value12);
-              Kmatrix[3][3][j][p] =
-                  0.5 * Mag[j] * (GAMMA_MINUS1 * h_c * Value123 / Cs_avg + GAMMA_MINUS1 * vel_dot_n * Value12 / Cs_avg + Value3);
+              const double velocity[2] = {velx_avg, vely_avg};
+              const double normal[2] = {N_X[j], N_Y[j]};
+              const double eigenvalues[3] = {Value1, Value2, Value3};
+              double matrix[4][4];
+              if(rd_euler_spectral_matrix(2, velocity, h_avg, Cs_avg, GAMMA, normal, Mag[j],
+                                          eigenvalues, &matrix[0][0]) != 0)
+                terminate_program("Invalid RD characteristic matrix input");
+              for(int row = 0; row < 4; row++)
+                for(int col = 0; col < 4; col++)
+                  Kmatrix[row][col][j][p] = matrix[row][col];
             }
         }
 

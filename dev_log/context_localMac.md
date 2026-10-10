@@ -5,6 +5,17 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-10
 
+**3D integration authorised; shared-kernel milestone (2026-10-10, log3 §230):**
+User requests implementation with mathematical cross-checks and commits at key
+milestones. `rd_euler.c/.h` now supplies the common 2D/3D spectral K matrix;
+`rd_linalg.c/.h` extracts the LU/SVD policy with 4/5-component support. Existing
+2D calls use these modules. See `RD_3D_KERNEL_MATHEMATICS_20261010.md` for
+normal/face/volume conventions and source corrections. Independent C algebra
+tests and 16 frozen before/after native 2D short runs pass (nodal differences
+<=2.45e-15). Archive: `../local_runs/rd_3d_integration_20261010_v1/`.
+Next: native tetra geometry and static N, then early moving gates. Native 3D
+is not yet enabled at this milestone; thesis and standalone repo untouched.
+
 **Chapter3 wording correction (2026-10-02, log3 §210):**
 User explicitly wants their original FV–RD sentences preserved; only typeset
 math symbols, without unsolicited prose polishing. Restored the two original
