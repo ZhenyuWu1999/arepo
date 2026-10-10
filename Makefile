@@ -316,8 +316,8 @@ OBJS    += mesh/voronoi/voronoi_2d.o
 endif
 
 ifeq (RESIDUAL_DISTRIBUTION,$(findstring RESIDUAL_DISTRIBUTION,$(CONFIGVARS)))
-OBJS    += hydro/residual_distribution_solver.o hydro/rd_euler.o hydro/rd_linalg.o hydro/rd_state.o mesh/rd_simplex_geometry.o
-INCL    += hydro/rd_euler.h hydro/rd_linalg.h hydro/rd_state.h mesh/rd_simplex_geometry.h
+OBJS    += hydro/residual_distribution_solver.o hydro/rd_euler.o hydro/rd_linalg.o hydro/rd_state.o hydro/rd_timestep.o mesh/rd_simplex_geometry.o
+INCL    += hydro/rd_euler.h hydro/rd_linalg.h hydro/rd_state.h hydro/rd_timestep.h mesh/rd_simplex_geometry.h
 INCL    += hydro/rd_rusanov.h
 INCL    += hydro/rd_hllc.h
 INCL    += hydro/rd_lda_rusanov.h

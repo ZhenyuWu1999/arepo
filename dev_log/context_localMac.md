@@ -5,6 +5,13 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-10
 
+**3D static MPI milestone (2026-10-10, log3 §235):**
+N/LDA full-mesh equal-step native gates now pass on 1/2/4 ranks. Distributed
+spectral CFL is in `rd_timestep.c`; stage diagnostics are global. Archive:
+`../local_runs/rd_3d_extension_20261010_v1/mpi_v2/` (20 cases). Matched-ID
+fields and dual volumes differ by <3e-15 with identical timesteps. Static
+hierarchy is next; moving tetrahedra and large-scale performance remain open.
+
 **3D LDA/F1 milestone (2026-10-10, log3 §234):**
 Static periodic full-mesh equal-step LDA is implemented and tested alongside N;
 12 native 8³/16³ cases in `../local_runs/rd_3d_extension_20261010_v1/lda_v2/`

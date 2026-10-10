@@ -24,7 +24,7 @@ def prepare(root, suite):
     ncfg = (REPO/'examples/rd_3d/Config_N_static.sh').read_text()
     lcfg = (REPO/'examples/rd_3d/Config_LDA_static.sh').read_text()
     configs = {'N': ncfg, 'LDA': lcfg, 'LDA_svd': lcfg+'\nRD_ALWAYS_PSEUDOINVERSE\n'}
-    if suite != 'lda':
+    if suite == 'features':
         for scheme, cfg in [('N', ncfg), ('LDA', lcfg)]:
             configs[scheme+'_hier_equal'] = cfg+'\nRD_HIERARCHICAL_TIMESTEPS\n'
             configs[scheme+'_hier_pattern'] = cfg.replace('FORCE_EQUAL_TIMESTEPS\n', '')+'\nRD_HIERARCHICAL_TIMESTEPS\nRD_HIERARCHICAL_TEST_PATTERN\n'
@@ -33,6 +33,7 @@ def prepare(root, suite):
     specs += [(16,'advection',m,1/512,1) for m in ('N','LDA')]+[(16,'advection','LDA',1/4096,1), (8,'advection','N',1/512,1)]
     if suite != 'lda':
         specs += [(8,p,m,1/512,r) for m in ('N','LDA') for r in (2,4) for p in ('uniform','advection')]
+    if suite == 'features':
         specs += [(8,p,m,1/512,r) for scheme in ('N','LDA') for m in (scheme+'_hier_equal',scheme+'_hier_pattern',scheme+'_hier_natural') for r in (1,2,4) for p in ('uniform','advection')]
     used = sorted(set(x[2] for x in specs))
     for method in used:
@@ -123,7 +124,7 @@ def analyse(root, selected):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action',choices=['prepare','build','run','analyse','all']); parser.add_argument('root',type=Path)
-    parser.add_argument('--suite',choices=['lda','features'],default='features'); parser.add_argument('--select',nargs='+')
+    parser.add_argument('--suite',choices=['lda','mpi','features'],default='features'); parser.add_argument('--select',nargs='+')
     args=parser.parse_args(); root=args.root.resolve()
     if args.action in ('prepare','all'): prepare(root,args.suite)
     if args.action in ('build','all'): build(root,args.select)

@@ -17,6 +17,7 @@
 #include "rd_euler.h"
 #include "rd_linalg.h"
 #include "rd_state.h"
+#include "rd_timestep.h"
 
 /* DGELSD makes the authoritative numerical-rank decision.  Its machine-
  * precision default preserves every resolvable direction and therefore the
@@ -1589,8 +1590,8 @@ static int rd_simplex_claimed(tessellation *T, int i, int use_min_bin_owner)
 static void rd_build_element_set(tessellation *T, struct rd_element_set *set, int classify_activity)
 {
 #ifdef RD_3D_STATIC
-  if(NTask != 1 || NumPart != NumGas || All.ComovingIntegrationOn)
-    terminate_program("RD_3D_STATIC currently requires one rank, gas only and non-comoving integration");
+  if(NumPart != NumGas || All.ComovingIntegrationOn)
+    terminate_program("RD_3D_STATIC requires gas only and non-comoving integration");
 #endif
   point *DP = T->DP;
   tetra *DT = T->DT;
@@ -4512,6 +4513,13 @@ static void rd_accumulate_dual_area(tessellation *T, const struct rd_element_set
  *  how much this explicit estimate changed over the accepted step. */
 void rd_apply_cfl_timestep_constraint(tessellation *T)
 {
+#ifdef RD_3D_STATIC
+  exchange_primitive_variables(); /* CFL sees current primary states, including ghosts. */
+  struct rd_element_set set;
+  rd_build_element_set(T, &set, 0);
+  rd_static_tetra_cfl(T, set.n, set.element, set.normals);
+  rd_free_element_set(&set);
+#else
   if(NTask != 1)
     terminate_program("RD_ALE_CFL_TIMESTEP currently supports the one-rank ALE prototype only");
 
@@ -4529,49 +4537,7 @@ void rd_apply_cfl_timestep_constraint(tessellation *T)
   for(int slot = 0; slot < set.n; slot++)
     {
       int triangle = set.element[slot];
-#ifdef RD_3D_STATIC
-      double weight = 0.0, velocity[3] = {0}, enthalpy = 0.0;
-      int index[4];
-      for(int vertex = 0; vertex < 4; vertex++)
-        {
-          const point *dp = &DP[DT[triangle].p[vertex]];
-          index[vertex] = dp->index >= NumGas ? dp->index - NumGas : dp->index;
-          if(dp->task != ThisTask || index[vertex] < 0 || index[vertex] >= NumGas)
-            terminate_program("RD tetra CFL received a nonlocal/invalid vertex");
-          const int j = index[vertex];
-          double rho = SphP[j].Density, pressure = SphP[j].Pressure, speed2 = 0.0;
-          if(!(rho > 0.0) || !(pressure > 0.0) || !isfinite(rho) || !isfinite(pressure))
-            terminate_program("RD tetra CFL received an invalid primitive state");
-          double root = sqrt(rho);
-          for(int axis = 0; axis < 3; axis++)
-            {
-              velocity[axis] += root * P[j].Vel[axis];
-              speed2 += P[j].Vel[axis] * P[j].Vel[axis];
-            }
-          enthalpy += root * (GAMMA / GAMMA_MINUS1 * pressure / rho + 0.5 * speed2);
-          weight += root;
-          mass[j] += set.normals[slot].area / 4.0;
-        }
-      double speed2 = 0.0;
-      for(int axis = 0; axis < 3; axis++)
-        {
-          velocity[axis] /= weight;
-          speed2 += velocity[axis] * velocity[axis];
-        }
-      const double cs = sqrt(GAMMA_MINUS1 * (enthalpy / weight - 0.5 * speed2));
-      if(!(cs > 0.0) || !isfinite(cs))
-        terminate_program("RD tetra CFL received an invalid Roe sound speed");
-      double alpha = 0.0;
-      for(int vertex = 0; vertex < 4; vertex++)
-        {
-          double vn = 0.0;
-          for(int axis = 0; axis < 3; axis++)
-            vn += velocity[axis] * set.normals[slot].normal[vertex][axis];
-          alpha = dmax(alpha, set.normals[slot].mag[vertex] / 3.0 * (cs + fabs(vn)));
-        }
-      for(int vertex = 0; vertex < 4; vertex++)
-        alpha_sum[index[vertex]] += alpha;
-#elif defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
+#if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
       double u[3][4], n[3][2], w[2] = {0.0, 0.0}, phi[4], residual[4][3], scale;
       for(int vertex = 0; vertex < 3; vertex++)
         {
@@ -4703,6 +4669,7 @@ void rd_apply_cfl_timestep_constraint(tessellation *T)
   myfree(alpha_sum);
   myfree(mass);
   rd_free_element_set(&set);
+#endif /* RD_3D_STATIC */
 }
 #endif
 

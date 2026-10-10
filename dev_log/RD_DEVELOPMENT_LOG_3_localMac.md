@@ -9281,3 +9281,18 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
 - 档案：`../local_runs/rd_3d_extension_20261010_v1/`。下一个节点接入 MPI
   分布式 CFL 与三维 static hierarchy。本节点未改变 2D adapter 算术、
   默认 Config、thesis 或 standalone code，未 push。
+
+## 235. 2026-10-10：三维静态 N/LDA MPI 与 distributed CFL
+
+**作者：Codex。**
+
+- 复用 dimension-generic minimum-ID simplex owner、dual-volume 和 flux export。
+  移除 3D one-rank guard；新的 `rd_timestep.c` 从 refreshed primitive ghosts
+  计算 Roe CFL，将 V/4 和 spectral alpha 同时存回每个 primary，包括远端。
+  CFL 诊断、三维阶段总量/最小值/tetra 数均用 global reduction。
+- `mpi_v2/` 20 个 native 测试通过：原 12 例，加 N/LDA uniform/advection
+  的 2/4 rank 测试。逐 ID primitive/Q/dual 差<3e-15，actual dt 序列相同，
+  五分量守恒<3e-15。保留 `mpi_v1/` header guard 注册遗漏的编译失败。
+- 档案、范围和复现见 `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`。
+  这是小规模周期 full-mesh 静态 MPI 验证，非 moving 3D 或强扩展效率证据。
+  下一个节点是完整五分量 static hierarchy 与混合 bins 原生测试。

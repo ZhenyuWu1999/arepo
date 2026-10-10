@@ -67,3 +67,21 @@ byte-identical to `native_static_v3`. Full `make check_rd` passes.
 only declared for the split/hierarchy hooks); corrected to the existing
 0/1 stage convention before `lda_v2/` was frozen. No failed numerical gate
 was reclassified as a pass.
+
+## 4. MPI milestone
+
+The minimum-ID primary-copy ownership rule was already dimension-generic.
+The new `rd_timestep.c` assembles median mass and spectral sums on that same
+complete owned tetra set, reads current ghost primitives, and exports each
+remote vertex contribution to its primary. Global minimum CFL diagnostics use
+MINLOC; stage totals, minima and tetra counts now use global reductions.
+Flux and dual-volume exchanges retain the existing AREPO ownership machinery.
+No global particle replication or matrix inverse is introduced.
+
+`mpi_v2/`: 20 native cases pass, including the previous one-rank suite and
+N/LDA uniform/advection on 2 and 4 ranks. Step sequences are identical and
+maximum matched-ID field/dual-volume differences are below 3e-15. Conservation
+is below 3e-15. `mpi_v1/` preserves the build-check failure from the new header
+guard missing in `defines_extra`; that registration was fixed before v2.
+This establishes small periodic full-mesh static MPI gates, not moving-MPI or
+large-scale efficiency. Domain decomposition is enabled in the native run.

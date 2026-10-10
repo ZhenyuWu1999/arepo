@@ -157,8 +157,13 @@ void rd_static_validate_stage(int rd_stage, int elements)
       min_rho = dmin(min_rho, rho);
       min_pressure = dmin(min_pressure, pressure);
     }
+  double global_total[5], local_min[2] = {min_rho, min_pressure}, global_min[2];
+  int global_elements;
+  MPI_Allreduce(total, global_total, 5, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(local_min, global_min, 2, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(&elements, &global_elements, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   mpi_printf("RD-3D-STAGE time=%.17g stage=%d tetra=%d rho_min=%.17g p_min=%.17g "
-             "Q=[%.17g,%.17g,%.17g,%.17g,%.17g]\n", All.Time, rd_stage, elements,
-             min_rho, min_pressure, total[0], total[1], total[2], total[3], total[4]);
+             "Q=[%.17g,%.17g,%.17g,%.17g,%.17g]\n", All.Time, rd_stage, global_elements,
+             global_min[0], global_min[1], global_total[0], global_total[1], global_total[2], global_total[3], global_total[4]);
 }
 #endif
