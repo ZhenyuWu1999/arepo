@@ -292,7 +292,7 @@ void exchange_primitive_variables(void)
                 }
               tmpPrimExch[off].Csnd = get_sound_speed(place);
 #ifdef RD_RK2_TOTAL_RESIDUAL
-              for(int rd_k = 0; rd_k < 4; rd_k++)
+              for(int rd_k = 0; rd_k < DIMS + 2; rd_k++)
                 tmpPrimExch[off].RD_dU[rd_k] = SphP[place].RD_dU[rd_k];
 #ifdef RD_HIERARCHICAL_TIMESTEPS
               tmpPrimExch[off].RD_StarTimeBin  = SphP[place].RD_StarTimeBin;
@@ -411,7 +411,7 @@ void exchange_primitive_variables_and_gradients(void)
 
               tmpPrimExch[off].Csnd = get_sound_speed(place);
 #ifdef RD_RK2_TOTAL_RESIDUAL
-              for(int rd_k = 0; rd_k < 4; rd_k++)
+              for(int rd_k = 0; rd_k < DIMS + 2; rd_k++)
                 tmpPrimExch[off].RD_dU[rd_k] = SphP[place].RD_dU[rd_k];
 #ifdef RD_HIERARCHICAL_TIMESTEPS
               tmpPrimExch[off].RD_StarTimeBin  = SphP[place].RD_StarTimeBin;

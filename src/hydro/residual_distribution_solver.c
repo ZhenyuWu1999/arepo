@@ -12,9 +12,11 @@
 #include "../main/proto.h"
 #include "../mesh/mesh.h"
 #include "../mesh/rd_ale_geometry.h"
+#include "../mesh/rd_simplex_geometry.h"
 #include "../mesh/voronoi/voronoi.h"
 #include "rd_euler.h"
 #include "rd_linalg.h"
+#include "rd_state.h"
 
 /* DGELSD makes the authoritative numerical-rank decision.  Its machine-
  * precision default preserves every resolvable direction and therefore the
@@ -184,7 +186,23 @@ static int rd_rusanov_local_index(const point *dp)
 #endif
 
 #if !defined(TWODIMS)
-#error "The current residual-distribution solver is implemented only for TWODIMS."
+#if !defined(RD_3D_STATIC) || !defined(VORONOI_STATIC_MESH) || !defined(N_SCHEME) || \
+    !defined(RD_RK2_TOTAL_RESIDUAL) || !defined(CREATE_FULL_MESH) || !defined(FORCE_EQUAL_TIMESTEPS) || \
+    !defined(TREE_BASED_TIMESTEPS)
+#error "3D RD requires explicit RD_3D_STATIC: static full-mesh, equal-step N/lumped RK2 with tree timesteps."
+#endif
+#if defined(RD_HIERARCHICAL_TIMESTEPS) || defined(RD_RK2_SPLIT_STAGES) || defined(RD_ELEMENT_COMOVING_FRAME) || \
+    defined(RD_ALE_CONTOUR_RESIDUAL) || defined(RD_ALE_ENTROPY_DISSIPATION) || defined(RD_ALE_SHEAR_EIGENVALUE_FLOOR) || \
+    defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND) || defined(RD_ALE_CONDITION_DIAGNOSTIC) || \
+    defined(RD_ALE_CFL_DIAGNOSTIC) || defined(RD_DIAG_NO_KICK) || defined(RD_DIAG_PREDICTOR_ONLY) || \
+    defined(RD_DIAG_SKIP_PREPARE) || defined(RD_RT_FIXED_BOUNDARY) || defined(SELFGRAVITY) || \
+    defined(EXTERNALGRAVITY) || defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE) || defined(MHD) || defined(PASSIVE_SCALARS) || \
+    defined(REFINEMENT) || defined(REFINEMENT_HIGH_RES_GAS) || defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || \
+    defined(REFLECTIVE_Z) || defined(COOLING) || defined(ONEDIMS)
+#error "RD_3D_STATIC currently supports periodic source-free N hydro without stage-altering diagnostics."
+#endif
+#elif defined(RD_3D_STATIC)
+#error "RD_3D_STATIC must not be combined with TWODIMS."
 #endif
 
 #if !defined(VORONOI_STATIC_MESH) && !defined(RD_ALE_EQUALSTEP) && !defined(RD_ALE_HIERARCHICAL)
@@ -474,6 +492,11 @@ static int rd_triangle_is_physical(tessellation *T, int triangle_index)
   if(triangle_index < 0 || triangle_index >= T->Ndt)
     return 0;
 
+#ifndef TWODIMS
+  if(T->DT[triangle_index].t[0] < 0) /* 3D flip deletion leaves stale vertex slots. */
+    return 0;
+#endif
+
   for(int vertex = 0; vertex < DIMS + 1; vertex++)
     {
       int point_index = T->DT[triangle_index].p[vertex];
@@ -738,7 +761,7 @@ static long long RD_stat_elements;         /* elements whose residual was evalua
 static long long RD_stat_pinv_fallback;    /* elements that needed the pseudo-inverse */
 static long long RD_stat_exact_singular;   /* LU factorizations with an exactly singular pivot */
 static lapack_int RD_stat_min_svd_rank;    /* smallest numerical rank returned by DGELSD */
-static long long RD_stat_svd_rank_count[5]; /* DGELSD calls returning each rank 0,...,4 */
+static long long RD_stat_svd_rank_count[DIMS + 3]; /* DGELSD calls returning each rank 0,...,DIMS+2 */
 static double RD_stat_min_pivot_ratio;     /* smallest min|diag(U)|/max|diag(U)| seen */
 static double RD_stat_max_cons_defect_abs; /* largest raw conservation defect, absolute */
 static double RD_stat_max_phi;             /* largest |phi^T| seen, for context on the absolute figure */
@@ -839,8 +862,8 @@ static void rd_reset_solver_statistics(void)
   RD_stat_elements        = 0;
   RD_stat_pinv_fallback   = 0;
   RD_stat_exact_singular  = 0;
-  RD_stat_min_svd_rank    = 5; /* sentinel: no DGELSD call in this solver pass */
-  for(int rank = 0; rank <= 4; rank++)
+  RD_stat_min_svd_rank    = DIMS + 3; /* sentinel: no DGELSD call in this solver pass */
+  for(int rank = 0; rank <= DIMS + 2; rank++)
     RD_stat_svd_rank_count[rank] = 0;
   RD_stat_min_pivot_ratio     = 1.0;
   RD_stat_max_cons_defect_abs = 0.0;
@@ -1565,6 +1588,10 @@ static int rd_simplex_claimed(tessellation *T, int i, int use_min_bin_owner)
  */
 static void rd_build_element_set(tessellation *T, struct rd_element_set *set, int classify_activity)
 {
+#ifdef RD_3D_STATIC
+  if(NTask != 1 || NumPart != NumGas || All.ComovingIntegrationOn)
+    terminate_program("RD_3D_STATIC currently requires one rank, gas only and non-comoving integration");
+#endif
   point *DP = T->DP;
   tetra *DT = T->DT;
   int Ndt   = T->Ndt;
@@ -1620,6 +1647,20 @@ static void rd_build_element_set(tessellation *T, struct rd_element_set *set, in
     {
 #ifdef TWODIMS
       triangle_get_normals_area(T, set->element[i], &set->normals[i]);
+#else
+      double x[4][3], signed_volume = NAN;
+      for(int vertex = 0; vertex < 4; vertex++)
+        {
+          const point *dp = &DP[DT[set->element[i]].p[vertex]];
+          /* Use AREPO's already unfolded periodic images, not wrapped P.Pos. */
+          x[vertex][0] = dp->x;
+          x[vertex][1] = dp->y;
+          x[vertex][2] = dp->z;
+        }
+      if(rd_simplex_geometry(3, &x[0][0], &signed_volume, &set->normals[i].normal[0][0],
+                              set->normals[i].mag) != 0 || !(signed_volume > 0.0))
+        terminate_program("RD tetra geometry invalid: tetra=%d signed_volume=%.17g", set->element[i], signed_volume);
+      set->normals[i].area = signed_volume; /* legacy field name; 3D stores true volume */
 #endif
 
       char is_active = 0;
@@ -4440,6 +4481,9 @@ static void rd_accumulate_dual_area(tessellation *T, const struct rd_element_set
     MPI_Allreduce(&local_area, &global_area, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     double box_area = boxSize_X * boxSize_Y;
+#ifndef TWODIMS
+    box_area *= boxSize_Z;
+#endif
 
     if(fabs(global_area - box_area) > 1.0e-10 * box_area)
       {
@@ -4451,7 +4495,7 @@ static void rd_accumulate_dual_area(tessellation *T, const struct rd_element_set
 #endif /* #ifdef RD_DEBUG_ASSERTS */
 }
 
-#if defined(RD_ALE_CFL_TIMESTEP) || defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
+#if defined(RD_ALE_CFL_TIMESTEP) || defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND) || defined(RD_3D_STATIC)
 /*! Add the current-mesh RD spectral restriction to CurrentMaxTiStep.
  *
  *  This function is called immediately after tree_based_timesteps(), before
@@ -4485,7 +4529,49 @@ void rd_apply_cfl_timestep_constraint(tessellation *T)
   for(int slot = 0; slot < set.n; slot++)
     {
       int triangle = set.element[slot];
-#if defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
+#ifdef RD_3D_STATIC
+      double weight = 0.0, velocity[3] = {0}, enthalpy = 0.0;
+      int index[4];
+      for(int vertex = 0; vertex < 4; vertex++)
+        {
+          const point *dp = &DP[DT[triangle].p[vertex]];
+          index[vertex] = dp->index >= NumGas ? dp->index - NumGas : dp->index;
+          if(dp->task != ThisTask || index[vertex] < 0 || index[vertex] >= NumGas)
+            terminate_program("RD tetra CFL received a nonlocal/invalid vertex");
+          const int j = index[vertex];
+          double rho = SphP[j].Density, pressure = SphP[j].Pressure, speed2 = 0.0;
+          if(!(rho > 0.0) || !(pressure > 0.0) || !isfinite(rho) || !isfinite(pressure))
+            terminate_program("RD tetra CFL received an invalid primitive state");
+          double root = sqrt(rho);
+          for(int axis = 0; axis < 3; axis++)
+            {
+              velocity[axis] += root * P[j].Vel[axis];
+              speed2 += P[j].Vel[axis] * P[j].Vel[axis];
+            }
+          enthalpy += root * (GAMMA / GAMMA_MINUS1 * pressure / rho + 0.5 * speed2);
+          weight += root;
+          mass[j] += set.normals[slot].area / 4.0;
+        }
+      double speed2 = 0.0;
+      for(int axis = 0; axis < 3; axis++)
+        {
+          velocity[axis] /= weight;
+          speed2 += velocity[axis] * velocity[axis];
+        }
+      const double cs = sqrt(GAMMA_MINUS1 * (enthalpy / weight - 0.5 * speed2));
+      if(!(cs > 0.0) || !isfinite(cs))
+        terminate_program("RD tetra CFL received an invalid Roe sound speed");
+      double alpha = 0.0;
+      for(int vertex = 0; vertex < 4; vertex++)
+        {
+          double vn = 0.0;
+          for(int axis = 0; axis < 3; axis++)
+            vn += velocity[axis] * set.normals[slot].normal[vertex][axis];
+          alpha = dmax(alpha, set.normals[slot].mag[vertex] / 3.0 * (cs + fabs(vn)));
+        }
+      for(int vertex = 0; vertex < 4; vertex++)
+        alpha_sum[index[vertex]] += alpha;
+#elif defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
       double u[3][4], n[3][2], w[2] = {0.0, 0.0}, phi[4], residual[4][3], scale;
       for(int vertex = 0; vertex < 3; vertex++)
         {
@@ -4822,23 +4908,6 @@ static int rd_aposteriori_expand_halo(const tessellation *T, const struct rd_ele
 #endif
 
 #ifdef RD_RK2_EQUALSTEP
-/*! \brief Snapshot the intensive nodal state U^n before the predictor sweep. */
-static void rd_rk2_save_stage0(void)
-{
-  for(int i = 0; i < NumGas; i++)
-    {
-      double inv_area = 1.0 / SphP[i].DualArea;
-
-      SphP[i].RD_Ustage0[0] = P[i].Mass * inv_area;
-      SphP[i].RD_Ustage0[1] = SphP[i].Momentum[0] * inv_area;
-      SphP[i].RD_Ustage0[2] = SphP[i].Momentum[1] * inv_area;
-      SphP[i].RD_Ustage0[3] = SphP[i].Energy * inv_area;
-
-      for(int k = 0; k < 4; k++)
-        SphP[i].RD_dU[k] = 0.0;
-    }
-}
-
 #ifdef RD_RK2_RATE_CONSISTENT_HEUN
 /*! \brief Prepare the nodal data between the four rate-consistent sweeps.
  *
@@ -4927,99 +4996,6 @@ static void rd_rate_consistent_prepare_pass(int pass)
     }
 }
 #endif /* RD_RK2_RATE_CONSISTENT_HEUN */
-
-/*! \brief Between the stages: form dU, recover the stage primitives, and,
- *         unless an explicit old-element residual is required, apply the
- *         corrector's local +1/2 (Q* - Q^n) contribution.
- *
- *  This deliberately does NOT call update_primitive_variables(): that routine
- *  stamps OldMass and TimeLastPrimUpdate and, when the MinEgySpec floor
- *  fires, rewrites the conserved energy and the global EgyInjection
- *  accumulator, so the corrector would no longer see the predictor the RD
- *  equations define (Codex audit 11.3). The recovery here is side-effect free
- *  apart from writing the primitive fields themselves; a non-finite or
- *  non-positive predictor state terminates diagnostically instead of being
- *  floored.
- *
- *  The corrector update is
- *      U^{n+1}_i = U*_i + 1/2 (U*_i - U^n_i)
- *                  - (dt/|S_i|) sum_T [ sum_j m_ij dU_j/dt + 1/2 phi_i^T(U*) ]
- *  (analysis document section 4); the +1/2 dU term is purely local and is
- *  added here, before the corrector sweep contributes the element sums. B
- *  instead needs the saved old N and LDA pieces so one total-residual theta can
- *  blend both stages; the assembled shortcut has discarded that information.
- */
-static void rd_rk2_prepare_corrector(void)
-{
-  for(int i = 0; i < NumGas; i++)
-    {
-      double inv_area = 1.0 / SphP[i].DualArea;
-
-      double u0 = P[i].Mass * inv_area;
-      double u1 = SphP[i].Momentum[0] * inv_area;
-      double u2 = SphP[i].Momentum[1] * inv_area;
-      double u3 = SphP[i].Energy * inv_area;
-
-      SphP[i].RD_dU[0] = u0 - SphP[i].RD_Ustage0[0];
-      SphP[i].RD_dU[1] = u1 - SphP[i].RD_Ustage0[1];
-      SphP[i].RD_dU[2] = u2 - SphP[i].RD_Ustage0[2];
-      SphP[i].RD_dU[3] = u3 - SphP[i].RD_Ustage0[3];
-
-      double rho   = u0;
-      double velx  = u1 / u0;
-      double vely  = u2 / u0;
-      double egy   = u3 / u0 - 0.5 * (velx * velx + vely * vely);
-      double press = GAMMA_MINUS1 * rho * egy;
-
-      if(!isfinite(rho) || !isfinite(press) || rho <= 0 || press <= 0)
-        {
-          printf("RD predictor state invalid: task=%d i=%d ID=%llu rho=%g press=%g pos=%g|%g\n", ThisTask, i,
-                 (unsigned long long)P[i].ID, rho, press, P[i].Pos[0], P[i].Pos[1]);
-          terminate_program("RD predictor produced a non-physical state");
-        }
-
-      RD_stat_min_stage_rho   = dmin(RD_stat_min_stage_rho, rho);
-      RD_stat_min_stage_press = dmin(RD_stat_min_stage_press, press);
-
-#ifdef RD_DIAG_DUMP_STAGE
-      /* diagnostic only: per-rank dump of the recovered stage state */
-      {
-        static int rd_dump_step = 0;
-        static FILE *rd_dump_fp = NULL;
-        if(i == 0)
-          rd_dump_step++;
-        if(rd_dump_step == 1)
-          {
-            if(rd_dump_fp == NULL)
-              {
-                char nm[256];
-                sprintf(nm, "%s/rdstage_task%03d.txt", All.OutputDir, ThisTask);
-                rd_dump_fp = fopen(nm, "w");
-              }
-            if(rd_dump_fp)
-              fprintf(rd_dump_fp, "%llu %.17g %.17g %.17g %.17g %.17g %.17g\n", (unsigned long long)P[i].ID, rho, velx, vely,
-                      press, SphP[i].DualArea, P[i].Mass);
-          }
-      }
-#endif
-      SphP[i].Density  = rho;
-      P[i].Vel[0]      = velx;
-      P[i].Vel[1]      = vely;
-      SphP[i].Utherm   = egy;
-      SphP[i].Pressure = press;
-#ifdef TREE_BASED_TIMESTEPS
-      SphP[i].Csnd = sqrt(GAMMA * press / rho);
-#endif
-
-#if !defined(RD_DIAG_NO_KICK) && !defined(B_SCHEME)
-      /* the local +1/2 (Q* - Q^n) part of the corrector */
-      P[i].Mass += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[0];
-      SphP[i].Momentum[0] += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[1];
-      SphP[i].Momentum[1] += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[2];
-      SphP[i].Energy += 0.5 * SphP[i].DualArea * SphP[i].RD_dU[3];
-#endif
-    }
-}
 #endif /* #ifdef RD_RK2_EQUALSTEP */
 
 /*! The two main-loop hooks describe the lifetime of an RD step, not a claim
@@ -5203,7 +5179,6 @@ void compute_residuals(tessellation *T)
     MPI_Allreduce(&local_area, &global_area, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     double box_area = boxSize_X * boxSize_Y;
-
     if(fabs(global_area - box_area) > 1.0e-10 * box_area)
       terminate_program("RD hierarchy persistent DualArea coverage changed after domain decomposition");
   }
@@ -5326,7 +5301,7 @@ void compute_residuals(tessellation *T)
             }
 #endif
 #ifndef RD_DIAG_SKIP_PREPARE /* diagnostic only: run stage 1 on the stage-0 inputs */
-          rd_rk2_prepare_corrector();
+          rd_rk2_prepare_corrector(&RD_stat_min_stage_rho, &RD_stat_min_stage_press);
           exchange_primitive_variables(); /* ghosts receive W* and RD_dU */
 #endif
 #endif /* RD_RK2_RATE_CONSISTENT_HEUN */
@@ -5342,7 +5317,7 @@ void compute_residuals(tessellation *T)
           {
             loc[0] += P[ck].Mass;
             loc[1] += SphP[ck].Energy;
-            loc[2] += fabs(SphP[ck].RD_dU[0]) + fabs(SphP[ck].RD_dU[3]);
+            loc[2] += fabs(SphP[ck].RD_dU[0]) + fabs(SphP[ck].RD_dU[DIMS + 1]);
             loc[3] += fabs(SphP[ck].Density) + fabs(SphP[ck].Pressure);
           }
         MPI_Reduce(loc, glob, 4, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -5473,7 +5448,7 @@ void compute_residuals(tessellation *T)
         }
 
 #ifdef RD_RK2_TOTAL_RESIDUAL
-      double dU_vertex[DIMS + 1][4]; /* intensive nodal U* - U^n per vertex; corrector stage only */
+      double dU_vertex[DIMS + 1][DIMS + 2]; /* intensive nodal U* - U^n per vertex; corrector stage only */
 #endif
 
       for(j = 0; j < DIMS + 1; j++)  // loop through vertices of this triangle
@@ -5505,7 +5480,7 @@ void compute_residuals(tessellation *T)
                  || rd_stage == 3
 #endif
               )
-                for(k = 0; k < 4; k++)
+                for(k = 0; k < DIMS + 2; k++)
                   dU_vertex[j][k] = SphP[SphP_index].RD_dU[k];
 #else
               double dt_Extrapolation = All.Time - SphP[SphP_index].TimeLastPrimUpdate;
@@ -5525,16 +5500,18 @@ void compute_residuals(tessellation *T)
               Velvertex_avg[1] += SphP[SphP_index].VelVertex[1];
               Velvertex_avg[2] += SphP[SphP_index].VelVertex[2];
 
-#ifdef TWODIMS
               U_fluid[j][0]         = vertex_state.rho;
               U_fluid[j][1]         = U_fluid[j][0] * vertex_state.velx;
               U_fluid[j][2]         = U_fluid[j][0] * vertex_state.vely;
               Pressure[j]           = vertex_state.press;
               double kinetic_energy = 0.0;
               kinetic_energy += pow(vertex_state.velx, 2) + pow(vertex_state.vely, 2);
+#ifndef TWODIMS
+              U_fluid[j][3] = U_fluid[j][0] * vertex_state.velz;
+              kinetic_energy += pow(vertex_state.velz, 2);
+#endif
               kinetic_energy *= 0.5 * U_fluid[j][0];
               U_fluid[j][DIMS + 1] = kinetic_energy + Pressure[j] / (GAMMA_MINUS1);
-#endif
               if(U_fluid[j][DIMS + 1] <= 0)
                 {
                   printf(
@@ -5583,7 +5560,7 @@ void compute_residuals(tessellation *T)
                  || rd_stage == 3
 #endif
               )
-                for(k = 0; k < 4; k++)
+                for(k = 0; k < DIMS + 2; k++)
                   dU_vertex[j][k] = PrimExch[PrimExch_index].RD_dU[k];
 #else
               double dt_Extrapolation = All.Time - PrimExch[PrimExch_index].TimeLastPrimUpdate;
@@ -5605,16 +5582,18 @@ void compute_residuals(tessellation *T)
 
               /*we should only use primitive variables to get U_fluid*/
 
-#ifdef TWODIMS
               U_fluid[j][0]         = vertex_state.rho;
               U_fluid[j][1]         = U_fluid[j][0] * vertex_state.velx;
               U_fluid[j][2]         = U_fluid[j][0] * vertex_state.vely;
               Pressure[j]           = vertex_state.press;
               double kinetic_energy = 0.0;
               kinetic_energy += pow(vertex_state.velx, 2) + pow(vertex_state.vely, 2);
+#ifndef TWODIMS
+              U_fluid[j][3] = U_fluid[j][0] * vertex_state.velz;
+              kinetic_energy += pow(vertex_state.velz, 2);
+#endif
               kinetic_energy *= 0.5 * U_fluid[j][0];
               U_fluid[j][DIMS + 1] = kinetic_energy + Pressure[j] / (GAMMA_MINUS1);
-#endif
 
               C_sound[j] = PrimExch[PrimExch_index].Csnd;
 
@@ -7322,7 +7301,39 @@ void compute_residuals(tessellation *T)
       }
 #endif
 
-      for(j = 0; j < 3; j++)
+#else /* native static tetra N; common stages and particle update below */
+      double Phi[5], nodal[4][5], Flux_RD[5][4];
+      struct rd_n_diagnostics diagnostic;
+#ifdef RD_ALWAYS_PSEUDOINVERSE
+      const int always_svd = 1;
+#else
+      const int always_svd = 0;
+#endif
+      const int info = rd_euler_n_residual(3, &U_fluid[0][0], &tri_normals_list[i].normal[0][0],
+                                          tri_normals_list[i].mag, GAMMA, RD_SVD_RCOND, always_svd,
+                                          Phi, &nodal[0][0], &diagnostic);
+      if(info != 0)
+        terminate_program("RD tetra N failed: tetra=%d stage=%d info=%d solve=%.17g conservation=%.17g scale=%.17g",
+                          thistask_triangles[i], rd_stage, info, diagnostic.solve_defect,
+                          diagnostic.conservation_defect, diagnostic.roundoff_scale);
+      RD_stat_elements++;
+      RD_stat_pinv_fallback += diagnostic.solve.used_svd;
+      RD_stat_exact_singular += diagnostic.solve.exact_singular;
+      RD_stat_min_pivot_ratio = dmin(RD_stat_min_pivot_ratio, diagnostic.solve.pivot_ratio);
+      if(diagnostic.solve.used_svd)
+        {
+          RD_stat_min_svd_rank = imin(RD_stat_min_svd_rank, diagnostic.solve.rank);
+          RD_stat_svd_rank_count[diagnostic.solve.rank]++;
+        }
+      RD_stat_max_cons_defect_abs = dmax(RD_stat_max_cons_defect_abs, diagnostic.conservation_defect);
+      RD_stat_max_phi = dmax(RD_stat_max_phi, diagnostic.max_phi);
+      for(j = 0; j < DIMS + 1; j++)
+        for(k = 0; k < DIMS + 2; k++)
+          Flux_RD[k][j] = rd_stage == 0 ? nodal[j][k] :
+              tri_normals_list[i].area / (DIMS + 1) * dU_vertex[j][k] / triangle_dt + 0.5 * nodal[j][k];
+#endif /* TWODIMS: distribution */
+
+      for(j = 0; j < DIMS + 1; j++)
         {
           if(DP[DT[thistask_triangles[i]].p[j]].task == ThisTask)
             {
@@ -7347,7 +7358,10 @@ void compute_residuals(tessellation *T)
               P[P_index].Mass += (-1.0) * triangle_dt * Flux_RD[0][j];
               SphP[SphP_index].Momentum[0] += (-1.0) * triangle_dt * Flux_RD[1][j];
               SphP[SphP_index].Momentum[1] += (-1.0) * triangle_dt * Flux_RD[2][j];
-              SphP[SphP_index].Energy += (-1.0) * triangle_dt * Flux_RD[3][j];
+#ifndef TWODIMS
+              SphP[SphP_index].Momentum[2] += (-1.0) * triangle_dt * Flux_RD[3][j];
+#endif
+              SphP[SphP_index].Energy += (-1.0) * triangle_dt * Flux_RD[DIMS + 1][j];
 #ifdef RD_HIERARCHICAL_TIMESTEPS
               if(rd_stage == RD_RK_STAGE_PREDICTOR &&
                  rd_point_stage_live(&DP[DT[thistask_triangles[i]].p[j]]))
@@ -7370,8 +7384,12 @@ void compute_residuals(tessellation *T)
               FluxRD_list[N_FluxRD_export].dMass_Dual        = (-1.0) * triangle_dt * Flux_RD[0][j];
               FluxRD_list[N_FluxRD_export].dMomentum_Dual[0] = (-1.0) * triangle_dt * Flux_RD[1][j];
               FluxRD_list[N_FluxRD_export].dMomentum_Dual[1] = (-1.0) * triangle_dt * Flux_RD[2][j];
+#ifdef TWODIMS
               FluxRD_list[N_FluxRD_export].dMomentum_Dual[2] = 0.0;
-              FluxRD_list[N_FluxRD_export].dEnergy_Dual      = (-1.0) * triangle_dt * Flux_RD[3][j];
+#else
+              FluxRD_list[N_FluxRD_export].dMomentum_Dual[2] = (-1.0) * triangle_dt * Flux_RD[3][j];
+#endif
+              FluxRD_list[N_FluxRD_export].dEnergy_Dual      = (-1.0) * triangle_dt * Flux_RD[DIMS + 1][j];
 #ifdef RD_HIERARCHICAL_TIMESTEPS
               for(k = 0; k < 4; k++)
                 FluxRD_list[N_FluxRD_export].dPredictor[k] = 0.0;
@@ -7389,7 +7407,6 @@ void compute_residuals(tessellation *T)
               N_FluxRD_export += 1;
             }
         }
-#endif  // TWO_DIMS
     }   // for loop of triangles, i= 0~ Ndt_thistask
 
 #if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_EQUALSTEP)
@@ -7398,6 +7415,10 @@ void compute_residuals(tessellation *T)
 #endif
 
   apply_FluxRD_list();
+
+#ifdef RD_3D_STATIC
+  rd_static_validate_stage(rd_stage, set.n);
+#endif
 
 #ifdef RD_LDA_RUSANOV_BLEND
   {
@@ -7792,14 +7813,14 @@ void compute_residuals(tessellation *T)
   {
     long long stat_counts[4] = {RD_stat_elements, RD_stat_pinv_fallback, RD_stat_exact_singular, RD_stat_min_svd_rank};
     long long stat_totals[3], stat_min_rank;
-    long long stat_rank_counts[5];
+    long long stat_rank_counts[DIMS + 3];
     double stat_mins[2] = {RD_stat_min_pivot_ratio, RD_stat_min_dt_extrap};
     double stat_maxs[3] = {RD_stat_max_cons_defect_abs, RD_stat_max_dt_extrap, RD_stat_max_phi};
     double stat_min_out[2], stat_max_out[3];
 
     MPI_Reduce(stat_counts, stat_totals, 3, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&stat_counts[3], &stat_min_rank, 1, MPI_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(RD_stat_svd_rank_count, stat_rank_counts, 5, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(RD_stat_svd_rank_count, stat_rank_counts, DIMS + 3, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(stat_mins, stat_min_out, 2, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     MPI_Reduce(stat_maxs, stat_max_out, 3, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
@@ -7836,6 +7857,10 @@ void compute_residuals(tessellation *T)
           (double)RD_SVD_RCOND, stat_rank_counts[0], stat_rank_counts[1], stat_rank_counts[2], stat_rank_counts[3],
           stat_rank_counts[4], (stat_totals[1] > 0) ? stat_min_rank : -1, stat_min_out[0], stat_max_out[0], stat_max_out[2],
           (stat_max_out[2] > 0.0) ? stat_max_out[0] / stat_max_out[2] : 0.0, stat_min_out[1], stat_max_out[1]);
+
+#ifndef TWODIMS
+    mpi_printf("RD-3D rank5_count=%lld\n", stat_rank_counts[5]);
+#endif
 
 #ifdef RD_ALE_CONDITION_DIAGNOSTIC
     if(ThisTask == 0)

@@ -62,6 +62,7 @@
 #RD_OUTPUT_DIAGNOSTICS         # Write verbose RD triangulation diagnostics
 #RD_DEBUG_ASSERTS              # RD invariant assertions (sum_i K_i = 0, conservation) and solver statistics
 #RD_ALWAYS_PSEUDOINVERSE       # RD: always use the minimum-norm solve (reference path, no pivot branch)
+#RD_3D_STATIC                 # Experimental 3D static, one-rank, full-mesh equal-step N/RK2
 #RD_RK2_TOTAL_RESIDUAL         # RD: two-stage GL+F1 total-residual RK2 (thesis ch.3 / Arpaia-Ricchiuto)
 #RD_LDA_COMMON_OPENING_BETA   # comparison only: common interval-opening beta for static LDA/F1; default uses stage beta
 #RD_LDA_MIXED_STAGE_BETA      # legacy explicit selection of the mixed-stage default; incompatible with COMMON_OPENING_BETA

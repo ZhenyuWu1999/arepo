@@ -139,3 +139,122 @@ scaling, planar reduction and 4/5-component LU/SVD solves with several RHSs.
 Largest normalized K defect against the independent flux-derivative oracle:
 **1.903e-15**. Existing `make check_rd` tests also passed after extraction.
 Native regressions and later integration milestones are recorded in log 3.
+
+## 5. Native tetra integration and module boundaries
+
+Milestone 1 is commit `dd7a31b`. Milestone 2 adds explicit `RD_3D_STATIC` and
+the following modules, retaining the common AREPO stage orchestration:
+
+- `src/hydro/rd_euler.c`: dimension-aware directional K and a pure static N
+  element distribution, without AREPO storage or a time-step factor.
+- `src/hydro/rd_linalg.c`: four/five-component LU and rank-revealing SVD.
+- `src/mesh/rd_simplex_geometry.c`: signed simplex measure, inward unit face
+  normals and face measures; accepts already-unfolded periodic coordinates.
+- `src/hydro/rd_state.c`: common equal-step stage snapshots, primitive
+  recovery and corrector preparation. No primitive floor is applied here.
+- `src/hydro/rd_dimensions.h`: storage dimensions available before AREPO's
+  `voronoi.h` defines DIMS. Spatial dimension, number of vertices, number of
+  equations and energy index are separate quantities.
+
+The native adapter uses AREPO's DP coordinates, including their periodic
+images, and requires positive tetra orientation. A triangle routine must not
+be made three-dimensional just by extending its loop limits. In particular,
+AREPO's deleted 3D tetra slots have `DT[i].t[0] < 0` but may retain stale
+vertex indices; they must be excluded from physical element enumeration.
+Coverage and uniform-state tests catch the consequent duplicate-volume risk.
+
+The first supported path is periodic, source-free, gas-only, non-comoving,
+one rank, static full mesh, equal steps, N with the lumped RK2 mass. Its
+corrector element term is
+
+\[
+  \frac{|T|}{4}\frac{U_i^*-U_i^n}{\Delta t}
+  +\frac12\phi_i^T(U^*).
+\]
+
+Together with the existing local `+1/2 (Q*−Qn)` preparation, this is the
+two-stage lumped update, without importing the standalone half-step convention.
+All three momenta participate in storage, stage recovery and final updates.
+The three-dimensional CFL additionally bounds each nodal step by
+`CourantFac * M_i / sum_{T incident on i} max_j[(a_j/3)(c+|v·nhat_j|)]`, using
+the same Roe element state and `M_i=sum_T |T|/4`. It supplements AREPO's
+Voronoi/tree restriction. These mild gates do not establish positivity for
+arbitrary N-scheme data or distorted meshes.
+
+`test_simplex_kernels.py` compiles the production C kernels and checks 700
+random triangles/tetrahedra, both orientations and gamma=1.4/5/3. The total
+P1-Z residual is compared with independent exact face quadrature (two-point
+Gauss on an edge, degree-two three-point quadrature on a triangle). Largest
+normalized defects: closure 1.763e-16, linear-gradient identity 4.582e-15,
+integrated residual 4.441e-15, raw N conservation 6.715e-17 and solve
+compatibility 7.630e-17. Seventy nonuniform zero-velocity cases exercise ranks
+three/four in 2D/3D. Uniform residuals are exactly zero in the pure kernel.
+
+## 6. Native evidence, provenance and limitations
+
+Final numerical campaign: `../local_runs/rd_3d_integration_20261010_v1/native_static_v3/`.
+Reproducer and configuration: [3D example README](../examples/rd_3d/README.md),
+`tests/rd/run_3d_static_gates.py` and `examples/rd_3d/Config_N_static.sh`.
+The unit cube has gamma=1.4, periodic boundaries, one rank and double precision.
+Each n³ Cartesian grid is jittered by ±0.12/n in each coordinate using seed
+912+n; n=8 gives 512 nodes/3552 tetrahedra, n=16 gives 4096/28419. Every case
+reaches t=1/32 with snapshots at 0, 1/64 and 1/32. Both thread limits are one.
+
+Advection uses `rho=1+0.1 product_a sin(2 pi x_a)`, p=1 and v=(.3,−.2,.4),
+compared with the exact translated density at the actual final coordinates
+and time. Pressure-rest uses rho=1, v=0 and
+`p=1+0.01 product_a cos(2 pi x_a)`; it is a nonuniform dynamical test, not a
+steady solution. Its first predictor triggers 3552 rank-four SVD solves.
+
+| Case | Actual dt / number of steps | Maximum normalized global conservation defect | Density L1 |
+| --- | --- | --- | --- |
+| 8³ uniform rest | 1/512 / 16 | 6.509e-19 | — |
+| 8³ uniform flow | 1/512 / 16 | 0 | — |
+| 8³ pressure perturbation, initial v=0 | 1/512 / 16 | 1.111e-15 | — |
+| 8³ density advection | 1/512 / 16 | 6.662e-16 | 2.054116219e-3 |
+| 16³ density advection | 1/2048 / 64 | 1.444e-15 | 1.222963234e-3 |
+| 16³ density advection, smaller cap | 1/4096 / 128 | 2.015e-15 | 1.222963308e-3 |
+| 8³ advection, always SVD | 1/512 / 16 | 4.441e-16 | 2.054116219e-3 |
+
+Conservation is measured for `(M,Px,Py,Pz,E)` over all saved snapshots, relative
+to the initial sum of absolute nodal amounts; momentum denominators are at
+least the total mass so a zero momentum has a meaningful absolute scale.
+Density L1 is `sum_i Mdual_i |rho_i-rho_exact_i|` (box volume is one); L2 uses
+the same volume weights. Global median-dual coverage differs from unity by
+at most 1.111e-16. Uniform rho/v/p defects are at most 5.552e-16. All recorded
+states and both RK stages stay positive and finite, and coordinates stay fixed.
+
+LU/fallback versus always-SVD fields agree within 8.882e-16. Halving the actual
+16³ timestep changes rho/v/p by at most 2.696e-8 / 6.555e-10 / 1.460e-9.
+The two-grid L1 ratio is 1.6796 (an apparent exponent 0.7481); this is an initial
+decreasing-error trend on two jittered grids, **not** a measured asymptotic
+convergence order. N is the spatial first-order baseline.
+
+The final two-dimensional regression (`regression2d_final/`) compares against
+the frozen pre-integration commit `4b40f75`: static N/LDA and moving N
+equal/natural, each on uniform random and Yee48 with 2304 nodes to t=.015625.
+All eight candidate runs pass. Maximum matched rho/v/p difference is
+2.443e-15, coordinate difference 4.441e-16 and integrated total difference
+4.441e-16. Moving configurations retain high transfer mode 1 with lazy off.
+The full final `make check_rd` also passes (`check_rd_final.log`). This is a
+short regression, not a revalidation of every historical 2D configuration.
+
+Failed/setup attempts are preserved: `native_static_v1` failed compilation
+because mesh storage referenced DIMS before its definition; the dedicated
+dimension header fixes that include-order issue. `native_static_v2` ran seven
+cases, but its two nominal timestep caps were both overridden by the same
+CFL limit. Those identical timelines supply no timestep-sensitivity evidence.
+Version 3 lowers the second cap and asserts the **actual** factor-two step
+change. Final cleanup only changed comments/formatting and removed unreachable
+3D fragments inside guarded 2D ALE functions. `final_source/equivalence.json`
+verifies identical preprocessed numerical code against the frozen native
+binaries for all six configurations; only diagnostic `__LINE__` values and
+whitespace are neutralized. The final frozen sources and hashes are archived.
+
+This completes an initial **static** three-dimensional N integration. Moving
+3D conservation transfer, GCL/time-integrated tetra geometry, LDA/B, hierarchical
+time stepping, MPI agreement, strong shocks and long-run stability remain
+unimplemented or unvalidated on this path. A cubic-in-time tetra volume cannot
+reuse a 2D endpoint-average mesh-flux formula; the next moving gate needs a
+consistent time quadrature and full conservative reconnection-cavity transfer.
+The earlier feasibility report's model evidence is not native 3D evidence.

@@ -5,16 +5,24 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-10
 
-**3D integration authorised; shared-kernel milestone (2026-10-10, log3 §230):**
-User requests implementation with mathematical cross-checks and commits at key
-milestones. `rd_euler.c/.h` now supplies the common 2D/3D spectral K matrix;
-`rd_linalg.c/.h` extracts the LU/SVD policy with 4/5-component support. Existing
-2D calls use these modules. See `RD_3D_KERNEL_MATHEMATICS_20261010.md` for
-normal/face/volume conventions and source corrections. Independent C algebra
-tests and 16 frozen before/after native 2D short runs pass (nodal differences
-<=2.45e-15). Archive: `../local_runs/rd_3d_integration_20261010_v1/`.
-Next: native tetra geometry and static N, then early moving gates. Native 3D
-is not yet enabled at this milestone; thesis and standalone repo untouched.
+**Initial native static 3D N integrated (2026-10-10, log3 §§230–231):**
+User authorised implementation with mathematical cross-checks and commits at
+key milestones. Shared K/LU/SVD extraction is commit `dd7a31b`; the next
+milestone adds tetra geometry, common RK state transitions and explicit
+`RD_3D_STATIC`. Supported scope: periodic, one rank, gas-only, static full
+mesh, equal-step N/lumped RK2. See `RD_3D_KERNEL_MATHEMATICS_20261010.md` and
+`examples/rd_3d/README.md` for conventions, mathematical oracles and reproduction.
+All seven final 3D gates pass (8³/16³, t=1/32): five-component conservation
+<=2.015e-15, uniform defect <=5.552e-16; actual halved-dt and LU/SVD comparisons
+pass. Two-grid error decreases but does not establish convergence order.
+Full `make check_rd` and eight final native 2D short regressions pass against
+pre-integration `4b40f75` (field differences <=2.443e-15). Moving 2D retains
+high transfer mode 1 and lazy OFF. Archive:
+`../local_runs/rd_3d_integration_20261010_v1/`, final numerical runs in
+`native_static_v3/` and `regression2d_final/`; final-source equivalence recorded.
+Next: moving-tetra GCL and conservative reconnection-cavity transfer. Native
+moving 3D, 3D LDA/B, hierarchy and MPI remain guarded/unvalidated. Thesis and
+standalone repository were only read, not edited.
 
 **Chapter3 wording correction (2026-10-02, log3 §210):**
 User explicitly wants their original FV–RD sentences preserved; only typeset

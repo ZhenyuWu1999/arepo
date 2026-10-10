@@ -9143,3 +9143,51 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
 - 档案：`../local_runs/rd_3d_integration_20261010_v1/`，含复现脚本、冻结源、Config、
   source/binary/IC/参数哈希、linkage、日志及比较 JSON。原论文 PDF 与公式页亦归档。
   本节点仍未打开 native 3D；下一节点接入 tetra geometry 与 static N。
+
+## 231. 2026-10-10：3D 接入节点二，原生 static N/lumped RK2 与独立几何验证
+
+**作者：Codex；延续用户授权，数学审核、模块拆分和 native gates 完成后提交。**
+
+- 节点一已提交为 `dd7a31b`。本节点新增纯 simplex geometry、共用 `rd_state`
+  阶段转换和 dimension/storage header；Euler kernel 新增不依赖 AREPO 的静态
+  N distribution。主文件保留 element adapter/推进，未复制一份 3D solver。
+- 三维显式通过 `RD_3D_STATIC` 打开：周期、单 rank、仅 gas、非宇宙学、static
+  full mesh、equal timesteps、N/lumped RK2。不支持的算法/物理选项设有编译或
+  运行拒绝。三分量动量、五分量 stage state 和更新已接通，并加入 median-volume
+  spectral CFL；两 RK 阶段都在普通 primitive floor 之前检查正密度/正压力。
+- 采用 AREPO 展开的 periodic DP 坐标，正向 tetra determinant/6，单位 inward
+  face normals 和 face area/3，lumped mass=volume/4。跳过 `DT[i].t[0]<0`
+  的已删除 tetra：其 vertex slots 可能仍有效，不能沿用二维的点索引筛选。
+- [数学与 native 证据报告](RD_3D_KERNEL_MATHEMATICS_20261010.md) §§5–6
+  记录完整实现边界、测试范数/权重/坐标/时间步与失败尝试。
+  新增 700 个真实 C geometry/N 测试，对照独立 P1-Z 面积分，包含两种顶点
+  定向、gamma=1.4/5/3、均匀态及 70 个非均匀零速度奇异问题。没有 diagonal
+  repair、守恒回填或 state clipping；同时验证原始求解兼容性与单元守恒。
+- 最终 `make check_rd` 通过。700 例最大归一化 geometry-gradient 误差
+  4.582e-15、面通量积分差 4.441e-15、N 守恒差 6.715e-17；节点一的 800
+  K-matrix 测试仍通过，最大缺陷 1.903e-15。
+- 最终 native 3D `native_static_v3/`：gamma1.4、周期 unit cube，8³/16³
+  jittered grids（512/4096 点，3552/28419 tetra），7 个算例全到 t=1/32。
+  静止/运动均匀场、零初速压力扰动、两网格密度平流、实际 dt 减半、强制
+  SVD 比较全部通过。五分量总量归一化误差≤2.015e-15，coverage≤1.111e-16，
+  uniform≤5.552e-16；所有已检查阶段/快照为正且有限。压力扰动第一步确实
+  触发 3552 个 rank-four SVD，而非仅用零 residual 验证奇异路径。
+- 平流 L1：8³ 为 2.054116219e-3，16³ 为 1.222963234e-3；两网格下降
+  仅是初步趋势，不能作为渐近收敛阶。16³ actual dt=1/2048→1/4096，
+  64→128 步，最大 rho 差2.696e-8。8³ LU/always-SVD 场差≤8.882e-16。
+- 最终二维 `regression2d_final/`：与冻结的 `4b40f75` 比较 static N/LDA、
+  moving N equal/natural，各跑 uniform random 与 Yee48（2304 点、t=.015625）。
+  8 个候选运行全通过，rho/v/p 差≤2.443e-15、坐标差≤4.441e-16、总量差
+  ≤4.441e-16；moving 继续 high transfer mode 1、lazy OFF。仅短时回归。
+- 档案统一在 `../local_runs/rd_3d_integration_20261010_v1/`，包含 source、
+  binary、Config、生成 header、IC/参数 hashes、linkage、logs 和 JSON。
+  保留 `native_static_v1` include-order 编译失败；`v2` 两个名义 dt cap 都被
+  CFL 覆盖，因此不能当作 dt 敏感性证据。`v3` 要求实际步长减半。
+  提交前仅清理注释/缩进及二维 guarded 函数内不可达的三维片段；
+  `final_source/equivalence.json` 对六个已运行配置的 12 个 translation units
+  核对预处理数值代码完全相同（仅消除诊断行号和空白差异）。
+- 配置与复现入口：`examples/rd_3d/README.md`、`Config_N_static.sh`、
+  `tests/rd/run_3d_static_gates.py`。默认 Config 没有变化。未修改 thesis 或
+  standalone rdsolver，未 push。下一步是 moving tetra 的 GCL/time quadrature
+  和 conservative reconnection-cavity transfer；3D moving、LDA/B、hierarchy、
+  MPI、强激波和长期稳定性仍未完成或未验证。

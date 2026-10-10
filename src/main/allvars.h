@@ -1361,12 +1361,12 @@ extern struct sph_particle_data
 #endif
 #ifdef RD_RK2_TOTAL_RESIDUAL
   /* Per-step transients for the two-stage total-residual update. Both are
-   * intensive nodal states U = Q/DualArea = {rho, rho vx, rho vy, rho e},
+   * intensive nodal states U = Q/DualArea = {rho, rho v[0:RD_NDIM], E},
    * NOT the integrated conserved quantities Q (Codex audit 11.2). Excluded
    * from snapshot IO; binary restarts and domain migration carry the complete
    * SphP record, including these fields. */
-  double RD_Ustage0[4]; /* nodal U at t^n, saved before the predictor sweep */
-  double RD_dU[4];      /* U* - U^n after the predictor stage */
+  double RD_Ustage0[RD_NVAR]; /* nodal U at t^n, saved before the predictor sweep */
+  double RD_dU[RD_NVAR];      /* U* - U^n after the predictor stage */
 #ifdef RD_HIERARCHICAL_TIMESTEPS
   signed char RD_StarTimeBin;       /* minimum triangle timebin over the complete vertex star */
   integertime RD_PredictorEnd;      /* integer endpoint at which RD_dU is consumed */

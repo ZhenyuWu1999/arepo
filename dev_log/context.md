@@ -65,6 +65,14 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**2026-10-10 addition:** initial native **static 3D N** is now available behind
+`RD_3D_STATIC`, restricted to periodic gas-only, one rank and equal-step lumped
+RK2. Common Euler/LU/SVD, simplex geometry and state modules support the port;
+the mathematical audit and seven native 3D gates are documented in
+`dev_log/RD_3D_KERNEL_MATHEMATICS_20261010.md` and log 3 §§230–231. This does not
+establish moving 3D, 3D LDA/B, hierarchical or MPI support. The following
+historical completion statements concern **2D**, not all dimensions.
+
 *(This section was written on 2026-07-27 and revised on 2026-08-05. The
 authoritative running record is the development log; this is only an
 orientation for a new session.)*

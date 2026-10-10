@@ -53,7 +53,9 @@ void build(double *rd_stage_average, double *rd_beta_average,
     with tempfile.TemporaryDirectory(prefix='rd_common_beta_') as tmp:
         tmp = Path(tmp)
         (tmp/'probe.c').write_text(wrapper)
-        subprocess.run(['cc','-std=c99','-O2','-shared','-fPIC',str(tmp/'probe.c'),str(REPO/'src/hydro/rd_euler.c'),'-I'+str(REPO/'src/hydro'),'-o',str(tmp/'probe.so')],check=True)
+        blas = Path('/opt/homebrew/opt/openblas')
+        libs = ['-I'+str(blas/'include'), '-L'+str(blas/'lib'), '-lopenblas'] if blas.exists() else ['-llapacke', '-llapack', '-lblas']
+        subprocess.run(['cc','-std=c99','-O2','-shared','-fPIC',str(tmp/'probe.c'),str(REPO/'src/hydro/rd_euler.c'),str(REPO/'src/hydro/rd_linalg.c'),'-I'+str(REPO/'src/hydro'),*libs,'-o',str(tmp/'probe.so')],check=True)
         lib = ctypes.CDLL(str(tmp/'probe.so'))
         ptr = np.ctypeslib.ndpointer(dtype=np.float64,flags='C_CONTIGUOUS')
         lib.build.argtypes = [ptr]*6

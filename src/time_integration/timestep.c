@@ -117,7 +117,7 @@ void find_timesteps_without_gravity(void)
   tree_based_timesteps();
 #endif /* #ifdef TREE_BASED_TIMESTEPS */
 
-#if defined(RD_ALE_CFL_TIMESTEP) || defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
+#if defined(RD_ALE_CFL_TIMESTEP) || defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND) || defined(RD_3D_STATIC)
   /* The tree limiter is an FV/Voronoi signal-crossing criterion.  RD instead
    * needs the nodal median-dual mass divided by the incident element spectral
    * radii.  Apply that independent upper bound after the tree has reset and

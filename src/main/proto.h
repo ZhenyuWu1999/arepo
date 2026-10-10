@@ -193,7 +193,7 @@ int pm2d_periodic_compare_sortindex(const void *a, const void *b);
 void pm2d_mysort_pmperiodic(void *b, size_t n, size_t s, int (*cmp)(const void *, const void *));
 int timestep_evaluate(int target, int mode, int threadid);
 void tree_based_timesteps(void);
-#if defined(RD_ALE_CFL_TIMESTEP) || defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND)
+#if defined(RD_ALE_CFL_TIMESTEP) || defined(RD_RUSANOV_LOW_ORDER) || defined(RD_LDA_RUSANOV_BLEND) || defined(RD_3D_STATIC)
 void rd_apply_cfl_timestep_constraint(tessellation *T);
 #endif
 int MPI_Check_Sendrecv(void *sendbuf, int sendcount, MPI_Datatype sendtype, int dest, int sendtag, void *recvbufreal, int recvcount,

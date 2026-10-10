@@ -1,6 +1,8 @@
 #ifndef RD_EULER_H
 #define RD_EULER_H
 
+#include "rd_linalg.h"
+
 /* Pure Euler algebra, independent of AREPO storage and compile-time dimension.
  * ndim is 2 or 3; conserved ordering is rho, ndim momenta, total energy.
  * Arrays are compact row-major, with nvar = ndim + 2. */
@@ -16,5 +18,21 @@
 int rd_euler_spectral_matrix(int ndim, const double *velocity, double enthalpy, double sound_speed,
                              double gamma, const double *normal, double face_measure,
                              const double lambda[3], double *matrix);
+
+struct rd_n_diagnostics
+{
+  struct rd_solve_info solve;
+  double conservation_defect, solve_defect, roundoff_scale, max_phi;
+};
+
+/* Static N distribution on a simplex, with the conservative P1-Z residual.
+ * u and residual are [ndim+1][ndim+2], normals [ndim+1][ndim]. phi[ndim+2]
+ * is the element total. No time-step factor (including 1/2) is included.
+ * Checks raw solve compatibility and conservation; never repairs the result.
+ * Returns 0 success, -1 invalid state/geometry, -2 solve failure,
+ * -3 incompatible solve or failed element conservation. */
+int rd_euler_n_residual(int ndim, const double *u, const double *unit_normal,
+                       const double *face_measure, double gamma, double rcond,
+                       int always_svd, double *phi, double *residual, struct rd_n_diagnostics *diagnostics);
 
 #endif

@@ -31,6 +31,8 @@
 #ifndef MESH_H
 #define MESH_H
 
+#include "../hydro/rd_dimensions.h"
+
 #define SCALAR_TYPE_PASSIVE 0   /*!< only advection */
 #define SCALAR_TYPE_SPECIES 1   /*!< species are normalised to guarantee sum{species}=1 */
 #define SCALAR_TYPE_NORMALIZE 2 /*!< the same normalisation factor as for species is applied, but no contribution to sum{species} */
@@ -124,7 +126,7 @@ extern struct primexch
 #ifdef RESIDUAL_DISTRIBUTION
   MyFloat Energy;
 #ifdef RD_RK2_TOTAL_RESIDUAL
-  MyFloat RD_dU[4]; /* intensive nodal U* - U^n, for the corrector mass-matrix term */
+  MyFloat RD_dU[RD_NVAR]; /* intensive nodal U* - U^n, for the corrector mass-matrix term */
 #ifdef RD_HIERARCHICAL_TIMESTEPS
   signed char RD_StarTimeBin;
   integertime RD_PredictorEnd;
@@ -274,10 +276,10 @@ extern struct geometry
 
 struct triangle_normals
 {
-  double normal[3][2];
-  double mag[3];
-  double area;  // area of the triangle
-};              /*2D normal vectors to the edges of Delaunay triangles, used for residual distribution*/
+  double normal[RD_NVERT][RD_NDIM];
+  double mag[RD_NVERT];
+  double area;  /* legacy name: triangle area or tetra volume */
+};              /* Inward UNIT face normals, face measures, and simplex measure for RD. */
 
 struct pv_update_data
 {
