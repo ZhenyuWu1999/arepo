@@ -5,6 +5,18 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-10
 
+**2D compatibility finding confirmed (2026-10-10, log3 §233):**
+Claude's longer moving LDA/B Yee48 comparison is correct: old/new density
+differences reach 1.323e-6 / 6.453e-5 at t=1, beyond the scope of the earlier
+short static N/LDA and moving N gates. Same new binary replay is byte-identical;
+restoring only original 2D K construction in a frozen ablation restores all
+saved old particle fields byte-for-byte for both schemes. Working solver is
+unchanged; a modular 2D arithmetic-compatibility fix is still pending. Keep
+conservation, trajectory repetition and analytic accuracy distinct. See
+`RD_2D_REFACTOR_REPRODUCIBILITY_AUDIT_20261010.md` and
+`../local_runs/codex_claude_3d_review_20261010_v1/`. Prior 3D gate conclusions
+are unchanged; use longer moving LDA/B refactor gates going forward.
+
 **Initial native static 3D N integrated (2026-10-10, log3 §§230–231):**
 User authorised implementation with mathematical cross-checks and commits at
 key milestones. Shared K/LU/SVD extraction is commit `dd7a31b`; the next

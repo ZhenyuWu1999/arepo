@@ -3,6 +3,15 @@
 Author: Codex, 2026-10-10. User authorised incremental 3D integration and
 commits at validated milestones. No thesis edits.
 
+**Later 2D compatibility audit (2026-10-10, log3 §233):** the short regressions
+below do not establish long-time moving LDA/B reproduction. Claude's t=1
+Yee48 finding is independently confirmed: density differences grow to 1.323e-6
+and 6.453e-5. Same-binary replay is byte-identical; restoring only the old 2D
+K construction in a frozen ablation restores byte-identical old results.
+See [the detailed audit](RD_2D_REFACTOR_REPRODUCIBILITY_AUDIT_20261010.md).
+The working solver still uses the shared K implementation; no compatibility
+fix has yet been merged.
+
 ## 1. Sources and the convention that the code must enforce
 
 Read the current thesis `zhenyu_thesis/chapter3/chapter3.tex`, especially

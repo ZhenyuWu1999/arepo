@@ -9222,3 +9222,40 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   - lazy 运行的连接来自 registry，不能用末坐标重新 Delaunay 化来复现。
   - B1.8 的阈值不保证发生倒置。
   - CFL 最大值应为 0.116（我报的 0.103 是最后一个事件的值）。
+
+## 233. 2026-10-10：独立复核 Claude 的二维重构可重复性问题，并做 K 局部回退实验
+
+**作者：Codex；用户要求查看 Claude 审核，关注某些二维结果不能 machine-error-level 重复。只修改审核记录，未修改工作区 solver 或 thesis。**
+
+报告：[RD_2D_REFACTOR_REPRODUCIBILITY_AUDIT_20261010.md](RD_2D_REFACTOR_REPRODUCIBILITY_AUDIT_20261010.md)。
+
+- 接受 Claude 的核心发现。重算其全部快照，moving LDA/B Yee48 到 t=1 的
+  matched-ID 最大密度差分别为 1.323388e-6 / 6.452676e-5，压力差为
+  1.871170e-6 / 9.367402e-5。两组坐标也已不同，不能称作公共空间场差。
+  旧 `e1b1aa9` 与 Codex 基线 `4b40f75` 的 src 树一致，双方参数仅 OutputDir
+  不同。此前短回归仅 static N/LDA、moving N，不能覆盖此 moving LDA/B 结论。
+- 新运行四个完整 native 对照，冻结源、独立 build/run/output，两个线程限值
+  均为一：新二进制原样重跑 LDA/B，以及只恢复两个旧二维 K 构造片段的
+  新框架 LDA/B。全部 2304 点、dt=1/256、256 步到 t=1。
+  前两者所有快照的全部 particle datasets 按 ID 排序后与 Claude 新档案
+  逐字节相同；后两者与 Claude 旧档案逐字节相同，包括坐标。
+  因而已将这两例差异定位到 K 抽取路径，不是同一二进制自身不能重复。
+- 当前守恒仍为舍入误差级；两版本快照总量最大绝对差1.422e-14。
+  各自坐标上的解析 L1 变化很小，最大相对变化为 B 的 velocity L1
+  8.672e-6。但这不能证明任意长时/分辨率/激波都不受影响，更不能以
+  积分量接近代替逐节点重复性。
+- 逐步 timestep、flip 汇总计数和 LU/SVD/rank histogram 相同。
+  LDA/B 的123/119是有 flip 的步数，cavity 总数为249/244；未输出完整
+  cavity 身份，不能仅凭计数断言连接处处相同。Claude 的 HLLC Sedov21
+  原新全部快照 particle datasets 逐字节相同。
+- 对 Claude 解释作限定：尚未定位某条 off-diagonal/FMA 指令，未证明严格
+  指数增长；1e-6–1e-4 不是全部历史档案的通用差异上限。守恒性、数学
+  一致性和旧轨迹重复性是不同性质。
+- 局部回退仅用于冻结实验副本，未将旧内联代码放回主文件。建议下一步在
+  模块设计内保留经过验证的二维原浮点路径，并以这类数百步对照验证后
+  再合并；不能只放宽误差阈值。已在原数学报告和 local context 顶部注明
+  当前兼容性限制，保留 Claude 原文。
+- 档案：`../local_runs/codex_claude_3d_review_20261010_v1/`，含独立重算脚本、
+  完整四例实验、精确 patch、source/binary/Config/IC/参数哈希、linkage、
+  日志、快照以及全部 particle fields 的逐字节验证；原参考二进制已从
+  Claude 临时目录核验哈希后复制保留。本轮未重跑三维测试。
