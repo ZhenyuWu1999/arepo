@@ -9191,3 +9191,34 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   standalone rdsolver，未 push。下一步是 moving tetra 的 GCL/time quadrature
   和 conservative reconnection-cavity transfer；3D moving、LDA/B、hierarchy、
   MPI、强激波和长期稳定性仍未完成或未验证。
+
+## 232. 2026-10-10：Claude 审阅 Codex 的 3D 整合（static N）与相关 2D 重构
+
+**作者：Claude Code（Opus 5.5）；用户要求审阅 Codex 的 3D 进展。未改 solver、thesis 或 Codex 文件。**
+
+审阅报告：[RD_3D_INTEGRATION_CLAUDE_REVIEW_20261010.md](RD_3D_INTEGRATION_CLAUDE_REVIEW_20261010.md)；
+证据：`../local_runs/claude_3d_review_20261010_v1/`。
+
+- **结论：** 3D static N 的约定、代码与证据均正确且可复现，未发现 3D 路径的正确性错误。
+- **独立核查：**
+  - `check_rd` 全部通过。
+  - 3D spectral 矩阵对照"无特征向量"的多项式参照（有限差分 Jacobian）：300 个状态 × 三种分裂 × ALE 平移，最大偏差 2.1e-8（受有限差分限制）。直接特征分解在三重特征值处病态（cond 3.9e19），不可作为参照。
+  - N 残差对照独立的二阶体积求积：1.5e-9；守恒 5.8e-15；均匀态严格为 0。
+  - 以 632a401 新编译的二进制复现 Codex 的 8³ 平流快照，逐位相同。
+  - 延长到 t=0.5（256 步，原 gate 的 16 倍）：均匀态 5.6e-16；压力扰动守恒 2.2e-16，动能衰减；平流守恒 3.4e-16，L1 由 7.1e-3 平滑增至 1.8e-2（一阶 N 扩散），接触处 Δv≤3e-5、Δp≤6e-5。
+- **发现（P2，可复现性）：** dd7a31b 的 2D 重构对 LDA/B 运动网格不是逐位等价。
+  - Yee48 到 t=1：舍入差由 1e-14（t=0.25）增长到 1.3e-6（LDA）与 6.5e-5（B）。
+  - flip 事件、守恒与解析误差均相同（5–6 位有效数字）。HLLC 逐位相同。
+  - Codex 的 4 步回归无法发现这一点。
+  - 结论：dd7a31b 之前的档案（含 10-09 全部 campaign）对 LDA/B 只能复现到约 1e-6–1e-4。如需逐位复现，应保留 2D 原运算次序；否则记录即可。今后回归应跑数百步。
+- **建议：**
+  - 更长的 gate 与 3D 激波测试；
+  - 8³/16³/32³ 固定时刻的收敛测试；
+  - 与 standalone rdsolver 在同一网格上做交叉验证；
+  - 将 triangle_normals 等改名；
+  - 3D 运动网格需两点 Gauss 时间积分法向，3D 腔体转移需扩展到 5 分量，并需要 MPI。
+- **对 §226（Codex 对我测试规范的审核）：** 三项 P2 与次要项全部接受。
+  - 我的"误差场插值等于场差"在节点以外不成立：差值中含 (I_A−I_B)ρ_exact，为 O(h²ρ″)。
+  - lazy 运行的连接来自 registry，不能用末坐标重新 Delaunay 化来复现。
+  - B1.8 的阈值不保证发生倒置。
+  - CFL 最大值应为 0.116（我报的 0.103 是最后一个事件的值）。
