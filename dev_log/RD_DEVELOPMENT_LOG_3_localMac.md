@@ -9349,3 +9349,38 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   放COSMA/Cuillin；当前Mac helper的otool/linkage需在Linux适配后使用host SYSTYPE。
 - 详细数学、结果、失败和范围见 `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md`；
   统一档案 `../local_runs/rd_3d_extension_20261010_v1/`。
+
+## 238. 2026-10-10：Claude 审阅 Codex 的三维扩展（§§233–237），并定位冷 Sedov 停止的根因
+
+**作者：Claude Code（Opus 5.5）；用户要求审阅 Codex 的后续进展。未改仓库 solver、测试、thesis 或 Codex 文件；缩放求解仅为独立源码副本中的原型。**
+
+审阅报告：[RD_3D_EXTENSION_CLAUDE_REVIEW_20261010.md](RD_3D_EXTENSION_CLAUDE_REVIEW_20261010.md)；
+证据：`../local_runs/claude_3d_review2_20261010_v1/`（见 README.txt）。
+
+- **结论：** 三维 LDA/F1、MPI CFL、五分量 static hierarchy 与 SWIFT-family 小网格测试，在我能核查的范围内均正确，范围表述如实。
+  - 以 9ae1043 重新编译的 hierarchy natural LDA，在 np1/np2 下与 Codex 档案的全部快照按 ID 排序后逐字节相同。
+  - 冷 Sedov 的停止也完全复现：同一 tetra（47980），同一 defect。
+- **§233（二维审计）：** 接受 Codex 的结论及其对我 §232 的修正。
+  - 123/119 是含 flip 的步数，cavity 数为 249/244。
+  - 指数增长与 off-diagonal 归因只是假设。
+  - 1e-6–1e-4 不是所有旧档案的通用上限。
+- **代数核对：**
+  - LDA 的 Σφ=Φ，F1 的 ΣT=t。
+  - 等步 Qⁿ⁺¹=Qⁿ−(h/2)(φⁿ+φ*)−hΣ(T−lumped)，与 hierarchy 等 bin 退化恒等式一致。
+  - MPI CFL 的 ghost 读取、originalindex 回送与 MINLOC 均正确。
+  - 预处理检查：3D 构建中残留的 `<4` 循环只出现在三个未被调用的二维 static helper 中（目标文件中不存在）。
+- **冷 Sedov 根因（新）：** 失败的 tetra 是 sliver（四个法向在 1.1° 以内），且静止、均匀到舍入误差（|Φ|/(ΣA c)~2e-20）。
+  - S⁻ 的奇异值为 0.57、1.4e-6、7.5e-11、5.7e-11、1e-34。σ₁ 来自 ∝1/c 的 (ρ,E) 元素；因 E~ρc²~1e-6，矩阵元素跨越 11 个数量级。
+  - 双精度 rhs 对 rank-4 值域的精确不相容量只有 2e-44，故系统本身相容。
+  - 1.72e-33 的残差等于 DGELSD 的范数型后向误差 εσ₁|y|=1.44e-33，而审计使用逐分量尺度：4096ε×1.8e-21=1.65e-33。两者不匹配，不是 K 错误。
+  - 按自然单位做相似缩放 D=diag(1,c,c,c,c²) 后，σ₁=1.7e-6，残差降为 1.2e-38。
+  - 冷静止态扫描：production 在 p=1e-9 时失败率最高达 341/400；缩放原型 0/4800。
+- **原生原型：**
+  - Sedov N 通过审计，51 步后在 t=.00167 因中心负压停止（ρ=.0048）。
+  - Sedov LDA 在第一个 corrector 即出现负压。
+  - 二者与二维 §156 一致：二维 Sedov 只有 HLLC-RD 能完成。
+  - Sod/Gresho N 与 production 的差 ≤1.7e-14，守恒 ≤4.3e-15。
+- **建议：**
+  - 三维的空间解与 F1 解都采用该缩放，保留未缩放的审计，并增加冷静止态核测试。
+  - 三维激波基准前先把 HLLC-RD（或 blend）移植到 tetra。
+  - 二维是否采用缩放，应与已暂缓的二维算术兼容性决定一起处理。
