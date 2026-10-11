@@ -9384,3 +9384,30 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   - 三维的空间解与 F1 解都采用该缩放，保留未缩放的审计，并增加冷静止态核测试。
   - 三维激波基准前先把 HLLC-RD（或 blend）移植到 tetra。
   - 二维是否采用缩放，应与已暂缓的二维算术兼容性决定一起处理。
+
+## 239. 2026-10-11：三维运动网格 RD 的实施计划（交给 Codex）
+
+**作者：Claude Code（Opus 5.5）；用户问是否已可开始 3D moving mesh，并要求写给 Codex 的计划。仅文档，未改代码。**
+
+计划：[RD_3D_MOVING_MESH_PLAN_FOR_CODEX_20261011.md](RD_3D_MOVING_MESH_PLAN_FOR_CODEX_20261011.md)。
+
+- **判断：** static 3D 基础（N/LDA、hierarchy、MPI、simplex 几何、五分量状态）足以开始；但 3D 运动网格有静态没有遇到的问题：
+  - 面积向量随时间为二次、体积为三次；
+  - sliver 会在步内或 pullback 时倒置；
+  - 2-3/3-2/4-4 重连与更大的 cavity；
+  - 激波需要 HLLC-RD。
+- **顺序：**
+  - M0 前置：仅 3D 的 cold-gas 缩放；冻结二维逐位参照；最小二维 gate，由用户决定。
+  - M1 数学说明与 Python oracle。
+  - M2 只做诊断的 AREPO 3D 几何试跑，用标准 FV 运动网格统计 cavity 大小、pullback 倒置与 sliver。
+  - M3 Campoli moving N：先固定连接，再测量无 transfer 时的 flip 缺陷。
+  - M4 五分量 cavity transfer。
+  - M5 N→LDA 流动测试。
+  - M6 tetra 上的 HLLC-RD 与 Sedov。
+  - 之后才做 interval hierarchy、MPI 与 lazy。
+- **关键数学（待 M1 证明）：**
+  - endpoint ledger 只需端点体积，因 V∇·σ_h=dV/dt，任意维数成立。
+  - 元素残差中的几何因子对面积向量 N_j 线性，故只需精确时间平均 N̄_j；建议写成 N̄_j=N_j(½)+[N_j(0)−2N_j(½)+N_j(1)]/6，σ=0 时修正项严格为零。
+  - 以"静止仿射密度场在变形网格上保持不变"为验证门槛，中点法向为反例对照。
+- **停止点：** M1、M3、M4 之后审核；M2 之后由用户决定倒置策略与 cavity 策略。
+- §11 列出五个用户决定：二维 campaign 与 3D 的先后、二维算术、倒置策略、cavity 策略、M5/M6 顺序。
