@@ -2,6 +2,12 @@ Agent entry point: [AGENTS.md](../AGENTS.md) contains stable working rules and
 the reading order. This file retains project background and detailed conventions;
 read the latest development-log entries for evolving scientific conclusions.
 
+For 3D moving-mesh work on every host, use the shared English-language
+[dev_log_3D_moving_mesh.md](dev_log_3D_moving_mesh.md). Its first entry records
+the 2026-10-11 implementation state, geometry evidence and pending Cuillin
+handoff. Earlier preparation remains in log 3; host contexts describe their
+own environments, while subsequent 3D moving-mesh work is recorded together.
+
 This directory (/home/zwu/arepo_rd) contains the public version of the state-of-art astrophysics code AREPO. We aim to implement a new hydrodynamics solver based on the Residual Distribution (RD) method to test how it can improve the performance of the existing solver.
 
 ## useful links:
@@ -65,30 +71,30 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
-**Native moving-FV geometry diagnostic (2026-10-11, log3 §241):**
-M2 is implemented under the explicit diagnostic-only `RD_3D_GEOMETRY_DIAGNOSTICS`
-flag. Ten short 16³ cases at CFL .1/.3 yield 134 steps and 8274 connected change
-cavities. New-tet pullback inversion occurs 20 times, including 4 at CFL .1 in
-initially uniform random gas. Largest cavity: 1599/4096 vertices; five winding
-cavities have no coherent Euclidean unfolding. Five new-element Campoli temporal
-volumes are nonpositive while every nodal temporal mass is positive. Signed-chain
-volume/moment checks and independent periodic Delaunay/graph audits pass.
-Three native FV ON/OFF controls and full 256-step 2D LDA/B replays are byte-identical;
-frozen check_rd passes. Report `RD_3D_MOVING_GEOMETRY_DIAGNOSTIC_20261011.md`, archive
-`../local_runs/rd_3d_geometry_20261011_v4/`. Earlier v1/v2 build and v3 deleted-slot
-coverage failures are retained. No native moving-RD adapter or inversion/winding
-transfer policy exists yet; next is controlled fixed-connectivity M3. Production
-Euler stays unscaled, 2D arithmetic stays unchanged, large campaigns stay on clusters.
+**Current 3D moving-mesh handoff (2026-10-11):**
+Read [shared log entry 1](dev_log_3D_moving_mesh.md#1-2026-10-11-current-state-and-handoff-to-cuillin)
+for the status and evidence at implementation checkpoint `57e1ae3`.
+M1 mathematics and the M2 read-only native FV geometry diagnostic are complete
+within their stated scopes. The short local pilots expose interval inversions,
+nonpositive element temporal volumes and large/winding cavities; native moving
+3D RD and a transfer acceptance policy remain unimplemented. The next solver
+milestone is a controlled fixed-connectivity M3 adapter. Zhenyu plans further
+Cuillin tests; Linux campaign adaptation and one-rank parity checks are pending.
+No cluster build, submission or live host inspection occurred in this handoff.
+Keep production Euler unscaled and the current 2D arithmetic/lazy-OFF baseline.
+Large campaigns belong on clusters; record all 3D moving-mesh work in the shared
+log, including host, revision, artifact location and actual job status.
 
 
-**2026-10-11 addition:** moving 3D preparation has an independent geometry and
-Campoli-ledger proof/oracle, documented in
+**Earlier M1 checkpoint (2026-10-11):** moving 3D preparation has an independent
+geometry and Campoli-ledger proof/oracle, documented in
 `RD_3D_MOVING_GEOMETRY_MATHEMATICS_20261011.md` (log3 §240). Production remains
 unscaled per the user's preference not to make rescaling a prerequisite.
 The complete fixed-connectivity periodic model conserves to round-off with
 exact mean face vectors; midpoint normals fail the nonuniform control.
 Five-component transfer models now include 4-4/larger cavities. Native moving
-3D is still unsupported; next is diagnostic-only simplex registry/FV geometry.
+3D is still unsupported. The subsequent M2 diagnostic is complete locally;
+see the shared log for its evidence and the current next milestone.
 Claude's cold-Sedov root-cause/prototype evidence is in log3 §238; it does not
 make the current unscaled cold-Sedov benchmark or strong-shock positivity pass.
 
@@ -140,7 +146,8 @@ version controlled together with the code:
     arepo/dev_log/context.md                        (this file)
     arepo/dev_log/context_localMac.md               (Apple Silicon environment)
     arepo/dev_log/context_cosma.md                  (COSMA environment)
-    arepo/dev_log/RD_DEVELOPMENT_LOG_3_localMac.md (CURRENT log: local development)
+    arepo/dev_log/dev_log_3D_moving_mesh.md           (CURRENT shared 3D moving-mesh log)
+    arepo/dev_log/RD_DEVELOPMENT_LOG_3_localMac.md (other local work; earlier 3D preparation)
     arepo/dev_log/RD_DEVELOPMENT_LOG_2.md           (historical moving-mesh record)
     arepo/dev_log/RD_DEVELOPMENT_LOG_4_cosma.md     (COSMA setup and validation)
     arepo/dev_log/RD_DEVELOPMENT_LOG.md             (volume 1, closed 2026-08-05)
@@ -154,10 +161,19 @@ version controlled together with the code:
     arepo/dev_log/regularize_matrix_debug_report.md
     arepo/dev_log/RK2_timestep_movingmesh_analysis.md
 
-**Current logging convention, confirmed 2026-09-10:** append current work to
-`RD_DEVELOPMENT_LOG_3_localMac.md`; do not append new entries to volume 2.
-Start a new local session with `context_localMac.md` and the latest entries in
-volume 3. Read `RD_DEVELOPMENT_LOG_2.md` section 1 as needed for the historical
+**Current logging convention, confirmed 2026-10-11:** write development logs
+in English. Append all 3D moving-mesh preparation, implementation, reviews and
+tests to `dev_log_3D_moving_mesh.md`, whether on the Mac, Cuillin, COSMA or another
+host. Synchronize this version-controlled file through Git; merging concurrent
+entries must preserve both authors' records. Include the execution host,
+revision, evidence location and actual job/test status. The local archives
+referenced by an entry are not automatically shared with the Git checkout.
+
+Other local work continues in `RD_DEVELOPMENT_LOG_3_localMac.md`; volumes 1 and 2
+are historical. The former 2026-09-10 convention of putting all local work in
+volume 3 is superseded for the 3D moving-mesh topic. Start with the applicable
+host context and latest shared-log entries; follow earlier log 3 references
+when needed. Read `RD_DEVELOPMENT_LOG_2.md` section 1 as needed for the historical
 handover from volume 1. Volume 1 is 9000 lines and does not need to be read in full; it is
 the archive of the static-mesh phase and is still authoritative for anything
 section 1 points into. The companion documents above remain live references for

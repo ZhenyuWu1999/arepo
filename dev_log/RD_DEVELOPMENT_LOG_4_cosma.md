@@ -1,5 +1,10 @@
 # AREPO Residual Distribution Development Log, volume 4: COSMA
 
+**Navigation update, 2026-10-11:** subsequent 3D moving-mesh work on COSMA,
+Cuillin and other hosts belongs in the shared English-language
+[dev_log_3D_moving_mesh.md](dev_log_3D_moving_mesh.md). This volume retains its
+host setup and validation history with the original text and authorship.
+
 This log records COSMA environment work and validation begun while Cuillin
 connectivity is unreliable. It follows the local-Mac work in volume 3 without
 replacing the moving-mesh scientific history in volume 2.

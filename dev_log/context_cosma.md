@@ -1,13 +1,24 @@
 # AREPO-RD COSMA context
 
-Updated: 2026-09-27
+Updated: 2026-10-11 (shared-log navigation; environment evidence dates unchanged)
 
 This file records the COSMA environment for compiling and running the public
 AREPO residual-distribution branch. It supplements context.md (the original
 Cuillin workflow) and context_localMac.md (small native Apple-Silicon tests).
-The scientific history remains in the numbered development logs.
+Earlier scientific history remains in the numbered development logs.
 
-## Current handoff: return to local experiments, 2026-09-27
+## Shared 3D moving-mesh record, 2026-10-11
+
+Use [dev_log_3D_moving_mesh.md](dev_log_3D_moving_mesh.md) for all subsequent
+3D moving-mesh work, including any COSMA adaptation or tests. The same
+version-controlled log is used on the Mac, Cuillin and other hosts; this file
+continues to describe the COSMA environment. Zhenyu now plans further testing
+on Cuillin. Shared-log entry 1 records the local M1/M2 evidence and pending
+Linux campaign adaptation; no cluster build, submission or live environment
+inspection occurred while opening it. The historical handoffs and setup
+evidence below describe their writing dates.
+
+## Historical handoff: return to local experiments, 2026-09-27
 
 Zhenyu has requested that subsequent experiments run on the local Mac; COSMA
 is not needed for the next phase. The copied boosted-Yee comparison figures

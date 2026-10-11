@@ -1,5 +1,11 @@
 # AREPO Residual Distribution Development Log, volume 3: local Mac
 
+**Navigation update, 2026-10-11:** subsequent 3D moving-mesh work on every host
+belongs in the shared English-language
+[dev_log_3D_moving_mesh.md](dev_log_3D_moving_mesh.md). Earlier 3D preparation
+through §241 remains here with its original text and authorship. Other local
+development continues in this volume.
+
 This log records local Apple Silicon development and validation performed while
 access to the Cuillin cluster is unreliable. It complements
 `RD_DEVELOPMENT_LOG_2.md`; it does not replace or renumber the missing Cuillin

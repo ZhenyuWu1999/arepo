@@ -5,6 +5,15 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-11
 
+**Shared 3D moving-mesh log and Cuillin handoff (2026-10-11):**
+Use [dev_log_3D_moving_mesh.md](dev_log_3D_moving_mesh.md) for subsequent 3D
+moving-mesh work on the Mac and all clusters. Entry 1 consolidates the local
+M1/M2 results at `57e1ae3` and the pending Cuillin plan. Zhenyu intends to extend
+testing there; the Mac remains available for inexpensive checks. No Cuillin
+build, job submission or live host inspection was performed while opening
+the shared log. Linux provenance/campaign adaptation and one-rank parity
+tests remain pending. The checkpoints below retain the earlier local evidence.
+
 **Native moving-FV geometry diagnostic (2026-10-11, log3 §241):**
 M2 is implemented under the explicit diagnostic-only `RD_3D_GEOMETRY_DIAGNOSTICS`
 flag. Ten short 16³ cases at CFL .1/.3 yield 134 steps and 8274 connected change
@@ -33,9 +42,10 @@ and 1026 five-component transfer cases, including 4-4 and larger cavities.
 Full frozen check_rd passes; archive `../local_runs/rd_3d_moving_math_20261011_v3/`.
 K splitting does not commute with time averaging; mean-vector alpha is not a
 stepwise CFL maximum; exact nodal affine RK2 preservation is not proved by
-frozen-state geometry. Next boundary: standalone simplex registry and native
-FV geometry-only diagnostic (M2), before a moving-RD adapter. No native moving
-3D, inversion-policy choice or cluster campaign has been implemented here.
+frozen-state geometry. The next boundary at this M1 checkpoint was standalone
+simplex registry/native FV geometry diagnostics; M2 was subsequently completed
+locally, as recorded above and in the shared log. Native moving 3D RD, an
+inversion-policy choice and a cluster geometry campaign remain pending.
 
 **Reduced 3D benchmark record (2026-10-10, log3 §237):**
 Pinned SWIFT-family 16³ gamma5/3 Sod/Gresho N/LDA tests complete; N also agrees
@@ -1283,10 +1293,12 @@ This file records the local Apple Silicon development environment for small
 two-dimensional AREPO residual-distribution tests. It supplements `context.md`;
 the cluster development logs remain the scientific history of the project.
 
-**Logging convention, confirmed 2026-09-10:** all current work continues in
+**Historical logging convention, confirmed 2026-09-10:** all current work continues in
 `RD_DEVELOPMENT_LOG_3_localMac.md`. Keep volume 2 as the historical moving-mesh
 record; do not append new local findings there. For the current scientific
 status, read the latest volume-3 entries; the setup-era handoff below is historical.
+The 2026-10-11 convention at the top supersedes this destination for 3D
+moving-mesh work: use the shared English-language log on every host.
 
 **Current checkout/baseline (2026-09-13, log3 §36):** returned to
 `develop_pureC_RD`; selective static contour/Gauss port build source943f7ae.

@@ -15,9 +15,11 @@ precedence over project guidance here and in the linked documents.
    paths, tools and the current handoff. For COSMA work also read
    [COSMA context](dev_log/context_cosma.md); other cluster guidance is in the
    project context. Do not apply historical cluster paths/settings to the Mac.
-3. Read the latest relevant entries and reviewer corrections in
-   [development log 3](dev_log/RD_DEVELOPMENT_LOG_3_localMac.md), then follow
-   references into older logs or focused reports as needed. Do not read every
+3. For 3D moving-mesh work on **any host**, read the latest entries and reviewer
+   corrections in the [shared 3D moving-mesh log](dev_log/dev_log_3D_moving_mesh.md).
+   Earlier preparation remains in [log 3](dev_log/RD_DEVELOPMENT_LOG_3_localMac.md);
+   follow the shared log's references as needed. For other work, read the latest
+   relevant entries in log 3 and the applicable host log. Do not read every
    historical log in full by default.
 4. For static Chapter 4 work, consult the
    [baseline choices and limitations](dev_log/RD_STATIC_BASELINE_CHAPTER4.md)
@@ -31,12 +33,19 @@ not automatically turn a proposed algorithm into a validated result.
 
 ## Scope and scientific record
 
-- Append current work to **log 3**, preserving authorship and existing entries.
-  Logs 1 and 2 are historical; do not append current local work there. Put long
-  derivations/results in a focused Markdown report and link it from log 3.
-- Update the local context when the working environment, baseline or handoff
-  changes. Keep evolving conclusions, branch hashes and numerical tables in
-  the context/reports/log, rather than duplicating them in this file.
+- Write development logs in **English**. Append all 3D moving-mesh work,
+  including preparation, cluster adaptation, tests and reviews, to the shared
+  log above, whether performed on the Mac, Cuillin, COSMA or another host.
+  Identify the date, author/model, execution host, source revision, evidence
+  location and actual job/test status. Preserve existing entries and append
+  corrections; do not create separate host logs for this topic.
+- Other local work continues in **log 3**; logs 1 and 2 are historical. Put long
+  derivations/results in focused Markdown reports and link them from the
+  applicable log. Preserve the earlier host logs as source records.
+- Update the shared project context and relevant host context when the working
+  environment, baseline or handoff changes. Keep evolving conclusions, branch
+  hashes and numerical tables in the context/reports/log, rather than
+  duplicating them in this file.
 - Do not modify thesis files without an explicit thesis-edit request. Chapters
   1--3 require authorization for the specific chapters. Chapter 4 has an
   established structure; keep experimental connectivity changes and moving
