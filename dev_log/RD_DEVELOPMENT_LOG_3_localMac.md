@@ -9411,3 +9411,46 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   - 以"静止仿射密度场在变形网格上保持不变"为验证门槛，中点法向为反例对照。
 - **停止点：** M1、M3、M4 之后审核；M2 之后由用户决定倒置策略与 cavity 策略。
 - §11 列出五个用户决定：二维 campaign 与 3D 的先后、二维算术、倒置策略、cavity 策略、M5/M6 顺序。
+
+## 240. 2026-10-11：moving 3D 的数学准备与独立 oracle；rescaling 暂不作为前置条件
+
+**作者：Codex；用户看过 Claude 评论，要求开始 moving mesh 3D 准备，并认为 rescaling 不一定需要。本轮完成第一个数学节点，production solver 保持不变。**
+
+- 审核 §238--239：认可 cold-gas scaling 原型的精度改善，但它不负责 GCL、
+  flip 守恒或 positivity；缩放后 Sedov 的 N/LDA 仍负压。按用户倾向先保留
+  unscaled baseline，不更改 2D 求解算术，也不放宽审计。数值 SVD rank、LU
+  pivot ratio 与 F1 fallback 在非正交相似缩放下需要单独测试。
+- 新说明 `RD_3D_MOVING_GEOMETRY_MATHEMATICS_20261011.md` 证明：
+  线性轨迹的 face area vector 为二次、signed volume 为三次；endpoint
+  ledger 处理 delta V，元素 mesh-gradient term 采用精确 mean inward N/3。
+  结合 Campoli endpoint temporal mass (Vold+Vnew)/2，完整两 sweep 的总量
+  可写为 delta m U_mid 减 stage-averaged contour residual，shared faces
+  精确抵消。这一证明不要求 K+ 的时间积分等于 K+(mean N)。
+- 修正计划中的三点：full K 对 N 线性，K+/K- 和 N/LDA distribution 则一般
+  不线性；frozen-state 几何不能证明完整 RK2 的 nodal affine 精确保持；
+  mean-normal alpha 会低估步内最大 wave coefficient。给出 quadratic
+  Bernstein face-vector controls 的保守上界，后续仍需结合 mass/state CFL。
+- 新 `tests/rd/test_moving_tetrahedra.py` 纳入 check_rd：
+  - 300 moving tetra 的 gradient、mean-N、GCL、frozen mesh transport、
+    affine Reynolds、区间可加性、Galilean contour 等恒等式，最大归一化
+    缺陷 1.666e-15；检查 cubic 的全部 stationary points，不只 old/mid/new。
+  - 27 periodic nodes / 162 tets 的完整 Campoli ledger 模型（lumped 与
+    conservative F1 模型各有 uniform/nonuniform）：守恒<=1.322e-16，
+    uniform state 完全相同；midpoint-normal nonuniform control =3.114e-9。
+  - full K 的 averaging defect 7.772e-16，K+ 为3.922e-3；隐藏倒置例
+    old/mid/new 都正，但 s=.250239 的 minV=-8.371e-4。
+  - 171 cavities：2-3/3-2/4-4 各50，加20组 SciPy Delaunay pairs 的21个
+    cavities，最多20 vertices。1026 五分量 transfer cases，守恒<=6.083e-16，
+    748 个 limiting；包括1e8 energy contrast与三动量 counter-streaming。
+    mode1 donor逐位不变，uniform/affine theta1，变化<=1.777e-16。
+- 档案 `../local_runs/rd_3d_moving_math_20261011_v3/`：冻结 source、patch、
+  source hashes、JSON、oracle/check_rd日志；全套 frozen make check_rd 通过。
+  v1保留 manufactured control 变形太小、未达到既定.001幅度gate的失败，
+  v2保留独立模型遗漏corrector起始Q*的失败。增大明确反例的变形、修正模型
+  起始ledger后v3通过；没有改生产代码或降低gate。这些不属于native RD失败。
+- 核对本地 published Campoli chapter 的(5)--(8)，保留相关页文本与PNG；
+  新三维恒等式由本轮推导/oracle验证，不拿文献二维公式代替原生实现证据。
+- 只修改测试入口、独立模型和文档；src逐文件保持HEAD相同，因此本轮未重跑
+  原生2D或3D hydro，也不宣称machine-error native moving 3D。报告在v3测试
+  source冻结之后写入。下一节点是独立 simplex registry + 原生FV几何诊断
+  M2，先统计真实cavity/pullback/interval inversion再定策略。大算力留集群。

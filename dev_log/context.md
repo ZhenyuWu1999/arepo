@@ -65,6 +65,17 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**2026-10-11 addition:** moving 3D preparation has an independent geometry and
+Campoli-ledger proof/oracle, documented in
+`RD_3D_MOVING_GEOMETRY_MATHEMATICS_20261011.md` (log3 §240). Production remains
+unscaled per the user's preference not to make rescaling a prerequisite.
+The complete fixed-connectivity periodic model conserves to round-off with
+exact mean face vectors; midpoint normals fail the nonuniform control.
+Five-component transfer models now include 4-4/larger cavities. Native moving
+3D is still unsupported; next is diagnostic-only simplex registry/FV geometry.
+Claude's cold-Sedov root-cause/prototype evidence is in log3 §238; it does not
+make the current unscaled cold-Sedov benchmark or strong-shock positivity pass.
+
 **2026-10-10 addition:** native **static 3D N/LDA** now supports periodic
 gas-only full meshes, equal steps or the experimental frozen-dU hierarchy,
 with small double-precision 1/2/4-rank MPI gates. Fifty final 8³/16³ gates

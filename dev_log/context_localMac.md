@@ -3,14 +3,33 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-10-10
+Updated: 2026-10-11
+
+**Moving 3D mathematics preparation (2026-10-11, log3 §240):**
+User prefers not to make cold-gas similarity scaling a prerequisite. Production
+Euler/linear solves remain unscaled; 2D arithmetic and lazy-OFF baseline stay
+as currently committed. See `RD_3D_MOVING_GEOMETRY_MATHEMATICS_20261011.md`:
+endpoint ledger + exact mean inward face vectors + Campoli endpoint temporal
+mass conserve the complete two-sweep update on fixed periodic connectivity.
+Independent 27-node/162-tetra model gives <=1.322e-16 conservation; midpoint
+normal control gives 3.114e-9 for a nonuniform state. New check_rd oracle tests
+300 moving tetrahedra, hidden interval inversion, Galilean contour transport,
+and 1026 five-component transfer cases, including 4-4 and larger cavities.
+Full frozen check_rd passes; archive `../local_runs/rd_3d_moving_math_20261011_v3/`.
+K splitting does not commute with time averaging; mean-vector alpha is not a
+stepwise CFL maximum; exact nodal affine RK2 preservation is not proved by
+frozen-state geometry. Next boundary: standalone simplex registry and native
+FV geometry-only diagnostic (M2), before a moving-RD adapter. No native moving
+3D, inversion-policy choice or cluster campaign has been implemented here.
 
 **Reduced 3D benchmark record (2026-10-10, log3 §237):**
 Pinned SWIFT-family 16³ gamma5/3 Sod/Gresho N/LDA tests complete; N also agrees
 on 1/2 ranks. Eight of eleven attempts complete. Cold Sedov does not pass:
 three attempts stop at raw solve-compatibility defects ~1e-33 against product
 scales ~1e-21 in the first two steps; preceding stages remain positive.
-Root cause/rank spectra are not isolated. No floor or audit relaxation added.
+Claude's later review (log3 §238) isolates badly scaled cold compatible systems;
+an independent scaled prototype removes the audit stop but then N/LDA fail by
+negative pressure. No production scaling, floor or audit relaxation added.
 See `RD_3D_FEATURES_AND_BENCHMARKS_20261010.md` and
 `../local_runs/rd_3d_extension_20261010_v1/swift_v2/analysis_v2/`.
 Final check_rd passes. Large native tests stay on COSMA/Cuillin; current Mac
