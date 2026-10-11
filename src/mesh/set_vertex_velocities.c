@@ -343,6 +343,9 @@ void set_vertex_velocities(void)
    * correction introduced by the second loop. */
   rd_ale_geometry_velocity_begin();
 #endif
+#ifdef RD_3D_GEOMETRY_DIAGNOSTICS
+  rd_3d_geometry_velocity_begin();
+#endif
 
   for(idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
     {
@@ -495,6 +498,9 @@ void set_vertex_velocities(void)
 
 #ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
   rd_ale_geometry_velocity_end();
+#endif
+#ifdef RD_3D_GEOMETRY_DIAGNOSTICS
+  rd_3d_geometry_velocity_end();
 #endif
 
 #ifdef OUTPUT_VERTEX_VELOCITY_DIVERGENCE

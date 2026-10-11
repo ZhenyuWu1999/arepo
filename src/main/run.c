@@ -117,6 +117,9 @@ void run(void)
 #ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
       rd_ale_geometry_after_mesh(&Mesh);
 #endif
+#ifdef RD_3D_GEOMETRY_DIAGNOSTICS
+      rd_3d_geometry_after_mesh(&Mesh);
+#endif
 
 #ifdef RD_OUTPUT_DIAGNOSTICS
       char triangulation_name[1024];
@@ -346,6 +349,9 @@ void run(void)
 
 #ifdef RD_ALE_GEOMETRY_DIAGNOSTICS
       rd_ale_geometry_after_mesh(&Mesh);
+#endif
+#ifdef RD_3D_GEOMETRY_DIAGNOSTICS
+      rd_3d_geometry_after_mesh(&Mesh);
 #endif
 
 #ifdef RD_OUTPUT_DIAGNOSTICS

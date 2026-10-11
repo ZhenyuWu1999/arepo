@@ -328,6 +328,11 @@ ifeq (RD_ALE_GEOMETRY_DIAGNOSTICS,$(findstring RD_ALE_GEOMETRY_DIAGNOSTICS,$(CON
 OBJS    += mesh/rd_ale_geometry_diagnostics.o
 endif
 
+ifeq (RD_3D_GEOMETRY_DIAGNOSTICS,$(findstring RD_3D_GEOMETRY_DIAGNOSTICS,$(CONFIGVARS)))
+OBJS    += mesh/rd_3d_geometry_diagnostics.o mesh/rd_simplex_registry.o
+INCL    += mesh/rd_simplex_registry.h
+endif
+
 ifneq (,$(filter RESIDUAL_DISTRIBUTION RD_ALE_GEOMETRY_DIAGNOSTICS,$(CONFIGVARS)))
 OBJS    += mesh/rd_ale_geometry.o
 INCL    += mesh/rd_ale_geometry.h
@@ -499,6 +504,7 @@ check_rd:
 	@$(PYTHON) tests/rd/test_euler_dimensions.py
 	@$(PYTHON) tests/rd/test_simplex_kernels.py
 	@$(PYTHON) tests/rd/test_moving_tetrahedra.py
+	@$(PYTHON) tests/rd/test_simplex_registry.py
 	@$(PYTHON) tests/rd/test_lda_f1_rank_deficiency.py
 	@$(PYTHON) tests/rd/test_lda_common_beta.py
 	@$(PYTHON) tests/rd/test_n_frame_covariance.py

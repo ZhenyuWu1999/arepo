@@ -65,6 +65,22 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**Native moving-FV geometry diagnostic (2026-10-11, log3 §241):**
+M2 is implemented under the explicit diagnostic-only `RD_3D_GEOMETRY_DIAGNOSTICS`
+flag. Ten short 16³ cases at CFL .1/.3 yield 134 steps and 8274 connected change
+cavities. New-tet pullback inversion occurs 20 times, including 4 at CFL .1 in
+initially uniform random gas. Largest cavity: 1599/4096 vertices; five winding
+cavities have no coherent Euclidean unfolding. Five new-element Campoli temporal
+volumes are nonpositive while every nodal temporal mass is positive. Signed-chain
+volume/moment checks and independent periodic Delaunay/graph audits pass.
+Three native FV ON/OFF controls and full 256-step 2D LDA/B replays are byte-identical;
+frozen check_rd passes. Report `RD_3D_MOVING_GEOMETRY_DIAGNOSTIC_20261011.md`, archive
+`../local_runs/rd_3d_geometry_20261011_v4/`. Earlier v1/v2 build and v3 deleted-slot
+coverage failures are retained. No native moving-RD adapter or inversion/winding
+transfer policy exists yet; next is controlled fixed-connectivity M3. Production
+Euler stays unscaled, 2D arithmetic stays unchanged, large campaigns stay on clusters.
+
+
 **2026-10-11 addition:** moving 3D preparation has an independent geometry and
 Campoli-ledger proof/oracle, documented in
 `RD_3D_MOVING_GEOMETRY_MATHEMATICS_20261011.md` (log3 §240). Production remains

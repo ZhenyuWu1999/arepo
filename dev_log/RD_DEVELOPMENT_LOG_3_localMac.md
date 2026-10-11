@@ -9454,3 +9454,42 @@ binary/mesh 哈希、复现脚本和代数结果。context 与旧测试规范顶
   原生2D或3D hydro，也不宣称machine-error native moving 3D。报告在v3测试
   source冻结之后写入。下一节点是独立 simplex registry + 原生FV几何诊断
   M2，先统计真实cavity/pullback/interval inversion再定策略。大算力留集群。
+
+## 241. 2026-10-11：原生 3D moving FV 的只读几何诊断（M2）
+
+**作者：Codex（GPT-6）；用户要求继续准备3D moving mesh，诊断网格几何变化。**
+
+报告：[RD_3D_MOVING_GEOMETRY_DIAGNOSTIC_20261011.md](RD_3D_MOVING_GEOMETRY_DIAGNOSTIC_20261011.md)。
+最终档案：`../local_runs/rd_3d_geometry_20261011_v4/`。
+
+- 在入口已有未跟踪的registry草稿上修正、补齐；原草稿/哈希保存在
+  `rd_3d_geometry_entry_20261011/`。新 `RD_3D_GEOMETRY_DIAGNOSTICS` 只读原生
+  单rank、periodic full mesh、equal adaptive step 的标准moving FV，
+  不写P/SphP、速度、bins、timestep或连接，没有moving-RD update。
+- 完整键含四ID及相对周期image；opening保存实际drift速度并按ID对齐。
+  cubic体积检查全部导数实根；同键orientation反转也计入有向chain diff。
+  周期integer-potential图识别winding腔体，这类腔体不伪作欧氏一阶矩检查。
+- 十个16³短程诊断（随机静止、平流、Gresho、KH-like shear、短Sedov，
+  CFL.1/.3）134步、8274腔体。新回拉倒置20次、旧区间倒置23次，同键
+  反转3次；随机CFL.1仍倒置4次，最大腔体110vertices；.3最大1599vertices
+  （39.038%），且有2个winding腔体。剪切.3倒置1次、3个winding腔体。
+- 5个新元素的Campoli endpoint temporal volume非正，但全部节点的
+  temporal mass为正；不能仅用节点positivity通过来接受元素时间几何。
+  本轮无uncertain或native hidden-inversion事件；独立hidden反例仍通过。
+- exact mean face vector相对midpoint的最大修正.00377676；独立Gauss swept
+  GCL最大缺陷5.971e-17，midpoint最大1.436e-5。box coverage≤1.044e-14；
+  signed cavity volume≤2.825e-15，非winding一阶矩≤2.903e-15。
+  q=V/(ΣA)^1.5 的regular值是.05170027，纠正计划中的.0068引用。
+- 14个最终native attempts全部完成（10诊断+probe+3 OFF）。随机/Gresho/
+  Sedov .3的ON/OFF全部快照9个particle fields逐字节相同；二维LDA/B Yee48
+  完整256步至t1与§233五张参照快照11个fields逐字节相同。
+- full frozen check_rd通过。新增C测试800区间、35 cavity模型；原生全部
+  43条invalid chain events经NumPy独立重核。随机/平流首步两端的完整
+  periodic keys与27-image SciPy Delaunay完全相同；4例独立图遍历通过。
+- v1 header guard、v2 Nodes符号冲突的编译失败保留。v3完成FV但诊断误计
+  deleted tetra保留槽，coverage gate失败，结果不用于物理解读；v4按
+  t[0]筛选并增加opening coverage gate，没有放宽阈值。原始失败均有档案。
+- 达到M2诊断边界；没有选择倒置/winding cavity策略。下一步宜先做受控
+  固定连接的M3，在实际重连transfer前确定元素区间准入与周期腔体策略。
+  保持unscaled baseline；无默认Config、production solves、thesis、standalone
+  或cluster修改，无push。大规模稳定性/收敛/效率实验仍留集群。
