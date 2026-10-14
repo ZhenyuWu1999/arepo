@@ -5,6 +5,16 @@ this file holds local paths, toolchains and the evolving handoff.
 
 Updated: 2026-10-14
 
+**CFL reference audit (2026-10-14):**
+[Shared log entry 3](dev_log_3D_moving_mesh.md#3-2026-10-14-cfl-reference-audit-and-correction-to-the-diagnosis)
+narrows the earlier diagnosis: M2's public FV timestep is not an RD bound,
+and its tree distance differs from the literal 2010 paper. Smaller published
+signal/static-RD reference steps give no first-step old/new inversions in
+frozen-velocity SciPy periodic mesh reconstructions. First velocity selection
+also differs from the assigned drift velocity. Archive:
+`../local_runs/rd_3d_cfl_reference_20261014_v1/`. No native fluid run or build;
+full moving-RD timestep and interval geometry remain pending.
+
 **Nonpositive 3D volume cause audit (2026-10-14):**
 See [shared log entry 2](dev_log_3D_moving_mesh.md#2-2026-10-14-cause-of-nonpositive-3d-volumes)
 and the [cause report](RD_3D_NONPOSITIVE_VOLUME_CAUSE_20261014.md). A 60-digit

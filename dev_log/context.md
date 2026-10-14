@@ -71,6 +71,16 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**CFL interpretation corrected (2026-10-14):**
+Read [shared log entry 3](dev_log_3D_moving_mesh.md#3-2026-10-14-cfl-reference-audit-and-correction-to-the-diagnosis)
+before extrapolating M2 failures to RD. M2 uses public FV CFL, with an `r_ij+R_i`
+tree travel distance, not the literal paper (130) or RD spectral condition.
+Strict published-signal and current static-RD first-state reference bounds give
+smaller steps; frozen-velocity periodic mesh oracles have zero old/new inversions
+at those steps. The loop's first mesh-velocity reassignment also matters.
+These are offline first-state comparisons, not validated moving-RD evolutions.
+Voronoi FV and Delaunay-based RD retain distinct geometry/transfer requirements.
+
 **Nonpositive-volume cause audit (2026-10-14):**
 [Shared log entry 2](dev_log_3D_moving_mesh.md#2-2026-10-14-cause-of-nonpositive-3d-volumes)
 and the [cause report](RD_3D_NONPOSITIVE_VOLUME_CAUSE_20261014.md) distinguish

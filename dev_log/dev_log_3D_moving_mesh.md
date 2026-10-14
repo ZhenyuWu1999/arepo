@@ -28,6 +28,7 @@ or renumbered here. Host setup files continue to describe their own environments
 |---|---|---|---|
 | 1 | 2026-10-11 | Current implementation, validated geometry evidence and Cuillin handoff | Local Mac; cluster work planned |
 | 2 | 2026-10-14 | Cause of nonpositive interval volumes; high-precision audit and regularization controls | Local Mac |
+| 3 | 2026-10-14 | AREPO paper/code CFL comparison and scope correction for the geometry diagnosis | Local Mac; offline kinematics |
 
 ## 1. 2026-10-11: current state and handoff to Cuillin
 
@@ -321,3 +322,98 @@ acceptance/transfer policy for newly connected tetrahedra whose pullbacks cross
 zero. No absolute-volume replacement, mass clipping, velocity/timestep change
 or assertion relaxation has been introduced. M3 and Cuillin campaign adaptation
 remain pending.
+
+## 3. 2026-10-14: CFL reference audit and correction to the diagnosis
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host / starting revision:** local Mac / `a93fb87`.
+- **Request:** check the AREPO paper's CFL condition and distinguish the
+  Voronoi FV and Delaunay-based RD geometry requirements.
+- **Status:** publication/source review and six first-step kinematic mesh
+  comparisons completed. No new native fluid run, build or cluster job.
+- **Evidence:** `../local_runs/rd_3d_cfl_reference_20261014_v1/`;
+  [reproducer](../tests/rd/audit_3d_cfl_reference.py).
+
+**Correction to entry 2's interpretation:** M2 uses standard FV timestep
+selection, not RD's own spectral condition. Its invalid-volume records prove
+hazards on those FV trajectories; they do **not** prove that a moving-RD
+scheme obeying its own stability/geometry bounds would reproduce those events.
+The actual geometric sign changes and regularization-control results in entry 2
+remain valid. More suitable first-step limits remove the observed first-step
+inversions in a frozen-velocity oracle.
+
+### Paper versus public-code timestep
+
+[Springel (2010), §§7.1--7.2](https://arxiv.org/html/0901.4107#S7) gives the
+local moving-frame condition (126),
+`dt_i = C_CFL R_i / (c_i + |u_i-w_i|)`, and the signal-travel extension
+(128)--(130), `dt_i = C_CFL min(local_i, min_j r_ij/vsig_ij)`.
+The paper distinguishes the global minimum in (127) from individual-step
+selection. The stricter signal extension here is a comparison, not a claim
+that equation (126) is an invalid global FV prescription.
+
+The public source used by M2 has `TREE_BASED_TIMESTEPS`. It initializes the
+local moving-frame bound, then uses **`r_ij + R_i`** in the pair travel time,
+with matching radius terms in the tree-opening checks. That radius addition
+is intentional in the source comment to avoid very short steps for nearby
+generators; it is not the literal distance in paper (130). It must be identified
+before describing a run as a test of the strict published signal condition.
+See [tree code](../src/time_integration/timestep_treebased.c) and
+[timestep selection](../src/time_integration/timestep.c).
+
+Also, the first saved `VertexVelocity` is zero, whereas the final first-drift
+mesh RMS is `.4620527`. The loop selects a step, then calls
+`set_vertex_velocities()` again, enabling regularization once the time bin is
+nonzero. Evaluating local (126) with the final drift velocity gives raw minimum
+`.00912258`, versus the snapshot-based `.01368387`. At CFL=.1 the original
+first h=`.0009765625` is slightly above the final-velocity local limit
+`.000912258`; at .3 the original h satisfies the final-velocity local limit.
+This ordering matters for an audit; it does not explain every interval failure.
+
+### First-state comparison, actual power-of-two steps
+
+For the original 4096-point random IC, the strict signal minimum is
+`.000955549053` (pair IDs 723/3694). Existing static tetra RD assembles
+`m_i=sum_T V_T/4` and `alpha_i=sum_T max_j[A_Tj*c/3]` for uniform gas at rest;
+its raw minimum `m_i/alpha_i` is `.00143439074`.
+
+| First-state bound | CFL | Allowed dt before quantization | Selected power-of-two h | Old/new interval inversions in the frozen-velocity mesh oracle |
+|---|---:|---:|---:|---:|
+| Public FV tree, snapshot velocity | .3 | `.00308160` | `.001953125` | 7 / 5 |
+| Local paper (126), final drift velocity | .1 | `.000912258` | `.00048828125` | 2 / 0 |
+| Strict paper (129)--(130) | .3 | `.000286665` | `.000244140625` | 0 / 0 |
+| Strict paper (129)--(130) | .1 | `.0000955549` | `.00006103515625` | 0 / 0 |
+| Current static-RD spectral bound | .3 | `.000430317` | `.000244140625` | 0 / 0 |
+| Current static-RD spectral bound | .1 | `.000143439` | `.0001220703125` | 0 / 0 |
+
+These are **first-state kinematic comparisons**, with original drift velocities
+held fixed and periodic closing meshes rebuilt independently by SciPy. The
+original h reproduces the native first-pair tetra counts and 7/5 invalid counts;
+all six tested h have signed box coverage defects <=`2.221e-16` and no uncertain
+intervals. They are not native evolutions with alternative CFL rules, and the
+static-RD calculation is not an implemented or validated moving-RD bound.
+Full time-dependent RD geometry, Campoli masses and spectral envelopes still
+require separate analysis. Original M2 flags do not compile `RD_3D_STATIC`,
+`RD_ALE_CFL_TIMESTEP` or `RESIDUAL_DISTRIBUTION`.
+
+### Why FV and this RD formulation still differ
+
+[Springel (2010), §2.3](https://arxiv.org/html/0901.4107#S2.SS3) describes
+Delaunay topology changes while the dual Voronoi geometry changes continuously,
+with a changing neighbour relation's face reaching zero area.
+From this and our implementation, the relevant distinction is:
+
+- FV evolves conserved content in persistent generator-associated **Voronoi
+  cells**, using face fluxes. It does not require a particular old/new Delaunay
+  tetrahedron to remain a positive fluid element throughout the full step.
+- Our RD residuals and median-dual masses use **Delaunay simplices**. Carrying
+  their basis across time adds interval-element and reconnection-transfer
+  requirements. This concerns this formulation, not every possible RD method;
+  other moving-simplex discretizations can share the same issue.
+
+The correct next step is therefore to use an RD-consistent fluid bound and the
+actual assigned mesh velocity, then measure remaining geometry failures with
+the proposed transfer policy. Do not infer either that all previous failures
+are unavoidable RD geometry problems, or that strict FV CFL guarantees positive
+transported tetrahedra in general. Source and numerical solver behavior remain
+unchanged by this review.

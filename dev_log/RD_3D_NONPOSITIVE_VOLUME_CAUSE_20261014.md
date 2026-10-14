@@ -6,6 +6,16 @@ Execution host: local Apple Silicon Mac. Branch:
 Native evidence uses the frozen diagnostic implementation at `57e1ae3`.
 This investigation changes analysis and documentation only.
 
+**Subsequent CFL clarification, 2026-10-14:**
+[Shared log entry 3](dev_log_3D_moving_mesh.md#3-2026-10-14-cfl-reference-audit-and-correction-to-the-diagnosis)
+compares the native public FV condition, Springel (2010) and the existing static
+RD spectral bound. M2 did not use an RD CFL. The public tree adds `R_i` to the
+pair separation, unlike paper equation (130); the first velocity assignment
+also changes after timestep selection. A frozen-velocity first-step oracle
+has no old/new inversions at the smaller paper/RD reference steps. The events
+below are valid measurements of M2, but they do not establish unavoidable
+inversions under a correctly constrained moving-RD update.
+
 ## Finding
 
 The observed negative volumes are **orientation changes of a fixed tetrahedral
