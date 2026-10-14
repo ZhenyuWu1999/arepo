@@ -27,6 +27,7 @@ or renumbered here. Host setup files continue to describe their own environments
 | Entry | Date | Subject | Execution host |
 |---|---|---|---|
 | 1 | 2026-10-11 | Current implementation, validated geometry evidence and Cuillin handoff | Local Mac; cluster work planned |
+| 2 | 2026-10-14 | Cause of nonpositive interval volumes; high-precision audit and regularization controls | Local Mac |
 
 ## 1. 2026-10-11: current state and handoff to Cuillin
 
@@ -251,3 +252,72 @@ not a record of completed cluster validation:
 No thesis, standalone solver, production scaling or cluster job state is changed
 by opening this log. Future 3D moving-mesh entries, whether measurements, code
 changes or reviews, belong here; earlier reports remain linked source evidence.
+
+## 2. 2026-10-14: cause of nonpositive 3D volumes
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host:** local Apple Silicon Mac; one rank, OMP/BLAS threads=1.
+- **Branch / analysis starting revision:** `feature/ale-flip-conservation-hierarchy` / `cb504ac`.
+- **Native source:** frozen `57e1ae3` diagnostic artifact; reused without rebuilding.
+- **Request:** investigate the cause before advancing the moving 3D solver.
+- **Status:** offline audit and three small native controls completed. No cluster
+  job submitted or production solver modification made.
+
+Full results: [cause report](RD_3D_NONPOSITIVE_VOLUME_CAUSE_20261014.md).
+Reproduction: [diagnostic audit script](../tests/rd/diagnose_3d_nonpositive_volumes.py).
+
+The failures are real orientation crossings of thin tetrahedral vertex tuples
+under finite linear drift, seen when old connectivity is carried forward or
+new connectivity is pulled back. The diagnostic field `old_endpoint_negative`
+means the **old** tetra at the **closing** time; it does not mean a negative
+opening native tetrahedron. These measurements do not establish negative
+native Voronoi cell volumes.
+
+All 43 side-specific invalid records pass an independent 60-digit determinant
+audit and have one sign-changing root within their step. Their negative minima
+are at least `6.11679e8` times the diagnostic error estimate. Three old/new
+orientation-reversal pairs make 40 distinct case/step/ID-tuple combinations;
+these are not counts of individual flips. All 17 invalid records in the saved
+first full pairs belong to changed or orientation-reversed connectivity.
+There is no hidden-between-probes inversion in this native pilot, while the
+manufactured hidden-inversion oracle remains relevant.
+
+The earliest random-case old tetra has minimum altitude `5.67933e-5`, versus
+Voronoi radii `.0329531`--`.0476321`. It crosses zero at `t=.000320812720`:
+before either actual first step (`.0009765625` at CFL=.1, `.001953125` at .3)
+ends. The source CFL/regularization criteria use Voronoi geometry/signal scales,
+not this tetrahedron's altitude or cubic zero time.
+
+| Fresh random-gas control, end t=.015625 | Steps | Old/new invalid records |
+|---|---:|---:|
+| CellShapingSpeed=.5, CFL=.3 | 8 | 16 / 15 |
+| CellShapingSpeed=0, CFL=.3 | 8 | 0 / 0 |
+| CellShapingSpeed=0, CFL=.1 | 16 | 0 / 0 |
+
+The .5/.3 replay is byte-identical to the original in all nine particle datasets
+and three snapshots. The .3 OFF control has the same actual timestep sequence;
+the .1 OFF control has a different later adaptive schedule. Both OFF controls
+have no reconnection over this short run, though their evolved mesh velocities
+are small rather than exactly zero. This isolates regularization as the dominant
+driver for this random-gas pilot. The shear event at CFL=.3, step 8, has zero
+regularization correction and still crosses orientation; removing regularization
+is therefore not a validated general remedy.
+
+For the worst new tetra, `V_old/V_new=-6.23813080`, so its Campoli endpoint mean
+is `-2.90095125e-8`. The five nonpositive new-element temporal volumes follow
+from negative pullbacks; they are not Euler-scaling or Campoli arithmetic
+failures. Positive nodal masses and signed coverage can mask negative element
+contributions through summation/cancellation. Native moving RD is still absent.
+
+Evidence is local: native controls in
+`../local_runs/rd_3d_nonpositive_audit_20261014_v1/`; final offline audit in
+`../local_runs/rd_3d_nonpositive_audit_20261014_v3/`, including snapshot-volume
+and first-velocity checks. Earlier offline versions remain archived; the three
+native controls were not repeated. Original M2 data remain untouched.
+The report includes a version-controlled PNG/PDF of representative volume roots.
+
+Next design boundary: distinguish old-connectivity geometry limits from the
+acceptance/transfer policy for newly connected tetrahedra whose pullbacks cross
+zero. No absolute-volume replacement, mass clipping, velocity/timestep change
+or assertion relaxation has been introduced. M3 and Cuillin campaign adaptation
+remain pending.

@@ -71,6 +71,20 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**Nonpositive-volume cause audit (2026-10-14):**
+[Shared log entry 2](dev_log_3D_moving_mesh.md#2-2026-10-14-cause-of-nonpositive-3d-volumes)
+and the [cause report](RD_3D_NONPOSITIVE_VOLUME_CAUSE_20261014.md) distinguish
+native endpoint geometry from old-forward/new-pullback signed volumes.
+All 43 invalid records survive a 60-digit determinant audit. Thin tetrahedra
+cross orientation under finite relative motion; the current Voronoi CFL does
+not enforce interval tetra positivity. Three small local native controls reuse
+the frozen `57e1ae3` binary: random CFL=.3 reproduces 16/15 old/new inversions
+with regularization and gives 0/0 without it, at the same eight timesteps.
+A shear event with zero correction shows this is not solely a regularization
+issue. Five negative new-element Campoli means follow from negative pullbacks.
+No production geometry/velocity/timestep/scaling change or cluster run was made;
+M3 and the inversion/transfer policy remain pending.
+
 **Current 3D moving-mesh handoff (2026-10-11):**
 Read [shared log entry 1](dev_log_3D_moving_mesh.md#1-2026-10-11-current-state-and-handoff-to-cuillin)
 for the status and evidence at implementation checkpoint `57e1ae3`.

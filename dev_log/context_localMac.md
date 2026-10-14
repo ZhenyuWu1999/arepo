@@ -3,7 +3,21 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-10-11
+Updated: 2026-10-14
+
+**Nonpositive 3D volume cause audit (2026-10-14):**
+See [shared log entry 2](dev_log_3D_moving_mesh.md#2-2026-10-14-cause-of-nonpositive-3d-volumes)
+and the [cause report](RD_3D_NONPOSITIVE_VOLUME_CAUSE_20261014.md). A 60-digit
+audit confirms all 43 old-forward/new-pullback sign failures. Thin tetrahedra
+cross coplanarity under finite drift; native endpoint geometry and element
+interval positivity must be distinguished. Three short 16³ local controls
+reuse the frozen `57e1ae3` FV diagnostic binary. Random CFL=.3 gives 16/15
+old/new inversions with regularization and 0/0 without it at identical actual
+timesteps; the ON replay is byte-identical to the original. One shear event
+occurs with zero correction, so the geometric policy remains a separate design
+requirement. Archives: `../local_runs/rd_3d_nonpositive_audit_20261014_v1/` (native)
+and `../local_runs/rd_3d_nonpositive_audit_20261014_v3/` (offline).
+No solver or cluster state changed; no build was needed.
 
 **Shared 3D moving-mesh log and Cuillin handoff (2026-10-11):**
 Use [dev_log_3D_moving_mesh.md](dev_log_3D_moving_mesh.md) for subsequent 3D
