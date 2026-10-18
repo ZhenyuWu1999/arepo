@@ -8,6 +8,16 @@ the 2026-10-11 implementation state, geometry evidence and pending Cuillin
 handoff. Earlier preparation remains in log 3; host contexts describe their
 own environments, while subsequent 3D moving-mesh work is recorded together.
 
+**Branch organization (2026-10-18):** ongoing 3D work uses
+`feature/3d-moving-mesh`. `develop_pureC_RD` integrates the previous feature
+history through source checkpoint `44479a1` and the shared handoff documentation.
+`feature/ale-flip-conservation-hierarchy` is retained at that source checkpoint.
+See [shared log entry 4](dev_log_3D_moving_mesh.md#4-2026-10-18-development-checkpoint-and-dedicated-3d-branch).
+This integration preserves the existing numerical limitations; it does not
+establish native moving-3D support. All three branches are the authorized
+GitHub publication targets. Check the actual checkout and remote refs before
+continuing on another host.
+
 This directory (/home/zwu/arepo_rd) contains the public version of the state-of-art astrophysics code AREPO. We aim to implement a new hydrodynamics solver based on the Residual Distribution (RD) method to test how it can improve the performance of the existing solver.
 
 ## useful links:

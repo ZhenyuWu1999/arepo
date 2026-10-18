@@ -29,6 +29,7 @@ or renumbered here. Host setup files continue to describe their own environments
 | 1 | 2026-10-11 | Current implementation, validated geometry evidence and Cuillin handoff | Local Mac; cluster work planned |
 | 2 | 2026-10-14 | Cause of nonpositive interval volumes; high-precision audit and regularization controls | Local Mac |
 | 3 | 2026-10-14 | AREPO paper/code CFL comparison and scope correction for the geometry diagnosis | Local Mac; offline kinematics |
+| 4 | 2026-10-18 | Integrate the development checkpoint and start the dedicated 3D moving-mesh branch | Local Mac; Git operations |
 
 ## 1. 2026-10-11: current state and handoff to Cuillin
 
@@ -417,3 +418,40 @@ the proposed transfer policy. Do not infer either that all previous failures
 are unavoidable RD geometry problems, or that strict FV CFL guarantees positive
 transported tetrahedra in general. Source and numerical solver behavior remain
 unchanged by this review.
+
+## 4. 2026-10-18: development checkpoint and dedicated 3D branch
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host:** local Apple Silicon Mac.
+- **Source checkpoint:** `44479a1` (CFL review at the end of entry 3).
+- **Authorization:** Zhenyu approved the branch reorganization and GitHub push.
+- **Status:** local fast-forward integration and branch creation completed;
+  this entry and the context updates are the documentation-only handoff.
+
+The worktree was clean. `develop_pureC_RD` at `eacc3f9` was an ancestor of
+`feature/ale-flip-conservation-hierarchy` at `44479a1`, with 58 intervening
+commits and no develop-only commits. The refreshed remote develop checkpoint
+was `94cd37a`, another three commits behind the local develop branch.
+
+The approved organization is:
+
+| Branch | Role |
+|---|---|
+| `develop_pureC_RD` | Integrated development line, fast-forwarded to the source checkpoint plus this shared handoff documentation |
+| `feature/3d-moving-mesh` | Current branch for subsequent 3D moving-mesh preparation and implementation, starting from the same integrated checkpoint |
+| `feature/ale-flip-conservation-hierarchy` | Retained at `44479a1` as the previous development checkpoint |
+
+The original commits and hashes are retained; integration uses fast-forward
+operations. No rebase, squash or history rewrite is involved. Publication
+targets all three named branches on `origin`
+(`https://github.com/ZhenyuWu1999/arepo.git`); the push outcome and remote heads
+are verified after committing the handoff. Future work continues in this same
+English log on every host.
+
+This is a development checkpoint, not a new numerical validation result.
+The deferred 2D arithmetic-compatibility issue, unvalidated cold Sedov and
+pending native moving-3D adapter/geometry policy remain as documented above.
+There is no solver, Config or test-result change and no new build or simulation.
+Local run archives remain outside Git. Publishing the source does not transfer
+those archives or update a Cuillin/COSMA checkout; host adaptation and actual
+cluster tests remain pending.

@@ -3,7 +3,16 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-10-14
+Updated: 2026-10-18
+
+**Branch handoff (2026-10-18):** the current local branch is
+`feature/3d-moving-mesh`. Zhenyu approved fast-forward integration of the
+previous feature history into `develop_pureC_RD` and publication to GitHub.
+The old `feature/ale-flip-conservation-hierarchy` stays at `44479a1`; develop
+and the new branch include that source checkpoint and this handoff documentation.
+See [shared log entry 4](dev_log_3D_moving_mesh.md#4-2026-10-18-development-checkpoint-and-dedicated-3d-branch).
+The following dated records retain their original branch/evidence context.
+No numerical code, Config, build or run changes accompany this reorganization.
 
 **CFL reference audit (2026-10-14):**
 [Shared log entry 3](dev_log_3D_moving_mesh.md#3-2026-10-14-cfl-reference-audit-and-correction-to-the-diagnosis)
