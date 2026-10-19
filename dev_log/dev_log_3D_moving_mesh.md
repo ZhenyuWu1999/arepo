@@ -30,6 +30,7 @@ or renumbered here. Host setup files continue to describe their own environments
 | 2 | 2026-10-14 | Cause of nonpositive interval volumes; high-precision audit and regularization controls | Local Mac |
 | 3 | 2026-10-14 | AREPO paper/code CFL comparison and scope correction for the geometry diagnosis | Local Mac; offline kinematics |
 | 4 | 2026-10-18 | Integrate the development checkpoint and start the dedicated 3D moving-mesh branch | Local Mac; Git operations |
+| 5 | 2026-10-18 | Claude review of entries 1–4; face-connected change regions on archived first steps | Local Mac; offline analysis |
 
 ## 1. 2026-10-11: current state and handoff to Cuillin
 
@@ -455,3 +456,124 @@ There is no solver, Config or test-result change and no new build or simulation.
 Local run archives remain outside Git. Publishing the source does not transfer
 those archives or update a Cuillin/COSMA checkout; host adaptation and actual
 cluster tests remain pending.
+
+## 5. 2026-10-18: Claude review of entries 1–4 and face-connected cavities
+
+- **Author:** Claude Code (Opus 5.5), with Zhenyu Wu.
+- **Execution host:** local Apple Silicon Mac; one process, OMP/BLAS threads=1.
+- **Branch / revision reviewed:** `feature/3d-moving-mesh` / `3d72127`.
+- **Request:** review Codex's 3D moving-mesh progress through entry 4.
+- **Status:** source/report review and an offline analysis of the archived M2
+  first mesh pairs. No build, native run, solver/test/Config change or cluster job.
+- **Evidence:** `../local_runs/claude_3d_review3_20261018_v1/` (script, results,
+  input/script hashes, README).
+
+### 5.1 Checked without finding an error
+
+- **Entry 4 Git facts.** `eacc3f9..44479a1` has 58 commits; `94cd37a` is three
+  commits behind `eacc3f9`. `origin/feature/3d-moving-mesh` and
+  `origin/develop_pureC_RD` are at `3d72127`; `origin/feature/ale-flip-conservation-hierarchy`
+  is at `44479a1`. This records the push outcome that entry 4 left pending.
+- **M1 identities, re-derived by hand:** the Simpson mean area vector;
+  `M_T-V(1/2)=a2/4+3a3/8` and `M_T-∫V=a2/6+a3/4`; `dV/dt=(1/3)ΣN_i·w_i`;
+  transport identity (1); the Galilean map; the Bernstein bound on the CFL
+  coefficient; mode-1 transfer conservation.
+- **Registry kernel** ([rd_simplex_registry.c](../src/mesh/rd_simplex_registry.c)):
+  cubic coefficients, stationary-point roots, midpoint GCL defect `c3/4`,
+  mean-normal correction `δu×δv/24`, and the Gauss swept-face sign convention.
+- **CFL audit (entry 3).** Its static-RD bound uses the element-maximum face
+  area, as the solver does ([rd_timestep.c](../src/hydro/rd_timestep.c), lines 79–94).
+- **Tests.** `test_moving_tetrahedra.py` and `test_simplex_registry.py` pass at
+  `3d72127` and reproduce the reported values (1026 transfer cases, 748 limited,
+  conservation 6.083e-16; interval error 4.469e-15; cavity defect 2.578e-16).
+  The rest of `make check_rd` was not rerun.
+
+### 5.2 Finding: the reported cavity size comes from the merge rule
+
+The registry joins all four vertices of each changed tetrahedron
+(`rd_registry_compare`), so two changed regions touching at one vertex become
+one cavity. An alternative joins changed old/new tetrahedra only when they share
+a periodic triangle key. For the changed signed chain C = new − old, ∂C = 0 because
+both endpoint meshes tile the box and unchanged simplices cancel. A boundary
+face of one face-connected component cannot appear in another component, or the
+two would have been joined. Each component therefore has zero boundary, and
+identity (4) holds component by component.
+
+Results on the archived first pairs, `v4`; vertex-rule numbers equal the native
+`geometry_cavities.csv` first-step count and maximum in every run:
+
+| Run (first step) | Vertex rule: cavities / largest | Face rule: regions / largest / p99 |
+|---|---:|---:|
+| random, CFL .1 | 136 / 110 | 332 / 10 / 7.0 |
+| random, CFL .3 | 57 / 1599 | 543 / 13 / 10.0 |
+| Gresho, CFL .1 | 56 / 36 | 81 / 10 / 8.4 |
+| Gresho, CFL .3 | 66 / 99 | 159 / 10 / 9.4 |
+| shear, CFL .1 | 55 / 26 | 92 / 8 / 8.0 |
+| shear, CFL .3 | 42 / 488 | 278 / 20 / 15.5 |
+
+Advection and Sedov have no first-step reconnection. Every face-connected region
+unfolds consistently by minimum image (largest distance from its reference
+vertex .232) and closes to round-off. Signed volume closes to ≤2.844e-15 relative
+to Σ|V| and first moment to ≤2.756e-15 relative to Σ|V|×box, at both time levels.
+
+- **Consequence for the M2 conclusion:** the 39.038% percolating cavity is a
+  property of the merge rule, not of the reconnection. Three of the five native
+  winding cavities are in step 1 (random 1599; shear 480, 488), where no
+  face-connected region winds. The plan's percolation trigger for §11.4 should
+  be re-evaluated with face-connected regions.
+- **Consequence for transfer design:** a vertex can belong to up to five regions
+  (random CFL .3; 643 of 2221 changed vertices are shared). Each region's δm at
+  such a vertex must be accounted separately. Either partition the star mass `g_i`
+  or apply the regions sequentially, and restate the `g_i+δm_i>0` condition
+  accordingly.
+- **Limits:** only first steps were archived. The two step-2 winding cavities
+  (random 1499, shear 469) and all later steps need a native rerun with a
+  face-connected registry.
+
+### 5.3 Finding: inversion evidence at RD-sized steps is one frozen step
+
+Entry 3 correctly limits M2's inversions to FV timesteps. Its RD-sized evidence
+is one first step with frozen velocities. With `REGULARIZE_MESH_CM_DRIFT_USE_SOUNDSPEED`,
+the regularization speed is `CellShapingSpeed×c` whatever the step
+([set_vertex_velocities.c](../src/mesh/set_vertex_velocities.c)). That makes the
+frozen-velocity oracle fair for the first step. It also means that relative
+vertex speeds do not shrink with h. Delaunay sliver heights have no lower bound in
+3D, so a CFL factor can reduce but not exclude interval inversions. The earliest
+crossing in entry 2 (`t=.000320812720`) is only 1.31 times the RD-sized
+`h=.000244140625`.
+
+A multi-step measurement is cheap. Rerun the random and shear diagnostics at 16³
+with the step capped at `2^-12` (`MaxSizeTimestep`) to their original end times.
+M3 needs an explicit invalid-interval policy (abort with diagnostic) in any case.
+
+### 5.4 Finding: the random-point IC dominates the hazards
+
+Random points give 19 of the 20 new-pullback records and all 23 old-interval
+records; entry 2's regularization-off control removes them. Among the
+jittered-lattice cases only shear CFL .3 has one record. In random CFL .3, the
+vertex-rule cavity maximum falls from 1599/1499 (steps 1–2) to 75–226
+(steps 3–8). Report this start-up relaxation separately from later behaviour.
+A relaxed or glass IC would represent production meshes better.
+
+### 5.5 Documentation corrections and open items
+
+- [M1 note](RD_3D_MOVING_GEOMETRY_MATHEMATICS_20261011.md) §6 still gives
+  `q≈.0068` for a regular tetrahedron. Under its own definition the value is
+  `.05170027`, as entry 1 and the M2 report state. The note is left unchanged here.
+- The canonical [M2 report](RD_3D_MOVING_GEOMETRY_DIAGNOSTIC_20261011.md) is in
+  Chinese. It predates the English-log rule, but readers of this log need an
+  English summary or translation.
+- Plan M0.2 is partial: only the Yee48 LDA/B replay is byte-identical. M0.3
+  (2D gates B1.3/B1.4/B1.7) has no record, and user decision §11.1 is still open.
+
+### 5.6 Status and recommended order
+
+M1, M2 and the cause/CFL audits are complete within their stated scopes. M3–M6
+and the Cuillin adaptation have not started; no technical change followed entry 3.
+
+1. Start M3. Gates M3.1–M3.4 use fixed connectivity and need only the abort
+   policy, not the transfer or inversion decisions.
+2. In parallel, add face-connected regions to the registry, keeping the vertex
+   rule as a reported comparison, and rerun M2. Also run the step-capped
+   diagnostic of §5.3.
+3. Take decisions §11.3 (inversion) and §11.4 (cavity) on that evidence before M4.
