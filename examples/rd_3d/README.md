@@ -76,3 +76,18 @@ sequences, long-time stability and MPI scaling belong on COSMA/Cuillin with
 the corresponding project environment instructions. The current archive/build
 helpers target macOS (including `otool`); adapt their linkage/provenance step
 and use the cluster's configured SYSTYPE before Linux campaign builds.
+
+## Blob and the next cluster checks
+
+[Blob preparation](../../dev_log/RD_3D_BLOB_PREPARATION_20261018.md) documents
+the physical setup, paper N1/current N-RK2 difference, and the short static
+N/hierarchy/MPI results. `tests/rd/run_3d_blob_pilot.py` provides `prepare`,
+`build`, `run` and `analyse` actions with isolated archives. It is a workflow
+driver, not a completed full-duration Blob validation. Its generated configs
+use gamma5/3, while the generic example configs above use gamma1.4.
+
+For full 32³+ runs, follow [shared-log entry 11](../../dev_log/dev_log_3D_moving_mesh.md#11-2026-10-19-cluster-recommendation-and-cosma-handoff)
+and [COSMA context](../../dev_log/context_cosma.md). Recheck resources, use
+native compute-node builds and calibrate a short case before requesting the
+full wall time. The campaign build helper's macOS linkage step needs Linux
+adaptation. Git does not include the local binary, IC or snapshot archives.

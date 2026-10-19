@@ -249,7 +249,10 @@ value indistinguishable from zero under determinant/coefficient round-off.
 The present Python root logic is not a certified near-zero geometry predicate.
 For this milestone it is tested on random well-separated positive volumes and
 explicit lower-degree/repeated-root/hidden-inversion cases. Record
-`q=V/(sum_i |N_i|)^(3/2)` at each geometry time; a regular tetra has q≈.0068.
+`q=V/(sum_i |N_i|)^(3/2)` at each geometry time; a regular tetra has
+`q=sqrt(2)/(12*3^(3/4))≈.05170027`.
+Correction (Codex, 2026-10-18, following Claude's review): the earlier `.0068`
+value was incorrect under this definition; the identities and tests are unchanged.
 Scaling the Euler solve does not improve this geometric quality.
 
 ## 7. Cavities at a common time and five-component transfer

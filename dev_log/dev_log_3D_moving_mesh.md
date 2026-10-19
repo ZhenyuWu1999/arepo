@@ -31,6 +31,12 @@ or renumbered here. Host setup files continue to describe their own environments
 | 3 | 2026-10-14 | AREPO paper/code CFL comparison and scope correction for the geometry diagnosis | Local Mac; offline kinematics |
 | 4 | 2026-10-18 | Integrate the development checkpoint and start the dedicated 3D moving-mesh branch | Local Mac; Git operations |
 | 5 | 2026-10-18 | Claude review of entries 1–4; face-connected change regions on archived first steps | Local Mac; offline analysis |
+| 6 | 2026-10-18 | Progress review; independent face audit and multi-step controls capped at 2^-12 | Local Mac; offline and short native runs |
+| 7 | 2026-10-18 | Low-resolution static 3D Gresho N/LDA physical check before moving development | Local Mac; native runs completed |
+| 8 | 2026-10-18 | Static 3D Sedov failures separated into cold-solve and raw-pressure limits; user prioritizes the moving/hierarchy/MPI pipeline | Local Mac; four failed native attempts archived |
+| 9 | 2026-10-18 | Morton Blob preparation and short static N/hierarchy/MPI checks | Local Mac; three short runs completed; 32³ IC only |
+| 10 | 2026-10-19 | Local Blob runtime estimate from measured 16³ short checks | Local Mac; arithmetic extrapolation, no new run |
+| 11 | 2026-10-19 | Recommend cluster campaigns and prepare a COSMA source handoff | Local Mac; documentation/publication, no cluster job |
 
 ## 1. 2026-10-11: current state and handoff to Cuillin
 
@@ -577,3 +583,399 @@ and the Cuillin adaptation have not started; no technical change followed entry 
    rule as a reported comparison, and rerun M2. Also run the step-capped
    diagnostic of §5.3.
 3. Take decisions §11.3 (inversion) and §11.4 (cavity) on that evidence before M4.
+
+## 6. 2026-10-18: progress review, independent face audit and capped native controls
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host:** local Apple Silicon Mac; one rank, OMP/BLAS threads = 1.
+- **Branch / HEAD:** `feature/3d-moving-mesh` / `3d72127`.
+- **Native binary:** frozen `57e1ae3` diagnostic, reused without rebuilding.
+- **Status:** source/review audit, two algebra tests, independent first-pair
+  face analysis and two short native FV controls completed. No production
+  solver/Config, thesis or cluster change; no M3 implementation.
+- **Evidence:** `../local_runs/codex_3d_progress_review_20261018_v1/`.
+- **Report:** [English progress review](RD_3D_MOVING_PROGRESS_REVIEW_20261018.md).
+
+Claude's entry 5 was already uncommitted at entry to this task. It is retained
+verbatim, with the entry tree diff and log hash archived before this addition.
+The report also summarizes Claude's October 10 integration/extension reviews:
+their 2D long-trajectory compatibility finding is accepted and user-deferred;
+cold-system scaling and subsequent negative pressure remain separate limits.
+
+### 6.1 Face-region result independently confirmed, transfer still coupled
+
+The new [read-only audit](../tests/rd/audit_3d_face_components.py) uses a
+face-incidence BFS, exact integer oriented-boundary cancellation and integer
+periodic-image potentials. All 11 archived first pairs pass. Region counts,
+maxima and shared-node multiplicities agree with Claude. Random CFL .3 has
+543 face regions, maximum 13 vertices, instead of 57 vertex groups with maximum
+1599. Maximum normalized volume/moment closure defects are `1.108e-15` and
+`1.063e-15`; every face boundary cancels exactly and no face region winds.
+
+The geometric correction is accepted: the 1599 size does not establish one
+intrinsically large reconnection. However, random CFL .3 still has 643 shared
+vertices, membership up to five; 338 vertices donate in one region and receive
+in another. Joining face regions through shared nodes recovers exactly the
+original vertex groups, including 1599. A five-component transfer needs a
+partitioned or sequential mass/state ledger; signed-chain identities alone
+do not establish its positivity. Later-step face/winding statistics remain
+unmeasured, and the C diagnostic still uses vertex-connected groups.
+
+### 6.2 The multi-step small-ceiling control still has random inversions
+
+Following entry 5.3, two standard moving-FV 16³ CFL .3 runs reuse the frozen
+diagnostic binary and original ICs, with only `MaxSizeTimestep=2^-12` changed
+apart from isolated input/output paths. Both completed at that actual timestep:
+
+| Run | End time | Steps | Old-forward invalid | New-pullback invalid |
+|---|---:|---:|---:|---:|
+| Random | .015625 | 64 | 2 | 1 |
+| Shear | .03125 | 128 | 0 | 0 |
+
+Random events occur in steps 35, 38 and 63. Direct 60-digit Decimal determinants
+confirm all three, with magnitudes `4.24e8`–`3.35e9` times the uncertainty
+estimate. All saved FV snapshot volumes and nodal temporal masses stay positive.
+The invalid counts are reduced from the original random run's 16/15 at eight
+larger steps, but they are not eliminated over the same end time.
+
+This strengthens the limitation on entry 3: a safe first frozen step is not a
+full-trajectory interval-positivity guarantee. The control uses a fixed ceiling
+and FV timestep selection; it does not implement or disprove a dynamically
+updated moving-RD spectral bound. Actual-velocity geometric checks and an
+explicit invalid-interval policy remain necessary parts of the M3 design.
+
+### 6.3 Status and next gates
+
+Both `test_moving_tetrahedra.py` and `test_simplex_registry.py` pass and reproduce
+Claude's values: transfer conservation `6.083e-16`, registry interval error
+`4.469e-15`, cavity defect `2.578e-16`. Full `make check_rd` was not rerun.
+
+M1/M2 are complete within their scopes. Native moving RD, native five-component
+transfer, moving LDA/HLLC, moving hierarchy/MPI and Cuillin adaptation are still
+pending. Source guards still require static 3D RD; the native transfer header
+still has four-component arrays. Model tests do not change those boundaries.
+
+The next solver milestone is controlled fixed-connectivity M3 with explicit
+topology/invalid-interval rejection. Carry forward M1's correction to the
+original plan's M3.4: exact nodal affine RK2 preservation is not proved;
+analytic affine Reynolds checks and native accuracy diagnostics are distinct.
+The latest requested 2D baseline matrix remains incomplete, although older
+equal-/mixed-bin and no-transfer evidence exists. The M1 note's incorrect
+regular-tetra `q≈.0068` is corrected to `.05170027`; the M2 report gains an
+English interpretation update. Context files point to these corrections.
+
+## 7. 2026-10-18: low-resolution static 3D Gresho physical check
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host:** local Apple Silicon Mac; two concurrent singleton runs,
+  each with `OMP_NUM_THREADS=1` and `OPENBLAS_NUM_THREADS=1`.
+- **Source:** `feature/3d-moving-mesh`, HEAD `3d72127`, frozen source archive
+  including the recorded working files. Production `src/` has no working diff.
+- **Request:** run a small actual static 3D problem, such as Gresho, before
+  continuing moving-mesh development.
+- **Status:** separate N and LDA builds and native runs completed with exit 0;
+  analysis checks passed, PNG visually inspected, PDF exported. No solver,
+  default Config or thesis change; no cluster job.
+- **Evidence:** `../local_runs/rd_3d_static_gresho_20261018_v1/` contains the
+  frozen source, configs, generated headers, binaries/linkage, compiler,
+  hashes, parameters, IC, logs, five snapshots per run, analysis and driver.
+
+### Setup and interpretation
+
+This extends the earlier `t=.1` Gresho check to `t=.25` using the existing
+repository IC: 4096 generators (`16³`), deterministic jittered lattice
+(seed 928, ±.12 cell spacing per axis), periodic unit cube, gamma `5/3`,
+rho=1, no bulk boost. The cylindrical vortex is independent of z and has
+`v_phi=5r` for `r<.2`, `2-5r` for `.2<=r<.4`, and zero outside. It is evolved
+with all five Euler components on the static 3D tetrahedral mesh; it is not
+a test of arbitrary three-dimensional flow. The endpoint is about .20 of
+one inner-core revolution.
+
+N/lumped and LDA/F1 use `RD_RK2_TOTAL_RESIDUAL`, full meshes, equal adaptive
+steps, `CourantFac=.1`, cap `1/2048`, unscaled production solves and existing
+raw-state assertions. Both selected **2048 steps of `h=2^-13`**. Every snapshot
+has unchanged coordinates and unit median-dual coverage; the reported tetra
+count stays 28419. Each run saves t=0, .0625, .125, .1875 and .25.
+
+### Results at t=.25
+
+| Quantity | N | LDA/F1 |
+|---|---:|---:|
+| Volume-weighted full-vector velocity L1 | .0856480 | .0235345 |
+| Volume-weighted pressure L1 | .0455891 | .0101242 |
+| Volume-weighted density L1 | .00323056 | .00108099 |
+| Kinetic energy / initial kinetic energy | .566279 | .975442 |
+| Maximum normalized five-component conservation defect over saved states | 2.887e-15 | 1.998e-15 |
+| Minimum density across reported stages | .992844 | .994448 |
+| Minimum pressure across reported stages | 5.01560 | 5.00818 |
+| Final maximum absolute z velocity (analytic value zero) | .030553 | .028665 |
+| Wall time, seconds (concurrent runs; not a performance comparison) | 262.7 | 319.9 |
+
+L1 weights are measured median-dual volumes `Masses/Density`, normalized by
+their sum, and the reference is the stationary analytic state at each point.
+Conservation covers mass, three momenta and total energy. Its component scale
+is the initial sum of absolute conserved content, with at least total mass
+for momentum components. All saved states and all reported stage minima have
+positive density/pressure; no native numerical assertion fired. No positivity
+theorem is inferred from this run.
+
+LDA has about 3.64 times smaller velocity error and retains substantially more
+vortex kinetic energy. N visibly broadens and damps the vortex; total energy
+remains conserved as kinetic energy converts to internal energy. The nonzero
+z velocity is a measured discretization error on the irregular 3D mesh and
+must be retained in accuracy assessments. This is one low-resolution physical
+check, not a convergence study or moving-mesh validation. No full algebra
+suite was repeated because the numerical source was unchanged.
+
+![Static 3D Gresho: initial, N and LDA slices, radial profile and error histories](figures/rd_3d_gresho_static_20261018/gresho_static_3d.png)
+
+[PDF figure](figures/rd_3d_gresho_static_20261018/gresho_static_3d.pdf).
+The xy panels linearly interpolate one nominal z plane (256 points); radial
+profiles use all 4096 generators with volume-weighted bins. This figure does
+not increase the simulation's spatial resolution. Native moving-3D M3/M4 and
+Cuillin adaptation remain pending.
+
+## 8. 2026-10-18: Sedov failure diagnosis and development priority
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host:** local Apple Silicon Mac; one rank, OMP/BLAS threads = 1.
+- **Source / binaries:** `feature/3d-moving-mesh`, HEAD `3d72127`; reused the
+  frozen N/LDA gamma5/3 builds of entry 7, with their source archive, headers,
+  Config, linkage and hashes copied to the new evidence directory. Production
+  source remains unchanged.
+- **Status:** four native attempts executed and all failed diagnostically.
+  The driver exits 2 for each failed two-case group; these are completed
+  experiments, not passed Sedov simulations. No final blast profile exists.
+- **Evidence:** `../local_runs/rd_3d_static_sedov_20261018_v1/`, including ICs,
+  injection/verification metadata, parameters, stdout, return codes, native
+  artifacts/source provenance, results and the archived driver.
+
+### 8.1 Standard cold Sedov reproduces the solve-audit stop
+
+Use the same 16³ jittered periodic unit cube as the prior benchmark and entry
+7, gamma5/3, rho=1, velocity zero, ambient pressure `1e-6`, requested `t=.03`,
+CFL .1 and cap `1/2048`. The nearest 15 vertices have constant specific
+internal energy `279.16675756973734`. Their measured median-dual volume is
+`.0035820883858286557`, giving hot-region energy exactly 1 to round-off.
+Injection replaces their background energy; total initial energy is
+`1.0000014946268676`. The IC file is identical to the archived October 10 IC.
+
+| Method | Completed correctors | Last completed endpoint | Stop |
+|---|---:|---:|---|
+| N | 1 | 5.859375e-5 | Step 2, stage 0, tetra 47980, info=-3 |
+| LDA | 0 | 0 | Step 1, stage 1, tetra 15669, info=-3 |
+
+The tetra indices, stages, solve/conservation defects and product scales are
+exactly equal to the October 10 native failures. N's solve defect is
+`1.7196067948736992e-33` at scale `1.8192238353626902e-21`; LDA's is
+`8.2850358085990926e-34` at scale `7.9781739900903924e-22`. In `rd_euler.c`,
+info=-3 is the componentwise solve/conservation audit, not an invalid-state
+return. All preceding reported stages have positive rho and pressure.
+[Claude's earlier analysis](RD_3D_EXTENSION_CLAUDE_REVIEW_20261010.md#4-cold-sedov-root-cause-and-a-tested-remedy)
+identifies poor scaling in these cold compatible systems; this replay confirms
+the same native stop without changing scaling or tolerance.
+
+### 8.2 A separately labelled ambient-pressure control exposes negative pressure
+
+The additional control changes only the unheated ambient internal energy to
+`p0/(gamma-1)` with `p0=1e-3`. Coordinates, density, zero velocity, heated IDs,
+hot specific energy, algorithm, CFL and timestep cap are unchanged. The hot
+energy remains 1 and total initial energy is `1.0014946268674`. This warmer
+control is a different initial-value problem, not a repaired cold-Sedov pass.
+
+| Method | Completed correctors | Last completed endpoint | First rejected raw state |
+|---|---:|---:|---|
+| N | 51 | .001669921875 | Next predictor, stage 0: ID 1673, rho=.00479701, p=-4.29021 |
+| LDA | 0 | 0 | First corrector, stage 1: ID 1894, rho=1.19016, p=-.121931 |
+
+The failing N step's printed sync time is `.00169922`; the LDA sync time is
+`5.85937e-5`. Distinguish these from the last completed endpoints in the table.
+N first selects `h=5.859375e-5` and later `2.9296875e-5`. The N failure is
+at radius .09780, among the heated vertices; LDA fails at radius .19266.
+`rd_static_validate_stage` rejects both directly from conserved content,
+before primitive floors. The maximum normalized conservation defect across
+the successfully reported stages is `5.100e-15`; this says nothing about the
+admissibility of the subsequently rejected state. Only t=0 snapshots exist.
+
+The cold-solve audit and strong-shock positivity are therefore distinct
+observed limits. This test does not prove that HLLC is the only possible
+remedy, nor does the 2D HLLC result validate an unimplemented 3D port. No
+rescaling, tolerance relaxation, pressure floor or positivity repair was added.
+No AREPO rebuild or repeated algebra suite was needed for these unchanged
+binary runs.
+
+### 8.3 User decision: finish the 3D mesh and execution pipeline first
+
+After these tests, Zhenyu explicitly deferred 3D HLLC-RD and other shock
+remedies. The development priority is mesh handling for moving RD, together
+with hierarchical timesteps and MPI, so that the 3D workflow runs end to end.
+Do not make cold Sedov success, HLLC-RD or solve rescaling a prerequisite for
+that work. Keep the failed evidence as a known limitation.
+
+Proceed through controlled fixed-connectivity moving N, reconnection geometry
+and conservative five-component transfer, then moving hierarchical scheduling
+and distributed mesh/ledger exchange. Use warm uniform states, smooth
+advection and Gresho-style controls to check geometry, GCL, conservation,
+equal-bin degeneration, mixed-bin behavior and 1/2/4-rank agreement. Existing
+static hierarchy/MPI gates remain useful baselines but do not validate the
+moving paths. Moving LDA and strong-shock improvements can be scheduled around
+the pipeline work; the original plan's M6 HLLC stage does not block moving
+hierarchy/MPI under this user decision. Cuillin adaptation remains pending.
+
+## 9. 2026-10-18: Morton Blob preparation and short hierarchy/MPI checks
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host:** local Apple Silicon Mac; one or two MPI ranks,
+  `OMP_NUM_THREADS=OPENBLAS_NUM_THREADS=1`, cases run sequentially.
+- **Source / branch:** frozen `3d72127` plus recorded working files,
+  `feature/3d-moving-mesh`. No production numerical source change.
+- **Request:** identify useful 3D tests, especially Morton 2023's Blob test.
+- **Status:** primary-paper/local-predecessor review completed; a new
+  [driver](../tests/rd/run_3d_blob_pilot.py) and 16³/32³ ICs prepared. Three
+  shortened static N/RK2 runs completed and analysis passed. The 32³ IC has
+  not been evolved, and no cluster job or full Blob reproduction was run.
+- **Report:** [3D test choices and Blob preparation](RD_3D_BLOB_PREPARATION_20261018.md).
+- **Evidence:** `../local_runs/rd_3d_blob_20261018_v1/` and `..._v2/`.
+
+The [paper, section 5.3.1](https://arxiv.org/html/2204.01757v2#S5.SS3.SSS1)
+uses random vertices and N1, starting at 32³. Current AREPO 3D RD requires
+the N/RK2 path; predictor-only mode is guarded out. The prepared test is
+therefore a physical-setup adaptation and execution check, not a matched N1
+reproduction. The predecessor's BLOB block supplies a periodic side-10 cube,
+centre (2.5,5,5), radius 1, densities 100/10, uniform pressure 100, gamma5/3
+and wind 6.15. These also resolve an inconsistent background-density number
+in the paper's prose. Exact choices and source limitations are in the report.
+
+The 16³ random realization contains 14 cloud nodes; the prepared 32³ candidate
+has 140. Quantitative cloud disruption must not be inferred from the 16³
+workflow check. Use `t_cr=2 R sqrt(chi)/v_wind=1.0283829789`, retaining the
+factor two, and the paper's density/temperature cloud-mass selection for a
+later physical comparison.
+
+The initial v1 attempt targeted .1 t_cr at the predecessor's CFL .01. Its
+equal-step run was intentionally interrupted at approximately t=.01569 to
+keep local work bounded; the other two cases were not launched. It is an
+incomplete resource-interrupted attempt, not a numerical failure or success.
+v2 shortens the target to .01 t_cr with unchanged IC/CFL/algorithm; binary
+reuse is documented with source/Config hash comparison and the original
+`binary_source.tar`.
+
+All three v2 runs reach t=.010283829789165462:
+
+| Case | Conservation defect | Final min rho / p | Maximum bin ratio |
+|---|---:|---:|---:|
+| N equal steps, 1 rank | 6.061e-15 | 9.61214 / 93.7874 | 1 |
+| N natural hierarchy, 1 rank | 3.614e-15 | 9.61127 / 93.7784 | 4 |
+| N natural hierarchy, 2 ranks | 3.614e-15 | 9.61127 / 93.7784 | 4 |
+
+There are three saved snapshots per case and 512 stage-1 records; equal steps
+use h=2.0085605057e-5. All saved states are positive, coordinates unchanged,
+dual coverage correct, and raw-state assertions do not fire. Hierarchy 1/2-rank
+times agree exactly; maximum matched-ID field difference is 3.411e-15 with
+component scale `max(1,abs(reference))`. The measured initial cloud mass is
+450.43409; its threshold-selected final fraction is .99070635 in both
+hierarchy runs and .99070226 with equal steps. These are early diagnostics,
+not mixing/lifetime or temporal-accuracy results. Full algebra tests were not
+repeated because no solver changed.
+
+For this development phase, retain oblique smooth density advection as the
+analytic geometry/conservation/rank-crossing gate, add explicitly z-dependent
+smooth shear for three-dimensional dynamics, and use Blob as an integrated
+physical test. Full-duration 32³-and-up Blob comparisons belong on the cluster
+after confirming the method/IC matching choices. Moving Blob follows the
+controlled moving uniform/advection gates; HLLC-RD remains deferred.
+
+## 10. 2026-10-19: local Blob runtime budget
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Host:** local Apple Silicon Mac; source branch `feature/3d-moving-mesh`,
+  HEAD `3d72127`.
+- **Status:** timing-record inspection and arithmetic extrapolation only.
+  No build, native simulation, cluster job or numerical change.
+- **Evidence:** `../local_runs/rd_3d_blob_runtime_estimate_20261019_v1/estimate.json`,
+  including the hashed input results and explicit assumptions.
+
+The completed 16³ checks to .01 t_cr took 68.90 s for equal steps on one rank,
+30.85 s for natural hierarchy on one rank and 16.09 s for hierarchy on two
+ranks. At unchanged CFL .01, approximate cost as linear in physical duration
+and proportional to n^4: n^3 work per step and approximately n steps at fixed
+duration. This is a heuristic, not measured resolution scaling; random-mesh
+extrema, late-time waves and bin occupancy may alter it substantially.
+
+| Resolution | Hierarchy, 2 ranks: 1 t_cr | 1.5 t_cr | 5 t_cr |
+|---|---:|---:|---:|
+| 16³ | 27 min | 40 min | 2.2 h |
+| 32³ | 7.2 h | 10.7 h | 35.8 h |
+| 64³ | 4.8 days | 7.2 days | 23.8 days |
+
+For 32³ to 1.5 t_cr, the same extrapolation gives 20.6 h with single-rank
+hierarchy and 45.9 h with single-rank equal steps. These are conditional
+runtime budgets if the simulation remains numerically admissible, not a
+guarantee of completion or a validated MPI scaling curve. No 32³ or late-time
+timing measurement exists yet. A short 32³ calibration should precede a
+long-duration commitment. The 16³ cloud contains only 14 nodes and is useful
+for workflow checks; 32³ has 140 cloud nodes. Keep full-duration/resolution
+campaigns on the cluster under the existing resource policy.
+
+## 11. 2026-10-19: cluster recommendation and COSMA handoff
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Execution host:** local Mac.
+- **Source baseline:** `3d72127` on `feature/3d-moving-mesh`, plus the reviews,
+  diagnostic drivers, small native results and documentation in entries 5–10.
+- **User request:** add the cluster recommendation, commit and push the work
+  to GitHub. Zhenyu will log into COSMA to check whether resources are usable.
+- **Status:** source/documentation handoff; no COSMA connection, module or
+  allocation check, build, submission or simulation was performed here. The
+  recommendation is not a claim that COSMA is currently ready or a job queued.
+
+### Recommended allocation of work
+
+Keep the Mac for inexpensive algebra, IC inspection and short workflow checks.
+Run the full 32³-and-up Blob evolution, resolution comparisons, long stability
+tests and MPI scaling on a compute cluster. Entry 10's local estimates are
+extrapolations, not COSMA timing or allocation requests. First measure a short
+32³ case on the actual compute node; then choose rank count and wall time.
+
+COSMA is now the intended next host, subject to Zhenyu's resource check.
+The [COSMA context](context_cosma.md) records the historical compiler/module
+recipe and batch wrappers. Recheck the account, partition, limits, storage and
+modules rather than assuming the September setup remains available. Compile
+and run through Slurm on compute nodes. Keep large artifacts/snapshots out of
+the small home quota; use an available campaign location and unique directories.
+
+### Suggested COSMA sequence
+
+1. Fetch `feature/3d-moving-mesh`, inspect the COSMA Git status and preserve
+   any uncommitted host work before integrating. The new source is published
+   on this feature branch; the older develop checkpoint need not be silently
+   advanced. Consult the actual fetched commit rather than a historical hash.
+2. Rebuild natively using `SYSTYPE="COSMA"`, the checked module environment,
+   and the tracked `build_case_cosma.sbatch`/`run_case_cosma.sbatch` provenance
+   workflow. Never copy a Mac executable. Preserve Config, generated header,
+   source revision, compiler, linkage, binary hash and parameters per case.
+3. Adapt the Python campaign helpers before using their build action on Linux:
+   the current shared helper calls `otool -L`; COSMA needs Linux linkage
+   capture or its existing managed build wrapper. Generate ICs with available
+   NumPy/h5py and record their versions/hashes. Local `../local_runs/` archives
+   and the prepared 32³ IC are outside Git and are not transferred by a pull.
+4. Repeat the short static 3D N/LDA feature gates and the Blob workflow check.
+   Check equal-bin degeneration, actual mixed bins, five-component conservation,
+   positive states and 1/2/4-rank agreement where configured. Cross-host
+   comparisons use explicit tolerances, not bitwise equality between MKL and
+   OpenBLAS. Static hierarchy/MPI is available; moving 3D paths remain pending.
+5. Calibrate a short 32³ Blob run, then establish an equal-step static baseline
+   before separate hierarchy/MPI comparisons. Use the generated Blob configs
+   with gamma5/3; the generic `examples/rd_3d/` configs default to gamma1.4.
+   Retain CFL .01 for the documented setup unless a separate study changes it.
+   Choose an explicit Slurm wall time: the existing run wrapper's 20-minute
+   default is not a validated budget for a full Blob run.
+6. For the first physical comparison, target common output times such as .5,
+   1 and 1.5 t_cr, with three orthogonal slices and threshold cloud-mass curves.
+   Report the N/RK2 versus published N1 difference and actual cloud-node count;
+   a 32³ setup is not yet a matched paper reproduction. Full evolution and
+   breakup have not been tested by the .01 t_cr pilot.
+
+Append COSMA adaptation, job IDs, execution hosts, actual states and results
+to this same English log. Keep HLLC-RD/cold Sedov remedies deferred and continue
+the mesh/moving-RD, hierarchy and MPI development priority from entry 8.

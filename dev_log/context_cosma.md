@@ -1,11 +1,44 @@
 # AREPO-RD COSMA context
 
-Updated: 2026-10-11 (shared-log navigation; environment evidence dates unchanged)
+Updated: 2026-10-19 (3D source handoff; historical environment evidence unchanged)
 
 This file records the COSMA environment for compiling and running the public
 AREPO residual-distribution branch. It supplements context.md (the original
 Cuillin workflow) and context_localMac.md (small native Apple-Silicon tests).
 Earlier scientific history remains in the numbered development logs.
+
+## Current 3D handoff, 2026-10-19
+
+Zhenyu plans to log into COSMA and check resources for the next tests.
+[Shared-log entry 11](dev_log_3D_moving_mesh.md#11-2026-10-19-cluster-recommendation-and-cosma-handoff)
+contains the current recommendation and validation sequence. The source branch
+is `feature/3d-moving-mesh`; inspect the actual fetched revision and preserve
+any COSMA working changes before integrating. No live COSMA access, allocation,
+module check, build or job submission occurred during this local handoff.
+
+Static 3D N/LDA supports equal steps and the experimental frozen-dU hierarchy,
+with small 1/2/4-rank MPI gates. The latest 16³ Blob workflow check also passes
+with natural bin ratio 4 on 1/2 ranks. Native moving 3D RD is still pending;
+static results do not validate moving geometry, transfer or moving MPI.
+
+Full 32³+ Blob, long stability/resolution studies and MPI scaling should use
+cluster compute nodes. Recheck the historical settings below before submitting,
+rebuild natively under Slurm, and begin with short feature gates and a 32³ timing
+calibration. Use immutable artifacts and separate run/output directories, an
+available campaign storage location, and explicit wall time. The historical
+run wrapper defaults to 20 minutes and two ranks; override these deliberately.
+Never build/run AREPO on the login node or transfer the Mac executable.
+
+The new Blob driver uses the existing macOS campaign build helper, including
+`otool -L`; use/adapt the managed COSMA build wrapper and Linux linkage capture.
+Its generated Blob configs use gamma5/3, whereas generic 3D configs default to
+gamma1.4. Local `../local_runs/` archives and prepared ICs are not Git assets;
+regenerate or explicitly transfer inputs with provenance. The source pull alone
+does not deliver the already generated 32³ IC or local results.
+
+The older handoffs and environment/setup sections below retain their dates
+and do not establish current resource availability. All new 3D execution and
+results belong in the shared English log, not a separate COSMA 3D log.
 
 ## Shared 3D moving-mesh record, 2026-10-11
 
@@ -45,7 +78,7 @@ from the old setup tests below. Rebuild the new committed source with pinned
 modules; never transfer the Mac executable. The remaining sections describe the
 Sep2 environment validation and historical setup, not current campaign completion.
 
-## Scope and current status
+## Historical environment and setup status
 
 - COSMA is the current Linux cluster replacement while Cuillin connectivity is
   unreliable. The laptop remains useful for inexpensive local tests.
@@ -229,7 +262,7 @@ wrote initial/final HDF5 snapshots. At the endpoint:
 This passes the initial COSMA build, HDF5 I/O, positivity, conservation and MPI
 rank-invariance smoke gates.
 
-## Next gates
+## Historical setup gates
 
 1. Commit/review the COSMA support and rebuild the static N artifact with
    --require-clean.

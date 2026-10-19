@@ -81,6 +81,62 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**COSMA source handoff (2026-10-19):**
+Zhenyu will check COSMA access/resources. [Shared-log entry 11](dev_log_3D_moving_mesh.md#11-2026-10-19-cluster-recommendation-and-cosma-handoff)
+recommends cluster compute nodes for full 32³+ Blob, long stability/convergence
+and MPI scaling. Local work stays short. Fetch `feature/3d-moving-mesh`,
+preserve host changes, verify the historical COSMA environment, rebuild under
+Slurm and run short feature/Blob calibration gates before committing to a
+long job. See [COSMA context](context_cosma.md) for the batch/provenance recipe;
+the Mac campaign helpers' `otool` step needs Linux adaptation. No COSMA state
+or available allocation was checked in this local handoff. Local binary/IC
+archives are not included in a Git pull.
+
+**Blob preparation and execution check (2026-10-18):**
+[Entry 9](dev_log_3D_moving_mesh.md#9-2026-10-18-morton-blob-preparation-and-short-hierarchympi-checks)
+and the [test report](RD_3D_BLOB_PREPARATION_20261018.md) record a Morton-inspired
+static 16³ N/RK2 check to .01 cloud-crushing times. Equal steps and natural
+hierarchy on 1/2 ranks complete with positive states, conservation <6.062e-15,
+actual bin ratio 4 and rank field differences <3.411e-15. There are only 14
+cloud nodes. A 32³ IC with 140 cloud nodes is prepared but not evolved; a full
+N1 paper reproduction and moving Blob remain pending. Continue the simpler
+analytic advection/geometry gates for moving-path development.
+
+**User priority after Sedov (2026-10-18):**
+Complete the 3D mesh/moving-RD workflow, hierarchical timesteps and MPI before
+3D HLLC-RD or other strong-shock remedies. Cold Sedov success and solve
+rescaling are not prerequisites. Use warm uniform/smooth/Gresho controls for
+the pipeline gates; preserve the shock failures as limitations. Static
+hierarchy/MPI has small validated gates; moving hierarchy/MPI still needs its
+own implementation and checks. [Shared-log entry 8](dev_log_3D_moving_mesh.md#8-2026-10-18-sedov-failure-diagnosis-and-development-priority)
+records this decision and four failed 16³ Sedov attempts: cold N/LDA reproduce
+the solve-audit stop; a separately labelled p0=1e-3 control reaches raw negative
+pressure (N after 51 correctors, LDA in the first corrector). No 3D HLLC or
+production scaling change was made.
+
+**Low-resolution static 3D Gresho check (2026-10-18):**
+[Shared-log entry 7](dev_log_3D_moving_mesh.md#7-2026-10-18-low-resolution-static-3d-gresho-physical-check)
+records completed 16³ N/LDA runs to t=.25 on the static periodic tetrahedral
+mesh. Both use 2048 equal steps; velocity L1 is .085648/.0235345 and retained
+kinetic energy is 56.63%/97.54%, with conservation below 2.887e-15 and positive
+states. The IC is z-invariant; final spurious z speeds reach about .03. This
+is a low-resolution physical check, not convergence or moving-RD validation.
+
+**3D progress review and new controls (2026-10-18):**
+Read [shared-log entries 5–6](dev_log_3D_moving_mesh.md#5-2026-10-18-claude-review-of-entries-14-and-face-connected-cavities)
+and the [English review](RD_3D_MOVING_PROGRESS_REVIEW_20261018.md) before using
+the older cavity or CFL conclusions. Claude's face partition is independently
+confirmed: random CFL .3's first-step 1599-vertex group becomes 543 face regions,
+largest 13; shared nodes still couple transfers. First-pair face regions have
+zero integer boundary and no winding; later winding cases remain unmeasured.
+Two short native FV runs at a fixed `2^-12` timestep ceiling complete: random
+64 steps has 2/1 old/new invalid intervals, shear 128 steps has 0/0. This is not
+a dynamically recomputed moving-RD CFL test. M1/M2 are complete within their
+scopes, native moving 3D RD remains unimplemented, and Cuillin work is pending.
+Next is controlled fixed-connectivity M3 with fail-fast geometry/topology guards;
+the original exact-affine M3.4 requirement is superseded by M1's correction.
+Keep production unscaled and the user-deferred 2D compatibility issue recorded.
+
 **CFL interpretation corrected (2026-10-14):**
 Read [shared log entry 3](dev_log_3D_moving_mesh.md#3-2026-10-14-cfl-reference-audit-and-correction-to-the-diagnosis)
 before extrapolating M2 failures to RD. M2 uses public FV CFL, with an `r_ij+R_i`

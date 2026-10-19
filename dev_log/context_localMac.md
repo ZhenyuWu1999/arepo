@@ -3,7 +3,67 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-10-18
+Updated: 2026-10-19
+
+**Cluster recommendation and publication (2026-10-19):**
+Zhenyu authorizes committing/pushing the pending 3D review/test work and will
+log into COSMA to check resources. [Entry 11](dev_log_3D_moving_mesh.md#11-2026-10-19-cluster-recommendation-and-cosma-handoff)
+records the handoff: keep the Mac for short checks, put full 32³+ Blob and
+long stability/convergence/MPI scaling on compute nodes after short host
+calibration. Publish the current `feature/3d-moving-mesh`; retain Claude's
+review authorship separately. No COSMA login or job is part of this turn.
+
+**Blob workflow check (2026-10-18):**
+See [entry 9](dev_log_3D_moving_mesh.md#9-2026-10-18-morton-blob-preparation-and-short-hierarchympi-checks)
+and [report](RD_3D_BLOB_PREPARATION_20261018.md). Three 16³ static N/RK2 cases
+finish .01 t_cr: equal steps and natural hierarchy on 1/2 ranks, bin ratio 4,
+conservation <6.062e-15, maximum scaled MPI field difference 3.411e-15.
+Only 14 cloud nodes: no breakup/mixing claim. A 32³ candidate IC (140 cloud
+nodes) is ready but unrun. Archives `../local_runs/rd_3d_blob_20261018_v1/`
+(intentionally interrupted longer attempt) and `..._v2/` (completed short
+checks, source/Config-verified binary reuse). Driver
+`tests/rd/run_3d_blob_pilot.py`; larger/full-time work requires cluster build
+and scheduler adaptation. Paper N1 differs from current N/RK2. No solver,
+default Config, HLLC or cluster job change.
+
+**Priority and Sedov record (2026-10-18):**
+Zhenyu defers 3D HLLC-RD/strong-shock improvements and prioritizes the 3D
+mesh/moving-RD, hierarchy and MPI workflow. Cold Sedov/scaling do not block
+that work; validate warm uniform/smooth/Gresho cases first. [Entry 8](dev_log_3D_moving_mesh.md#8-2026-10-18-sedov-failure-diagnosis-and-development-priority)
+archives four failed 16³ one-rank Sedov runs reusing entry 7's binaries. At
+p0=1e-6 N/LDA exactly reproduce the earlier linear-solve audit stop. At p0=1e-3
+with unchanged hot energy, N completes 51 steps then has p=-4.29021; LDA's
+first corrector has p=-.121931. No completed Sedov profile or new solver build.
+Evidence: `../local_runs/rd_3d_static_sedov_20261018_v1/`. All production
+scaling, audits and primitive-floor settings are unchanged. Static MPI and
+hierarchy evidence does not establish moving-path support.
+
+**Static 3D Gresho pilot (2026-10-18):**
+[Shared-log entry 7](dev_log_3D_moving_mesh.md#7-2026-10-18-low-resolution-static-3d-gresho-physical-check):
+16³ jittered periodic unit cube, gamma5/3, one rank, N and LDA/F1, t=.25,
+2048 steps of 2^-13. Both completed and passed analysis. Velocity L1 is
+.085648/.0235345; kinetic fractions .566279/.975442; conservation <2.887e-15,
+positive states, unchanged coordinates. PNG profiles/slices inspected; PDF exported.
+The vortex is z-invariant and has final numerical |v_z| peaks about .03;
+no convergence or moving-mesh result follows. Source/binaries/inputs/outputs:
+`../local_runs/rd_3d_static_gresho_20261018_v1/`. No production solver change.
+
+**Latest 3D review (2026-10-18):**
+See [shared-log entry 6](dev_log_3D_moving_mesh.md#6-2026-10-18-progress-review-independent-face-audit-and-capped-native-controls)
+and the [English progress review](RD_3D_MOVING_PROGRESS_REVIEW_20261018.md).
+Independent face-incidence/image-potential audits confirm Claude's first-step
+face regions (random CFL .3 maximum 13 versus vertex-rule 1599), with exact
+integer boundary cancellation. Shared nodes still couple mass/state transfers.
+Reused the frozen `57e1ae3` FV diagnostic binary for two 16³ one-rank controls
+with `MaxSizeTimestep=2^-12`: random completes 64 steps to .015625 with 2 old
+and 1 new invalid interval; shear completes 128 steps to .03125 with none.
+All three random events survive a 60-digit determinant check. These are fixed
+ceilings on FV runs, not a validated dynamic moving-RD bound. Both existing
+geometry tests pass; no AREPO rebuild or production code change. Evidence:
+`../local_runs/codex_3d_progress_review_20261018_v1/`.
+Native M3/M4 and cluster adaptation remain pending. Preserve Claude's entry 5;
+this review appends entry 6 and corrects the old M1 quality value. The exact
+affine M3.4 gate must follow M1's correction before native implementation.
 
 **Branch handoff (2026-10-18):** the current local branch is
 `feature/3d-moving-mesh`. Zhenyu approved fast-forward integration of the

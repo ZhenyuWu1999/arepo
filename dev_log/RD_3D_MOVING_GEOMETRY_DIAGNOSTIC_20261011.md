@@ -5,6 +5,19 @@
 本轮在已有两个未跟踪的 simplex registry 草稿上核查、修正并补齐原生诊断；
 入口草稿与 SHA256 保留于 `../local_runs/rd_3d_geometry_entry_20261011/`。
 
+> **Interpretation update, 2026-10-18 (Codex, following Claude's review):**
+> The cavity counts, 1599-vertex maximum and winding statistics below use the
+> registry's **vertex-connected** merge rule. They do not establish an
+> intrinsically large face-connected reconnection. Independent analysis of the
+> archived first pairs finds largest face regions of 13 vertices for random
+> CFL .3 and 20 for shear CFL .3, all nonwinding; later pairs remain unmeasured.
+> Shared-node transfer coupling remains. A new native random run capped at
+> `h=2^-12` still has two old-forward and one new-pullback invalid intervals
+> over 64 steps. This is a fixed-ceiling FV control, not a dynamic RD-CFL test.
+> See the [English progress review](RD_3D_MOVING_PROGRESS_REVIEW_20261018.md)
+> and shared-log entries 5–6. The original measurements and authorship below
+> are retained; their geometric interpretation is narrowed by these reviews.
+
 ## 结论与下一实施边界
 
 **三维 moving RD 不能直接假定：新连接回拉后保持正向，或者连接变化总是小而局部的腔体。**
