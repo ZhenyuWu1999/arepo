@@ -1,0 +1,22 @@
+{
+  "ic_arrays_and_headers": "16/32-cubed exact match; overwrite refused",
+  "native_analysis_parity": "all N cloud-history samples, endpoints and conservation match",
+  "failed_LDA_status": "only initial snapshot; failed status retained",
+  "tar_checksums": "both archives verified in one streaming pass",
+  "relocated_execution": true,
+  "optional_plot_exercised": true,
+  "archives": [
+    {
+      "name": "blob3d_mac_analysis_20261020_v1.tar.gz",
+      "bytes": 170099139,
+      "sha256": "26719c7efc00e1ae518121c908007299d9ea4f143159469146956cf7523f7256"
+    },
+    {
+      "name": "blob3d_scripts_20261020_v1.tar.gz",
+      "bytes": 160123,
+      "sha256": "a59c31c578eda0d33cf282de9f88493ade940468c3cdcddecc3505295df4335d"
+    }
+  ],
+  "download_directory": "/cosma/home/do020/dc-wu8/arepo_rd/cosma_runs/",
+  "move_to_cosma_runs_sha256_verified": true
+}

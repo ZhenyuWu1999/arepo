@@ -1,11 +1,83 @@
 # AREPO-RD COSMA context
 
-Updated: 2026-10-19 (3D source handoff; historical environment evidence unchanged)
+Updated: 2026-10-20 (native Blob outcomes audited; no active jobs)
 
 This file records the COSMA environment for compiling and running the public
 AREPO residual-distribution branch. It supplements context.md (the original
 Cuillin workflow) and context_localMac.md (small native Apple-Silicon tests).
 Earlier scientific history remains in the numbered development logs.
+
+## Compact Mac downloads available, 2026-10-20
+
+Two validated download archives are now under `/cosma/home/do020/dc-wu8/arepo_rd/cosma_runs/`:
+`blob3d_scripts_20261020_v1.tar.gz` (156.4 KiB; two standalone Python tools
+plus small configs/provenance) and `blob3d_mac_analysis_20261020_v1.tar.gz`
+(162.2 MiB; tools, original full-run snapshots/IC, failure logs and analysis).
+Archive checksum sidecars moved with the downloads; the file hashes are unchanged.
+Full native archives and unpacked analysis trees remain in apps storage; no data was transferred to the Mac. The tools need NumPy/h5py,
+with Matplotlib optional, and were tested after relocation outside the repo.
+See [shared-log entry 16](dev_log_3D_moving_mesh.md#16-2026-10-20-standalone-initializationanalysis-scripts-and-compact-mac-bundles)
+and the [package record](RD_3D_BLOB_COSMA_20261019.md#compact-mac-packages-created-2026-10-20).
+
+## Latest Blob execution status, 2026-10-20
+
+All eight preparation-chain jobs completed on gc001 on 2026-10-19. The queue
+is empty. Full N equal12187329 and hierarchy12187330 completed to 1.5 t_cr
+and passed their per-run analysis (05:10:44 and 02:49:59); normalized snapshot
+conservation defects are 8.43e-14/3.68e-14 and actual hierarchy ratio 8.
+Full LDA equal12187332 and hierarchy12187333 both failed numerical raw-state
+positivity checks at stage 1, ID 14151, near .02142334 t_cr. Short LDA gates
+and calibration passed, but neither full LDA run completed; only its initial
+snapshot exists. Exact rejected pressures and provenance are in
+[shared-log entry 14](dev_log_3D_moving_mesh.md#14-2026-10-20-cosma-execution-audit--n-completes-lda-stops-at-negative-pressure)
+and the [campaign report](RD_3D_BLOB_COSMA_20261019.md).
+
+The N-v2 and LDA-v1 apps archives remain authoritative. Their submission
+manifests' initial PENDING text is historical; use Slurm accounting, run status
+and analysis JSON for actual outcomes. No restart/resubmission or numerical
+repair was performed. Existing results do not validate moving 3D, matched N1
+reproduction or converged cloud disruption. The preparation handoffs below
+retain their writing dates and are superseded as descriptions of job state.
+
+## Blob preparation record, 2026-10-19
+
+**N/LDA update:** the user requires Blob with both schemes. The N campaign
+and chain below remain active; separate LDA jobs 12187273 (build),12187274
+(gates),12187275 (32³ calibration),12187276 (conditional full submitter)
+are now also pending. LDA evidence is
+`/cosma/apps/do020/dc-wu8/arepo-rd/rd_3d_blob_20261019_lda_v1/`.
+Both schemes target equal and natural-hierarchy 32³ runs to 1.5 t_cr on eight
+ranks each, with their own gates/timings/budgets. Exact physical IC arrays
+and solver source match between campaigns. See
+[shared-log entry 13](dev_log_3D_moving_mesh.md#13-2026-10-19-user-correction--test-blob-with-both-n-and-lda).
+No native run has started; keep all four N jobs as well as these four LDA
+jobs. The driver supports `--schemes N LDA`, or single-scheme preparation
+for independent dependency chains. No numerical success is claimed.
+
+
+Live inspection on `login5c` confirms dine2/do020 and the documented module
+stack/Python are available. All dine2 nodes are under the `ciuk2` reservation
+until 09:00 Europe/London today; the scheduler currently estimates a 09:00
+start, subject to change. No compute-node compilation or hydro result exists
+for the new campaign yet.
+
+[Shared-log entry 12](dev_log_3D_moving_mesh.md#12-2026-10-19-cosma-static-3d-blob-preparation-and-dependent-submissions)
+and the [COSMA Blob report](RD_3D_BLOB_COSMA_20261019.md) record the final frozen
+campaign at `/cosma/apps/do020/dc-wu8/arepo-rd/rd_3d_blob_20261019_v2/`.
+Base source is `35ecccd` on `feature/3d-moving-mesh`; the solver is unchanged.
+Pending jobs are 12187116 (build), 12187117 (gates), 12187118 (32³ calibration)
+and 12187119 (conditional full submission). Only after successful checks and
+a measured wall budget <=3 days will the last stage submit separate 8-rank
+32³ N/RK2 equal/hierarchy runs to 1.5 t_cr. Actual long IDs/results will be
+in `full_submissions.json` and per-case analysis. Do not resubmit this chain
+or interpret its pending state as a validation pass.
+
+The Linux companion `tests/rd/run_3d_blob_cosma.py` and its Slurm wrappers
+freeze source, capture `ldd` and use the managed run launcher. The original
+Mac helper still calls `otool`; do not use its build action on COSMA. Full
+case outputs and analysis are independent, and all OMP/BLAS thread counts are
+one. The preceding v1 pending jobs were cancelled before execution; both
+archives are retained. The original local handoff below remains historical.
 
 ## Current 3D handoff, 2026-10-19
 

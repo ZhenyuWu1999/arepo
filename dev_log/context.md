@@ -81,6 +81,54 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**Portable Blob analysis packages (2026-10-20):**
+[Shared-log entry 16](dev_log_3D_moving_mesh.md#16-2026-10-20-standalone-initializationanalysis-scripts-and-compact-mac-bundles)
+records two standalone NumPy/h5py scripts and validated compact Mac downloads:
+156.4 KiB for tools/configs/provenance,162.2 MiB including full snapshots/IC.
+Download archives and checksum sidecars are in `/cosma/home/do020/dc-wu8/arepo_rd/cosma_runs/`;
+no Mac transfer occurred. Original N/LDA apps archives and failed evidence
+are preserved. See the campaign report for
+paths/checksums and actual completed/failed outcomes.
+
+
+**COSMA Blob outcomes audited (2026-10-20):**
+[Shared-log entry 14](dev_log_3D_moving_mesh.md#14-2026-10-20-cosma-execution-audit--n-completes-lda-stops-at-negative-pressure)
+records actual execution on gc001. N equal12187329 and hierarchy12187330
+completed 32³/8-rank evolutions to 1.5 t_cr, with passing analysis and snapshot
+conservation 8.43e-14/3.68e-14. LDA equal12187332 and hierarchy12187333 passed
+preparation but both failed raw negative-pressure checks at .02142334 t_cr,
+stage 1, ID 14151. No jobs remain queued/running. Failed evidence is preserved;
+there was no rerun, repair or new numerical-source change. Read the latest
+COSMA context/report; the pending handoffs below are historical. Static N
+completion does not validate LDA long-time positivity or moving 3D support.
+
+
+**Both Blob schemes required (2026-10-19):**
+The user's correction is implemented in
+[shared-log entry 13](dev_log_3D_moving_mesh.md#13-2026-10-19-user-correction--test-blob-with-both-n-and-lda).
+N retains pending jobs 12187116–12187119; independent LDA Blob jobs
+12187273–12187276 are also pending. Each scheme targets32³ equal/hierarchy,
+eight ranks, gamma 5/3, CFL.01,1.5 t_cr, with its own successful native gates
+and timing required before long submission. The previous N campaign's LDA
+cases were only warm controls. Exact Blob IC arrays and solver source match
+across the two campaigns; native results remain unmeasured. Read the COSMA
+context and campaign report before submitting duplicates.
+
+
+**COSMA static Blob queued (2026-10-19):**
+Live COSMA environment inspection and a frozen Linux campaign are recorded in
+[shared-log entry 12](dev_log_3D_moving_mesh.md#12-2026-10-19-cosma-static-3d-blob-preparation-and-dependent-submissions)
+and the [COSMA Blob report](RD_3D_BLOB_COSMA_20261019.md). Base source `35ecccd`
+is unchanged. Build/gate/calibration/conditional-submit jobs
+12187116/12187117/12187118/12187119 are **pending**, with the scheduler initially
+estimating a 09:00 Europe/London build start after a reservation ends. The
+32³, 1.5 t_cr N/RK2 equal/hierarchy inputs use eight ranks, gamma 5/3 and CFL .01;
+long jobs require successful native checks and measured wall budgets. Evidence
+is in apps storage `.../arepo-rd/rd_3d_blob_20261019_v2/`. No new COSMA numerical
+success, moving-3D support or paper N1 reproduction is claimed. Read the COSMA
+context before submitting another job; this chain is already queued.
+
+
 **COSMA source handoff (2026-10-19):**
 Zhenyu will check COSMA access/resources. [Shared-log entry 11](dev_log_3D_moving_mesh.md#11-2026-10-19-cluster-recommendation-and-cosma-handoff)
 recommends cluster compute nodes for full 32³+ Blob, long stability/convergence

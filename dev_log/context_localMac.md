@@ -3,7 +3,19 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-10-19
+Updated: 2026-10-20
+
+**Compact COSMA Blob analysis handoff (2026-10-20):**
+N equal/hierarchy completed 32³ to 1.5 t_cr; LDA full runs failed raw negative
+pressure near .02142334 t_cr. The standalone scripts/config package is 156.4 KiB;
+the package with full snapshots, IC and analysis is 162.2 MiB. Both are ready
+in COSMA `/cosma/home/do020/dc-wu8/arepo_rd/cosma_runs/` with checksums; **no transfer or Mac execution has yet
+occurred**. [Package instructions](RD_3D_BLOB_COSMA_20261019.md#compact-mac-packages-created-2026-10-20)
+and [shared-log entry 16](dev_log_3D_moving_mesh.md#16-2026-10-20-standalone-initializationanalysis-scripts-and-compact-mac-bundles)
+give exact paths and validation. The two NumPy/h5py tools have no repository,
+compiler or MPI dependency; optional Matplotlib plots were tested on COSMA
+from an extracted bundle. Earlier local-only progress records below retain
+their original dates and are superseded by the shared execution record.
 
 **Cluster recommendation and publication (2026-10-19):**
 Zhenyu authorizes committing/pushing the pending 3D review/test work and will

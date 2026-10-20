@@ -979,3 +979,295 @@ the small home quota; use an available campaign location and unique directories.
 Append COSMA adaptation, job IDs, execution hosts, actual states and results
 to this same English log. Keep HLLC-RD/cold Sedov remedies deferred and continue
 the mesh/moving-RD, hierarchy and MPI development priority from entry 8.
+
+## 12. 2026-10-19: COSMA static 3D Blob preparation and dependent submissions
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Preparation host:** `login5c.pri.cosma.local`; no AREPO compile/evolution
+  on the login node. Compute hosts and native results remain pending.
+- **Source:** `feature/3d-moving-mesh`, base `35ecccd`; production source
+  unchanged. Frozen v2 includes the new cluster drivers, all source/config
+  hashes and the host `Makefile.systype`. Source archive SHA256:
+  `a64002b924c6c3166c94e655d61424a8d8d5bda2dad7293b4e74dff16f221afa`.
+- **Request:** inspect the Mac development handoff and prepare/submit a static
+  3D Blob test on COSMA, allowing hierarchical timesteps and MPI.
+- **Evidence:**
+  `/cosma/apps/do020/dc-wu8/arepo-rd/rd_3d_blob_20261019_v2/`;
+  `campaign.json`, `source_provenance.json`, `preflight.json`,
+  `submissions.json`, then per-job/per-case logs and results when executed.
+- **Report:** [COSMA Blob setup and submission record](RD_3D_BLOB_COSMA_20261019.md).
+- **Actual status:** prepared and queued, **not yet a native COSMA pass**.
+  Build **12187116**, short gates **12187117**, calibration **12187118**,
+  and calibration-dependent full submitter **12187119** are pending.
+  The `ciuk2` reservation covers dine2 until 09:00 Europe/London today;
+  Slurm currently estimates the build at 09:00, subject to scheduling changes.
+
+The documented GNU14/OpenMPI5/parallel-HDF5/MKL modules and Python3.12.4
+(NumPy2.0.0/h5py3.11.0) are available on this host. Build/run wrappers require
+Slurm compute nodes and capture Linux linkage. All OMP/OpenBLAS/MKL threads
+are 1. Apps storage holds the campaign; no Mac binary or untracked local IC
+is assumed to have arrived through Git. Immutable binaries, headers, configs,
+parameters and run provenance will be retained per configuration/case.
+
+The 34 prepared cases include 22 warm N/LDA controls for equal-bin
+hierarchy degeneration and actual mixed bins on 1/2/4 ranks, four 16³ Blob
+gates to .01 t_cr, six 32³ calibrations to .001 t_cr, and two conditional
+32³ long cases to **1.5 t_cr**. The random ICs contain 14/140 cloud nodes at
+16³/32³. Blob retains gamma 5/3, CFL .01, rho=100/10, p=100, wind=6.15 and
+`t_cr=2 R sqrt(10)/6.15`; it uses **N/lumped RK2, not published N1**. Full
+N equal and natural-hierarchy runs use eight ranks each, separate directories,
+and requested output spacing .05 t_cr including .5/1/1.5. The documented
+method difference and experimental hierarchy accuracy limits remain.
+
+Stages require successful prerequisites and their asserted analysis. The
+full submitter chooses each case's wall time from twice its measured
+same-method/rank projection plus 15 minutes, rounded up to five minutes;
+it refuses budgets above dine2's three-day limit and prevents duplicates.
+Actual long-job IDs will appear in `full_submissions.json` only after the
+calibration succeeds. This is a queued conditional workflow, not a claim
+that long runs have been submitted, completed or shown cloud disruption.
+
+Python/shell syntax, all source/IC/parameter hashes, gamma/timestep flags,
+and mock-only submission budgeting/duplicate/limit checks pass. Native
+compilation, conserved totals, raw/saved positivity, actual bins/timesteps,
+MPI/equal-bin comparisons and COSMA performance remain **unmeasured**.
+No assertion was relaxed, and no production/shock/scaling/thesis change or
+Git commit was made. The initial v1 archive is preserved; its pending jobs
+12187098/12187099/12187100 were cancelled before execution after separating
+concurrent full-run analysis files and freezing the final dispatcher in v2.
+This is superseded preparation, not a numerical failure. Append actual
+compute hosts/job outcomes and scientific results here after execution.
+
+## 13. 2026-10-19: user correction — test Blob with both N and LDA
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Preparation host:** `login5c.pri.cosma.local`; compute execution pending.
+- **User decision:** Blob must test **both N and LDA**. Entry 12's N-only
+  Blob matrix was incomplete for this requirement; its LDA cases were warm
+  controls only. Keep that historical record and add the missing LDA Blob.
+- **Source:** base `35ecccd`, branch `feature/3d-moving-mesh`; no numerical
+  source changes. All `src/` hashes in the new LDA archive exactly match
+  the frozen N campaign. New source archive SHA256:
+  `7b8c949183ef4ef3c9d9bad00c0f4a572f0489bbc1958f788bbd9d1a105950a9`.
+- **Evidence:**
+  `/cosma/apps/do020/dc-wu8/arepo-rd/rd_3d_blob_20261019_lda_v1/`, including
+  source archive/manifests, configs, ICs, parameters, `preflight.json` and
+  `submissions.json`; native artifacts and results remain pending.
+- **Status:** independent LDA chain submitted: build **12187273**, gates
+  **12187274**, calibration **12187275**, conditional full submitter
+  **12187276**. Original N chain **12187116–12187119** remains queued and
+  uses its original frozen v2 drivers. Neither scheme has run on COSMA yet.
+
+The campaign preparer now accepts `--schemes N LDA` (both by default), or a
+single explicitly selected scheme. The submitted LDA campaign uses
+`--schemes LDA` so each scheme's Blob gates, timing and long submissions
+have their own success dependencies and output/result paths. N's existing
+chain is retained. No long job is submitted from the other scheme's timing
+or taken as evidence of the other scheme's success.
+
+LDA uses the existing `LDA_SCHEME` / `RD_RK2_TOTAL_RESIDUAL` / F1 path, with
+separate equal and natural-hierarchy configs. The same physical Blob IC and
+settings as N are used: 32³ nodes, 140 cloud nodes, gamma 5/3, CFL .01,
+wind 6.15, pressure 100, rho 100/10, `t_cr=2 R sqrt(10)/6.15`, target 1.5 t_cr and
+requested output spacing .05 t_cr. Both 16³ and 32³ **particle datasets** are
+exactly equal to N's archived ICs, including coordinates, IDs, densities,
+velocities and specific energies. Each method's MPI tests compare ranks
+within that method; N and LDA are not required to give the same trajectory.
+
+The added LDA matrix has 23 cases: 11 warm controls, four 16³ Blob checks
+(equal np1; hierarchy np1/2/4) to .01 t_cr, six 32³ calibrations (equal np1/8;
+hierarchy np1/2/4/8) to .001 t_cr, and two conditional full cases (equal and
+hierarchy, np8 each) to 1.5 t_cr. Together the active campaigns now target
+**N equal, N hierarchy, LDA equal, LDA hierarchy** at common physical outputs.
+The three-day budget guard and per-method/rank calibration rule are unchanged.
+
+The generic Blob hierarchy assertion now checks actual mixed bins for LDA
+as well as N. Conservation, positivity and rank tolerances are unchanged;
+no floor, blending, scaling or numerical fallback was added. LDA stability
+and long-time admissibility must be measured independently. Its F1/hierarchy
+accuracy limitations remain those in the reviewed baseline, rather than a
+new time-order claim based on the RK2 flag.
+
+Completed preparation checks: syntax; all 23 IC/parameter hashes; exact
+LDA/gamma/timestep flags; 15/6/2 group counts; identical 16³/32³ physical IC
+arrays and all solver source hashes versus N; and a temporary mock-only
+check that the dispatcher selects the two LDA full cases with their own
+calibration rows. No real submission was made by the mock check. Actual
+Slurm submission occurred afterward and is recorded by the four IDs above.
+Native compilation, raw/saved positivity, conservation, actual bins, MPI
+agreement and timing remain unmeasured. No Git commit or thesis edit.
+
+## 14. 2026-10-20: COSMA execution audit — N completes; LDA stops at negative pressure
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu.
+- **Audit host/date:** `login5c.pri.cosma.local`, 2026-10-20 at approximately
+  07:03–07:08 Europe/London. Actual compute execution was on
+  `gc001.pri.cosma.local`, 2026-10-19.
+- **Source:** base `35ecccd` on `feature/3d-moving-mesh`; frozen N-v2 and
+  LDA-v1 archives from entries 12–13, with identical solver source/physical
+  IC arrays and their separate recorded archive/binary hashes. No new
+  numerical source, configuration, threshold or parameter change.
+- **Evidence:** the two apps campaign roots in entries 12–13; Slurm
+  accounting, `full_submissions.json`, per-run `run_status.json`, native
+  `output/arepo-*.log`, N `analysis.json` and saved snapshots.
+- **Current queue:** empty for this user. All eight build/gate/calibration/
+  dispatch jobs completed successfully; four long jobs executed and ended.
+  No new run, restart or resubmission was requested or performed in this audit.
+
+| Full case, 32³ / 8 ranks | Job | Actual Slurm status | Elapsed | Endpoint / stop |
+| --- | --- | --- | --- | --- |
+| N equal | 12187329 | COMPLETED, 0:0 | 05:10:44 | 1.5 t_cr, analysis passed |
+| N natural hierarchy | 12187330 | COMPLETED, 0:0 | 02:49:59 | 1.5 t_cr, analysis passed |
+| LDA equal | 12187332 | FAILED, 1:0 | 00:06:23 | raw stage-1 negative pressure at .02142333984375 t_cr |
+| LDA natural hierarchy | 12187333 | FAILED, 1:0 | 00:03:30 | raw stage-1 negative pressure at .02142333984375 t_cr |
+
+### Native preparation gates and N full runs
+
+N preparation jobs 12187116–12187119 and LDA jobs 12187273–12187276 all
+completed. The N root's 26 short cases and six calibrations pass; the LDA
+root's 15 short cases and six calibrations pass. Maximum scaled rank/equal-bin
+field differences are 1.2222e-14 in N's 32³ calibration and 1.7337e-14 in
+LDA's. These short rank checks do not certify the later failed LDA evolution.
+
+All full cases use the identical random side-10 periodic cube, seed 68315,
+32768 generators, 140 initial cloud nodes, centre(2.5,5,5), radius 1,
+rho_cloud/wind=100/10, p=100, gamma 5/3, vx_wind=6.15 and CFL .01.
+`t_cr=1.0283829789165462`; actual N final time is
+`1.5425744683748193=1.5 t_cr`, independently checked in both final HDF5
+headers. Mesh coordinates remain fixed. Config flags and exact headers are
+in each artifact: N/lumped or LDA/F1 with `RD_RK2_TOTAL_RESIDUAL`, equal steps
+or natural `RD_HIERARCHICAL_TIMESTEPS`, and unchanged raw-state assertions.
+This does not establish formal temporal order or moving-3D support.
+
+Both N cases save 31 snapshots and report131072 stage-1 records. N equal's
+actual step is approximately 1.1768909213e-5 (subtraction-roundoff min/max in
+`analysis.json`); hierarchy reaches actual bin ratio 8, rather than an equal-bin
+degeneration. Analysis passes fixed coordinates, positive finite saved states,
+dual coverage and five-component conservation. Maximum snapshot normalized
+conservation defects are **8.42995e-14** (equal) and **3.68044e-14** (hierarchy),
+using extensive mass/three momenta/energy, median-dual `Masses/Density`,
+componentwise absolute initial content and total mass as momentum scale floor.
+At the final snapshot, min rho/p are 8.83711955/71.09158543 (equal) and
+8.83702587/71.08843824 (hierarchy). No raw-stage positivity assertion fired.
+The observed elapsed ratio is 1.828 for this one pair at eight ranks; it is
+not a general MPI scaling/efficiency result.
+
+The threshold cloud mass (`rho>64`, `p/rho<9`) starts at 420.972805764 and is
+zero in both N final snapshots. First saved zero is near 1.05 t_cr, not an
+exact disruption time. Requested .5/1 snapshots are not exactly coincident:
+actual normalized times are .5000038147/1.0000076294 (equal) and
+.5000610352/1.0001220703 (hierarchy). Use actual saved times in physical
+comparisons. At this resolution, with no material tracer, neither a zero
+threshold mass nor a completed run establishes converged cloud mixing or a
+matched reproduction of the published N1 experiment.
+
+### LDA's first rejected states
+
+Both LDA native logs identify `rd_static_validate_stage`, stage 1, ID 14151,
+at sync-point1872. The full-run dyadic timeline gives raw sync time
+**.022031398046857161=.02142333984375 t_cr**. There are 1871 prior stage-1
+records; the last reported stage-1 time is .022019629137644096, or
+.021411895751953125 t_cr. For hierarchy, a stage record need not be a globally
+synchronized completed interval. Both failed runs save only `snap_000.hdf5`;
+there is no later saved profile or full-run passing analysis.
+
+| LDA case | Rejected rho | Rejected raw pressure | Maximum actual bin ratio |
+| --- | --- | --- | --- |
+| Equal | 2.7419081441624558 | -5.0089129123616971e-5 | 1 |
+| Hierarchy | 2.7064776249856886 | -.03303868560543384 | 8 |
+
+The validator computes pressure directly from conserved mass, three momenta,
+energy and median-dual volume before accepting the stage. These are numerical
+admissibility failures; `MPI_ABORT` follows that intentional fail-fast stop.
+The immediate recorded cause is negative pressure. Its deeper mechanism is
+not diagnosed by this status inspection. IC ID 14151 is an ambient node at
+(3.543844133611583,4.927265014250266,4.815061744870591), radius 1.0625926367
+from the initial cloud centre, initial rho 10. The LDA full runs both started
+09:08:00; hierarchy stopped09:11:30 and equal09:14:23. Preserve these failed
+attempts for a subsequent positivity/oscillation diagnosis. No floors,
+assertion relaxation, scheme blending, timestep repair or rerun was added.
+
+## 15. 2026-10-20: Blob storage inventory for possible Mac analysis
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; inventory host `login5c`.
+- **Source/evidence:** unchanged frozen 35ecccd campaigns from entries 12–14;
+  the two apps roots and a read-only regular-file size/snapshot inventory.
+- **Status:** data located and sized; no copy, deletion, compression,
+  simulation or solver edit performed. Mac access/free space was not checked.
+- **Details:** [storage inventory and Mac suitability](RD_3D_BLOB_COSMA_20261019.md#storage-inventory-and-mac-analysis-suitability-2026-10-20).
+
+Under `/cosma/apps/do020/dc-wu8/arepo-rd/`, N's
+`rd_3d_blob_20261019_v2` has 2410306537 logical file bytes and LDA's
+`rd_3d_blob_20261019_lda_v1` has 572749293 bytes:2.778 GiB combined.
+N's two full cases each have 31 HDF5 snapshots, approximately 2.894 MiB per
+snapshot; their62 snapshots total 179.444 MiB. Each failed full LDA case has
+only its initial snapshot. A core selection including full snapshots,
+inputs/configs/JSON/provenance and LDA failure logs is 198.684 MiB(150 files),
+without creating a new bundle. Complete archives remain on COSMA.
+
+The documented M4/16-GB Mac is suitable for sequential HDF5 slice/profile/
+cloud-mass analysis. Use matched IDs, actual saved times and median-dual
+`Masses/Density` weights. This is an analysis/transfer recommendation, not a
+claim that data is already present on the Mac or that a physical result is
+converged. N long results and the failed LDA evidence retain their entry 14
+status. No native check or rebuild is needed for this read-only inventory.
+
+## 16. 2026-10-20: standalone initialization/analysis scripts and compact Mac bundles
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; preparation/validation on login5c.
+- **Request:** explain the multi-GiB archive sizes and retain only necessary
+  initialization/analysis scripts for local use.
+- **Source/evidence:** new `tests/rd/blob_tools/` utilities; unchanged native
+  solver base 35ecccd and N-v2/LDA-v1 outputs from entries 12–15. No default
+  Config, production source, native output or failed evidence was removed.
+- **Artifacts:** under `/cosma/apps/do020/dc-wu8/arepo-rd/`,
+  `blob3d_scripts_20261020_v1.tar.gz` (160123 bytes, about 156.4 KiB) and
+  `blob3d_mac_analysis_20261020_v1.tar.gz` (170099139 bytes, about 162.2 MiB),
+  plus unpacked trees and archive checksum sidecars. No Mac transfer performed.
+- **Details:** [compact package record](RD_3D_BLOB_COSMA_20261019.md#compact-mac-packages-created-2026-10-20).
+
+The former holds two standalone Python entry points, exact configs and small
+status/provenance metadata; the latter adds all62 successful N full snapshots,
+two initial failed-LDA snapshots, one original32³ IC, compressed LDA failure
+logs and portable CSV/JSON analysis. Large CPU/timestep logs, restart files,
+source copies, solver executables and objects are omitted from downloads.
+Full original archives remain on COSMA with their original scientific status.
+`make_ic.py` and `analyse.py` use NumPy/h5py, with Matplotlib optional for plots;
+there is no repository or historical Sedov/campaign import dependency.
+
+Validation against actual data:16³/32³ particle arrays and Header attributes
+reproduce the originals, and overwrite is refused. All N cloud histories,
+endpoints and normalized conserved defects match native analysis. Failed LDA
+runs stay labelled failed with only initial data. Both tar archives passed
+complete streaming checksums. Extracted analysis ran outside the repository
+and reproduced its summary, including successful optional PNG/PDF plotting.
+Evidence: `dev_log/BLOB_PORTABLE_CHECKS_20261020.json`. No native solver rebuild,
+new Slurm job, numerical rerun, assertion relaxation or Git commit occurred.
+
+## 17. 2026-10-20: move compact downloads to cosma_runs and prepare Git publication
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host login5c.
+- **User authorization:** move both compact archives into `cosma_runs`, then
+  commit and push the Blob-related code and documentation.
+- **Source/target:** checked-out `feature/3d-moving-mesh`, base 35ecccd;
+  fetched `origin/feature/3d-moving-mesh` matched before publication.
+- **Archive status:** both `.tar.gz` files and their checksum sidecars moved
+  from apps to `/cosma/home/do020/dc-wu8/arepo_rd/cosma_runs/`, the pre-existing
+  sibling of the repository. SHA256 was checked before/after; bytes unchanged.
+  Full originals and unpacked analysis trees remain in apps. No Mac download.
+- **Publication scope:** Blob COSMA preparation/build/run/analysis and
+  conditional-submit code, standalone IC/analysis/export utilities,
+  verification JSON, focused report and project/host contexts/shared log.
+  Binary archives and native simulation output remain outside this Git repo.
+- **Evidence:** moved checksum sidecars, `BLOB_PORTABLE_CHECKS_20261020.json`,
+  [relocation/publication record](RD_3D_BLOB_COSMA_20261019.md#archive-relocation-and-git-publication-2026-10-20),
+  and the eventual commit/push result. Per-commit authorship credits Zhenyu Wu
+  and Codex (GPT-6), with the existing co-author trailer convention.
+
+The first move preflight stopped before moving any file because the login
+system Python lacks `hashlib.file_digest`. A streaming SHA256 implementation
+then completed and verified both moves. This is a recovered environment/API
+setup issue; no archive or simulation was changed by the failed preflight.
+The source and results remain those of entries 12–16. Syntax, staged-scope,
+link/whitespace and checksum checks are the publication gates; the earlier
+native/portable validation is retained without a redundant solver rerun.
