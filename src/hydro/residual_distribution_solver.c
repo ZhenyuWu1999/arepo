@@ -14,6 +14,7 @@
 #include "../mesh/rd_ale_geometry.h"
 #include "../mesh/rd_simplex_geometry.h"
 #include "../mesh/voronoi/voronoi.h"
+#include "rd_element.h"
 #include "rd_euler.h"
 #include "rd_linalg.h"
 #include "rd_state.h"
@@ -5029,6 +5030,94 @@ void rd_step_end(tessellation *T)
 #endif
 }
 
+/* The native ledger boundary is shared by every 2D/3D residual backend.
+ * Keep the deposit weight separate from the full predictor interval: hierarchy
+ * deposits h_T/2 but assembles the live predictor with h_T. */
+static void rd_deposit_element(tessellation *T, int element, const struct rd_element_flux *flux,
+                                double triangle_dt, double full_triangle_dt, int rd_stage)
+{
+  if(flux->ndim != RD_NDIM || !flux->rate)
+    terminate_program("RD element flux dimension/layout mismatch");
+  point *DP = T->DP;
+  tetra *DT = T->DT;
+  const double (*Flux_RD)[RD_NVERT] = (const double (*)[RD_NVERT])flux->rate;
+  int j;
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+  int k;
+#else
+  (void)full_triangle_dt;
+  (void)rd_stage;
+#endif
+  for(j = 0; j < DIMS + 1; j++)
+    {
+      if(DP[DT[element].p[j]].task == ThisTask)
+        {
+          int SphP_index = DP[DT[element].p[j]].index;
+          if(SphP_index >= NumGas)
+            SphP_index -= NumGas;
+
+          int P_index = SphP_index;
+
+#ifdef RD_RT_FIXED_BOUNDARY
+          if(rd_rt_fixed_boundary_vertex(P_index))
+            {
+              rd_rt_record_absorbed_update((-1.0) * triangle_dt * Flux_RD[0][j],
+                                           (-1.0) * triangle_dt * Flux_RD[1][j],
+                                           (-1.0) * triangle_dt * Flux_RD[2][j],
+                                           (-1.0) * triangle_dt * Flux_RD[3][j]);
+              continue;
+            }
+#endif
+          P[P_index].Mass += (-1.0) * triangle_dt * Flux_RD[0][j];
+          SphP[SphP_index].Momentum[0] += (-1.0) * triangle_dt * Flux_RD[1][j];
+          SphP[SphP_index].Momentum[1] += (-1.0) * triangle_dt * Flux_RD[2][j];
+#ifndef TWODIMS
+          SphP[SphP_index].Momentum[2] += (-1.0) * triangle_dt * Flux_RD[3][j];
+#endif
+          SphP[SphP_index].Energy += (-1.0) * triangle_dt * Flux_RD[DIMS + 1][j];
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+          if(rd_stage == RD_RK_STAGE_PREDICTOR &&
+             rd_point_stage_live(&DP[DT[element].p[j]]))
+            {
+              for(k = 0; k < RD_NVAR; k++)
+                SphP[SphP_index].RD_dU[k] += (-1.0) * full_triangle_dt * Flux_RD[k][j];
+            }
+#endif
+        }
+      else
+        {
+          if(N_FluxRD_export >= Max_N_FluxRD_export)
+            terminate_program("FluxRD_list capacity exceeded");
+
+          FluxRD_list[N_FluxRD_export].task  = DP[DT[element].p[j]].task;
+          FluxRD_list[N_FluxRD_export].index = DP[DT[element].p[j]].originalindex;
+
+          FluxRD_list[N_FluxRD_export].dMass_Dual        = (-1.0) * triangle_dt * Flux_RD[0][j];
+          FluxRD_list[N_FluxRD_export].dMomentum_Dual[0] = (-1.0) * triangle_dt * Flux_RD[1][j];
+          FluxRD_list[N_FluxRD_export].dMomentum_Dual[1] = (-1.0) * triangle_dt * Flux_RD[2][j];
+#ifdef TWODIMS
+          FluxRD_list[N_FluxRD_export].dMomentum_Dual[2] = 0.0;
+#else
+          FluxRD_list[N_FluxRD_export].dMomentum_Dual[2] = (-1.0) * triangle_dt * Flux_RD[3][j];
+#endif
+          FluxRD_list[N_FluxRD_export].dEnergy_Dual      = (-1.0) * triangle_dt * Flux_RD[DIMS + 1][j];
+#ifdef RD_HIERARCHICAL_TIMESTEPS
+          for(k = 0; k < RD_NVAR; k++)
+            FluxRD_list[N_FluxRD_export].dPredictor[k] = 0.0;
+
+          if(rd_stage == RD_RK_STAGE_PREDICTOR &&
+             rd_point_stage_live(&DP[DT[element].p[j]]))
+            {
+              for(k = 0; k < RD_NVAR; k++)
+                FluxRD_list[N_FluxRD_export].dPredictor[k] = (-1.0) * full_triangle_dt * Flux_RD[k][j];
+            }
+#endif
+
+          N_FluxRD_export += 1;
+        }
+    }
+}
+
 #ifdef RD_HIERARCHICAL_TIMESTEPS
 void compute_residuals(tessellation *T, int rd_stage)
 #elif defined(RD_RK2_SPLIT_STAGES) && !defined(RD_ALE_EQUALSTEP)
@@ -5640,12 +5729,21 @@ void compute_residuals(tessellation *T)
       Velvertex_avg[1] /= (DIMS + 1);
       Velvertex_avg[2] /= (DIMS + 1);
 
+      const struct rd_element_input element_input = {
+        {RD_NDIM, tri_normals_list[i].area, &tri_normals_list[i].normal[0][0], tri_normals_list[i].mag},
+        &U_fluid[0][0]
+      };
+#ifdef TWODIMS
+      const double (*element_normal)[RD_NDIM] =
+          (const double (*)[RD_NDIM])element_input.geometry.unit_normal;
+#endif
+
 #ifdef TWODIMS
 #ifdef RD_RUSANOV_LOW_ORDER
       double Phi[4], Flux_RD[4][3], phi_scale, normal[3][2];
       for(int vertex = 0; vertex < 3; vertex++)
         for(int axis = 0; axis < 2; axis++)
-          normal[vertex][axis] = tri_normals_list[i].mag[vertex] * tri_normals_list[i].normal[vertex][axis];
+          normal[vertex][axis] = element_input.geometry.face_measure[vertex] * element_normal[vertex][axis];
 #ifdef RD_LOW_ORDER_HLLC
       double coeff[3];
       double alpha = rd_hllc_residual(U_fluid, normal, Velvertex_avg, GAMMA, Phi, Flux_RD, coeff, &phi_scale);
@@ -5667,7 +5765,7 @@ void compute_residuals(tessellation *T)
 #else
           rd_rus_coeff[index] += triangle_dt * 4.0 * alpha / 3.0;
 #endif
-          rd_rus_coeff[NumGas + index] += tri_normals_list[i].area / 3.0;
+          rd_rus_coeff[NumGas + index] += element_input.geometry.measure / 3.0;
         }
 #else
       // compute residuals: Roe Vector Z, Modified fluid state U_hat = \frac{ \partial{U(Z_avg)}}{ \partial Z} * Z
@@ -5684,9 +5782,9 @@ void compute_residuals(tessellation *T)
           Z_Roe[j][2] = U_fluid[j][2] / Z_Roe[j][0];
           Z_Roe[j][3] = (U_fluid[j][3] + Pressure[j]) / Z_Roe[j][0];
 
-          N_X[j]      = tri_normals_list[i].normal[j][0];
-          N_Y[j]      = tri_normals_list[i].normal[j][1];
-          Mag[j]      = tri_normals_list[i].mag[j];
+          N_X[j]      = element_normal[j][0];
+          N_Y[j]      = element_normal[j][1];
+          Mag[j]      = element_input.geometry.face_measure[j];
           Enthalpy[j] = (U_fluid[j][DIMS + 1] + Pressure[j]) / U_fluid[j][0];  // specific enthalpy = (rho E + p)/rho
         }
 
@@ -6072,7 +6170,7 @@ void compute_residuals(tessellation *T)
           /* RD_dU is already the nodal spatial rate v for a mass-apply pass. */
           for(k = 0; k < 4; k++)
             rhs[k][2] =
-                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]);
+                (element_input.geometry.measure / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]);
 #else
           double f1_interval = triangle_dt;
 #ifdef RD_HIERARCHICAL_TIMESTEPS
@@ -6082,7 +6180,7 @@ void compute_residuals(tessellation *T)
 #endif
           for(k = 0; k < 4; k++)
             rhs[k][2] =
-                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / f1_interval;
+                (element_input.geometry.measure / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / f1_interval;
 #endif
         }
 #endif
@@ -6663,7 +6761,7 @@ void compute_residuals(tessellation *T)
               T_target[k] = 0.0;
               for(j = 0; j < 3; j++)
                 {
-                  T_lumped[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / full_triangle_dt;
+                  T_lumped[k][j] = (element_input.geometry.measure / 3.0) * dU_vertex[j][k] / full_triangle_dt;
                   T_target[k] += T_lumped[k][j];
                 }
             }
@@ -6748,7 +6846,7 @@ void compute_residuals(tessellation *T)
 
           for(k = 0; k < 4; k++)
             mass_target[k] =
-                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]);
+                (element_input.geometry.measure / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]);
 
           if(solve_rank == 4)
             {
@@ -6766,7 +6864,7 @@ void compute_residuals(tessellation *T)
               RD_stat_f1_lumped++;
               for(k = 0; k < 4; k++)
                 for(j = 0; j < 3; j++)
-                  Flux_RD[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k];
+                  Flux_RD[k][j] = (element_input.geometry.measure / 3.0) * dU_vertex[j][k];
             }
 
           for(k = 0; k < 4; k++)
@@ -6797,7 +6895,7 @@ void compute_residuals(tessellation *T)
 
           for(k = 0; k < 4; k++)
             T_target[k] =
-                (tri_normals_list[i].area / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / triangle_dt;
+                (element_input.geometry.measure / 3.0) * (dU_vertex[0][k] + dU_vertex[1][k] + dU_vertex[2][k]) / triangle_dt;
 
 #ifdef LDA_SCHEME
           /* Global Lumping is the first Neumann truncation of the mass-matrix
@@ -6853,7 +6951,7 @@ void compute_residuals(tessellation *T)
 
               for(k = 0; k < 4; k++)
                 for(j = 0; j < 3; j++)
-                  T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
+                  T_time[k][j] = (element_input.geometry.measure / 3.0) * dU_vertex[j][k] / triangle_dt;
             }
 #elif defined(B_SCHEME)
           /* Blended mass matrix, Arpaia & Ricchiuto (2015) eqs. 43-44:
@@ -6881,7 +6979,7 @@ void compute_residuals(tessellation *T)
 
           for(k = 0; k < 4; k++)
             for(j = 0; j < 3; j++)
-              T_lumped[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
+              T_lumped[k][j] = (element_input.geometry.measure / 3.0) * dU_vertex[j][k] / triangle_dt;
 
           if(solve_rank == 4)
             {
@@ -7029,7 +7127,7 @@ void compute_residuals(tessellation *T)
                       (unsigned long long)DP[diag_pt[0]].ID,
                       (unsigned long long)DP[diag_pt[1]].ID,
                       (unsigned long long)DP[diag_pt[2]].ID,
-                      cx, cy, tri_normals_list[i].area,
+                      cx, cy, element_input.geometry.measure,
                       theta_map[0], theta_map[1], theta_map[2], theta_map[3],
                       triangle_dt * nlda_gap_map[0], triangle_dt * nlda_gap_map[3],
                       triangle_dt * theta_map[0] * nlda_gap_map[0],
@@ -7039,7 +7137,7 @@ void compute_residuals(tessellation *T)
 #else /* N_SCHEME: the lumped mass IS the thesis choice m^N = (|T|/3) delta_ij */
           for(k = 0; k < 4; k++)
             for(j = 0; j < 3; j++)
-              T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / triangle_dt;
+              T_time[k][j] = (element_input.geometry.measure / 3.0) * dU_vertex[j][k] / triangle_dt;
 #endif
 
 #ifdef RD_DIAG_ZERO_TEMPORAL /* diagnostic only: isolate the temporal term's contribution */
@@ -7126,13 +7224,13 @@ void compute_residuals(tessellation *T)
 
               for(k = 0; k < 4; k++)
                 for(j = 0; j < 3; j++)
-                  T_time[k][j] = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / full_triangle_dt;
+                  T_time[k][j] = (element_input.geometry.measure / 3.0) * dU_vertex[j][k] / full_triangle_dt;
             }
 
           for(k = 0; k < 4; k++)
             for(j = 0; j < 3; j++)
               {
-                double T_lumped = (tri_normals_list[i].area / 3.0) * dU_vertex[j][k] / full_triangle_dt;
+                double T_lumped = (element_input.geometry.measure / 3.0) * dU_vertex[j][k] / full_triangle_dt;
                 rk2_scale += 2.0 * (fabs(T_time[k][j]) + fabs(T_lumped));
                 Flux_RD[k][j] += 2.0 * (T_time[k][j] - T_lumped);
               }
@@ -7157,7 +7255,7 @@ void compute_residuals(tessellation *T)
            * Campoli uses (D_T,M_T)=(A_new,(A_old+A_new)/2); Arpaia uses
            * (A_mid+(A_new-A_old)/2,A_mid). */
           double area_gap =
-              (set.ale_hier_divisor_element_area[i] - tri_normals_list[i].area) / 3.0;
+              (set.ale_hier_divisor_element_area[i] - element_input.geometry.measure) / 3.0;
 
           for(k = 0; k < 4; k++)
             for(j = 0; j < 3; j++)
@@ -7196,16 +7294,16 @@ void compute_residuals(tessellation *T)
         double normals[3][2], low[4][3];
         for(int v = 0; v < 3; v++)
           for(int d = 0; d < 2; d++)
-            normals[v][d] = tri_normals_list[i].mag[v] * tri_normals_list[i].normal[v][d];
+            normals[v][d] = element_input.geometry.face_measure[v] * element_normal[v][d];
 #ifdef RD_BLEND_LOW_HLLC
         double coeff[3], low_phi[4], low_scale = 0, nx[3], ny[3], mag[3];
         double alpha = rd_hllc_residual(U_fluid, normals, Velvertex_avg, GAMMA, low_phi, low, coeff, &low_scale);
         if(!(alpha > 0)) terminate_program("LDA/HLLC low-order stage found an inadmissible or star state");
         for(int v = 0; v < 3; v++)
           {
-            nx[v] = tri_normals_list[i].normal[v][0];
-            ny[v] = tri_normals_list[i].normal[v][1];
-            mag[v] = tri_normals_list[i].mag[v];
+            nx[v] = element_normal[v][0];
+            ny[v] = element_normal[v][1];
+            mag[v] = element_input.geometry.face_measure[v];
           }
         rd_hllc_gauss_edge_split(U_fluid, nx, ny, mag, GAMMA, low, low_phi, &low_scale);
         /* Both endpoints must now share LDA's Gauss3 element total. */
@@ -7229,7 +7327,7 @@ void compute_residuals(tessellation *T)
         for(int k = 0; k < 4; k++)
           for(int v = 0; v < 3; v++)
             sensor_low[k][v] = rd_stage == 0 ? low[k][v] :
-                tri_normals_list[i].area/3 * dU_vertex[v][k]/triangle_dt +
+                element_input.geometry.measure/3 * dU_vertex[v][k]/triangle_dt +
                 .5*(rd_lr_old[i].low[k][v]+low[k][v]);
         rd_lr_b_sensor(sensor_low, RD_LDA_RUSANOV_B_SENSOR, theta);
         for(int k = 0; k < 4; k++)
@@ -7244,7 +7342,7 @@ void compute_residuals(tessellation *T)
             int index = rd_rusanov_local_index(&DP[DT[thistask_triangles[i]].p[v]]);
 #ifdef RD_BLEND_LOW_HLLC
             rd_lr_cfl[index] += triangle_dt * coeff[v] / SphP[index].DualArea;
-            rd_lr_mass[index] += tri_normals_list[i].area / 3.0;
+            rd_lr_mass[index] += element_input.geometry.measure / 3.0;
 #else
             rd_lr_cfl[index] += triangle_dt * alpha / SphP[index].DualArea;
 #endif
@@ -7252,7 +7350,7 @@ void compute_residuals(tessellation *T)
             for(int k = 0; k < 4; k++)
               {
                 if(rd_stage == 1)
-                  low[k][v] = tri_normals_list[i].area/3 * dU_vertex[v][k]/triangle_dt + .5*low[k][v];
+                  low[k][v] = element_input.geometry.measure/3 * dU_vertex[v][k]/triangle_dt + .5*low[k][v];
                 rd_lr_correction[i][k][v] = -triangle_dt * (Flux_RD[k][v]-low[k][v]);
 #ifdef RD_LDA_RUSANOV_B_SENSOR
                 if(rd_stage == 0)
@@ -7276,7 +7374,7 @@ void compute_residuals(tessellation *T)
 #endif
 
 #else /* static tetra distributions; common stages and particle update below */
-      double Phi[5], nodal[4][5], Flux_RD[5][4];
+      double Phi[5], nodal[5][4], Flux_RD[5][4];
       struct rd_n_diagnostics diagnostic;
 #ifdef RD_ALWAYS_PSEUDOINVERSE
       const int always_svd = 1;
@@ -7284,26 +7382,25 @@ void compute_residuals(tessellation *T)
       const int always_svd = 0;
 #endif
 #ifdef LDA_SCHEME
-      double temporal[5] = {0}, f1[4][5];
+      double temporal[5] = {0}, f1[5][4];
       if(rd_stage == 1)
         for(k = 0; k < RD_NVAR; k++)
           for(j = 0; j < RD_NVERT; j++)
-            temporal[k] += tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
-      const int info = rd_euler_lda_residual(3, &U_fluid[0][0], &tri_normals_list[i].normal[0][0],
-                                            tri_normals_list[i].mag, GAMMA, RD_SVD_RCOND, always_svd,
-                                            rd_stage == 1 ? temporal : NULL,
-                                            Phi, &nodal[0][0], &f1[0][0], &diagnostic);
+            temporal[k] += element_input.geometry.measure / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
+      struct rd_element_output element_output = {Phi, &nodal[0][0], &f1[0][0]};
+      const int info = rd_element_roe_residual(&element_input, RD_ELEMENT_LDA, GAMMA, RD_SVD_RCOND, always_svd,
+                                               rd_stage == 1 ? temporal : NULL, &element_output, &diagnostic);
       if(rd_stage == 1 && diagnostic.solve.rank != RD_NVAR)
         {
           RD_stat_f1_lumped++;
           for(j = 0; j < RD_NVERT; j++)
             for(k = 0; k < RD_NVAR; k++)
-              f1[j][k] = tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
+              f1[k][j] = element_input.geometry.measure / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
         }
 #else
-      const int info = rd_euler_n_residual(3, &U_fluid[0][0], &tri_normals_list[i].normal[0][0],
-                                          tri_normals_list[i].mag, GAMMA, RD_SVD_RCOND, always_svd,
-                                          Phi, &nodal[0][0], &diagnostic);
+      struct rd_element_output element_output = {Phi, &nodal[0][0], NULL};
+      const int info = rd_element_roe_residual(&element_input, RD_ELEMENT_N, GAMMA, RD_SVD_RCOND, always_svd,
+                                               NULL, &element_output, &diagnostic);
 #endif
       if(info != 0)
         terminate_program("RD tetra distribution failed: tetra=%d stage=%d info=%d solve=%.17g conservation=%.17g scale=%.17g",
@@ -7324,18 +7421,18 @@ void compute_residuals(tessellation *T)
         for(k = 0; k < RD_NVAR; k++)
 #ifdef RD_HIERARCHICAL_TIMESTEPS
           {
-            Flux_RD[k][j] = nodal[j][k];
+            Flux_RD[k][j] = nodal[k][j];
 #ifdef LDA_SCHEME
             if(rd_stage == 1)
-              Flux_RD[k][j] += 2.0 * (f1[j][k] - tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt);
+              Flux_RD[k][j] += 2.0 * (f1[k][j] - element_input.geometry.measure / RD_NVERT * dU_vertex[j][k] / full_triangle_dt);
 #endif
           }
 #else
-          Flux_RD[k][j] = rd_stage == 0 ? nodal[j][k] :
+          Flux_RD[k][j] = rd_stage == 0 ? nodal[k][j] :
 #ifdef LDA_SCHEME
-              f1[j][k] + 0.5 * nodal[j][k];
+              f1[k][j] + 0.5 * nodal[k][j];
 #else
-              tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / triangle_dt + 0.5 * nodal[j][k];
+              element_input.geometry.measure / RD_NVERT * dU_vertex[j][k] / triangle_dt + 0.5 * nodal[k][j];
 #endif
 #endif /* RD_HIERARCHICAL_TIMESTEPS */
       /* Check the actual stage deposit, including the F1/lumped difference.
@@ -7348,7 +7445,7 @@ void compute_residuals(tessellation *T)
             {
               target *= 0.5;
               for(j = 0; j < RD_NVERT; j++)
-                target += tri_normals_list[i].area / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
+                target += element_input.geometry.measure / RD_NVERT * dU_vertex[j][k] / full_triangle_dt;
             }
 #endif
           for(j = 0; j < RD_NVERT; j++)
@@ -7356,7 +7453,7 @@ void compute_residuals(tessellation *T)
               sum += Flux_RD[k][j];
               scale += fabs(Flux_RD[k][j]);
               if(rd_stage == 1)
-                scale += tri_normals_list[i].area / RD_NVERT * fabs(dU_vertex[j][k]) / full_triangle_dt;
+                scale += element_input.geometry.measure / RD_NVERT * fabs(dU_vertex[j][k]) / full_triangle_dt;
             }
           if(!isfinite(sum) || fabs(sum - target) >
               RD_CONSERVATION_ROUNDOFF_FACTOR * DBL_EPSILON * dmax(scale, DBL_MIN))
@@ -7365,76 +7462,14 @@ void compute_residuals(tessellation *T)
         }
 #endif /* TWODIMS: distribution */
 
-      for(j = 0; j < DIMS + 1; j++)
-        {
-          if(DP[DT[thistask_triangles[i]].p[j]].task == ThisTask)
-            {
-              int SphP_index = DP[DT[thistask_triangles[i]].p[j]].index;
-              //              if(SphP_index < 0)
-              //                continue;   not necessary here, since the triangles we selected should not contain external points
-              if(SphP_index >= NumGas)
-                SphP_index -= NumGas;
-
-              int P_index = SphP_index;
-
-#ifdef RD_RT_FIXED_BOUNDARY
-              if(rd_rt_fixed_boundary_vertex(P_index))
-                {
-                  rd_rt_record_absorbed_update((-1.0) * triangle_dt * Flux_RD[0][j],
-                                               (-1.0) * triangle_dt * Flux_RD[1][j],
-                                               (-1.0) * triangle_dt * Flux_RD[2][j],
-                                               (-1.0) * triangle_dt * Flux_RD[3][j]);
-                  continue;
-                }
-#endif
-              P[P_index].Mass += (-1.0) * triangle_dt * Flux_RD[0][j];
-              SphP[SphP_index].Momentum[0] += (-1.0) * triangle_dt * Flux_RD[1][j];
-              SphP[SphP_index].Momentum[1] += (-1.0) * triangle_dt * Flux_RD[2][j];
-#ifndef TWODIMS
-              SphP[SphP_index].Momentum[2] += (-1.0) * triangle_dt * Flux_RD[3][j];
-#endif
-              SphP[SphP_index].Energy += (-1.0) * triangle_dt * Flux_RD[DIMS + 1][j];
+      const struct rd_element_flux stage_flux = {RD_NDIM, &Flux_RD[0][0]};
+      rd_deposit_element(T, thistask_triangles[i], &stage_flux, triangle_dt, full_triangle_dt,
 #ifdef RD_HIERARCHICAL_TIMESTEPS
-              if(rd_stage == RD_RK_STAGE_PREDICTOR &&
-                 rd_point_stage_live(&DP[DT[thistask_triangles[i]].p[j]]))
-                {
-                  for(k = 0; k < RD_NVAR; k++)
-                    SphP[SphP_index].RD_dU[k] += (-1.0) * full_triangle_dt * Flux_RD[k][j];
-                }
-#endif
-            }
-          else
-            {
-              if(N_FluxRD_export >= Max_N_FluxRD_export)
-                terminate_program("FluxRD_list capacity exceeded");
-
-              FluxRD_list[N_FluxRD_export].task  = DP[DT[thistask_triangles[i]].p[j]].task;
-              FluxRD_list[N_FluxRD_export].index = DP[DT[thistask_triangles[i]].p[j]].originalindex;
-
-              FluxRD_list[N_FluxRD_export].dMass_Dual        = (-1.0) * triangle_dt * Flux_RD[0][j];
-              FluxRD_list[N_FluxRD_export].dMomentum_Dual[0] = (-1.0) * triangle_dt * Flux_RD[1][j];
-              FluxRD_list[N_FluxRD_export].dMomentum_Dual[1] = (-1.0) * triangle_dt * Flux_RD[2][j];
-#ifdef TWODIMS
-              FluxRD_list[N_FluxRD_export].dMomentum_Dual[2] = 0.0;
+                           rd_stage
 #else
-              FluxRD_list[N_FluxRD_export].dMomentum_Dual[2] = (-1.0) * triangle_dt * Flux_RD[3][j];
+                           0
 #endif
-              FluxRD_list[N_FluxRD_export].dEnergy_Dual      = (-1.0) * triangle_dt * Flux_RD[DIMS + 1][j];
-#ifdef RD_HIERARCHICAL_TIMESTEPS
-              for(k = 0; k < RD_NVAR; k++)
-                FluxRD_list[N_FluxRD_export].dPredictor[k] = 0.0;
-
-              if(rd_stage == RD_RK_STAGE_PREDICTOR &&
-                 rd_point_stage_live(&DP[DT[thistask_triangles[i]].p[j]]))
-                {
-                  for(k = 0; k < RD_NVAR; k++)
-                    FluxRD_list[N_FluxRD_export].dPredictor[k] = (-1.0) * full_triangle_dt * Flux_RD[k][j];
-                }
-#endif
-
-              N_FluxRD_export += 1;
-            }
-        }
+      );
     }   // for loop of triangles, i= 0~ Ndt_thistask
 
 #if defined(RD_DIAG_THETA_MAP) && defined(B_SCHEME) && defined(RD_RK2_EQUALSTEP)

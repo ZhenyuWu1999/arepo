@@ -18,6 +18,26 @@ class Diagnostics(ctypes.Structure):
                 ('max_phi', ctypes.c_double)]
 
 
+DoublePtr = ctypes.POINTER(ctypes.c_double)
+
+
+class ElementGeometry(ctypes.Structure):
+    _fields_ = [('ndim', ctypes.c_int), ('measure', ctypes.c_double),
+                ('unit_normal', DoublePtr), ('face_measure', DoublePtr)]
+
+
+class ElementInput(ctypes.Structure):
+    _fields_ = [('geometry', ElementGeometry), ('conserved', DoublePtr)]
+
+
+class ElementOutput(ctypes.Structure):
+    _fields_ = [('total', DoublePtr), ('spatial', DoublePtr), ('temporal', DoublePtr)]
+
+
+def cptr(array):
+    return array.ctypes.data_as(DoublePtr)
+
+
 def main():
     ptr = np.ctypeslib.ndpointer(dtype=np.float64, flags='C_CONTIGUOUS')
     rng = np.random.default_rng(73913)
@@ -26,7 +46,8 @@ def main():
         blas = Path('/opt/homebrew/opt/openblas')
         libs = ['-I'+str(blas/'include'), '-L'+str(blas/'lib'), '-lopenblas'] if blas.exists() else ['-llapacke', '-llapack', '-lblas']
         subprocess.run([os.environ.get('CC', 'cc'), '-std=c99', '-O2', '-shared', '-fPIC',
-                        str(REPO/'src/hydro/rd_euler.c'), str(REPO/'src/hydro/rd_linalg.c'),
+                        str(REPO/'src/hydro/rd_euler.c'), str(REPO/'src/hydro/rd_element.c'),
+                        str(REPO/'src/hydro/rd_linalg.c'),
                         str(REPO/'src/mesh/rd_simplex_geometry.c'), *libs, '-o', str(so)], check=True)
         lib = ctypes.CDLL(str(so))
         lib.rd_simplex_geometry.argtypes = [ctypes.c_int, ptr, ptr, ptr, ptr]
@@ -37,6 +58,10 @@ def main():
         lib.rd_euler_lda_residual.argtypes = [ctypes.c_int, ptr, ptr, ptr, ctypes.c_double, ctypes.c_double,
                                              ctypes.c_int, ptr, ptr, ptr, ptr, ctypes.POINTER(Diagnostics)]
         lib.rd_euler_lda_residual.restype = ctypes.c_int
+        lib.rd_element_roe_residual.argtypes = [ctypes.POINTER(ElementInput), ctypes.c_int,
+                                               ctypes.c_double, ctypes.c_double, ctypes.c_int, DoublePtr,
+                                               ctypes.POINTER(ElementOutput), ctypes.POINTER(Diagnostics)]
+        lib.rd_element_roe_residual.restype = ctypes.c_int
         defects = dict(closure=0., gradient=0., phi_integral=0., conservation=0., solve=0.)
         stagnant = 0
         for d in (2, 3):
@@ -80,6 +105,22 @@ def main():
                 defects['solve'] = max(defects['solve'], diag.solve_defect/scale)
                 np.testing.assert_allclose(residual.sum(axis=0), phi, atol=2e-13*scale)
 
+                # The common boundary is component-major, while the pure
+                # Euler kernel is vertex-major. Check exact adapter identity
+                # in both dimensions, including non-square 4x3 / 5x4 arrays.
+                element = ElementInput(ElementGeometry(d, abs(vol[0]), cptr(normal), cptr(area)), cptr(u))
+                common_phi = np.empty(nc); common = np.empty((nc, nv))
+                common_time = np.full((nc, nv), 912.)
+                output = ElementOutput(cptr(common_phi), cptr(common), cptr(common_time))
+                adapter_diag = Diagnostics()
+                assert lib.rd_element_roe_residual(ctypes.byref(element), 0, gamma, -1., 0, None,
+                                                   ctypes.byref(output), ctypes.byref(adapter_diag)) == 0
+                np.testing.assert_array_equal(common_phi, phi)
+                np.testing.assert_array_equal(common, residual.T)
+                np.testing.assert_array_equal(common_time, 912.)
+                assert adapter_diag.solve.rank == diag.solve.rank
+                assert adapter_diag.conservation_defect == diag.conservation_defect
+
                 # Independent LDA/F1 oracle: complex-step flux Jacobian and
                 # spectral polynomials, avoiding production matrix entries.
                 z = np.column_stack([np.sqrt(rho), np.sqrt(rho)[:, None]*velocity, (energy+pressure)/np.sqrt(rho)])
@@ -109,6 +150,14 @@ def main():
                 else:
                     np.testing.assert_array_equal(f1, 0.)
 
+                assert lib.rd_element_roe_residual(ctypes.byref(element), 1, gamma, -1., 0, cptr(target),
+                                                   ctypes.byref(output), ctypes.byref(adapter_diag)) == 0
+                np.testing.assert_array_equal(common_phi, lda_phi)
+                np.testing.assert_array_equal(common, lda.T)
+                np.testing.assert_array_equal(common_time, f1.T)
+                assert adapter_diag.solve.rank == ld.solve.rank
+                assert adapter_diag.solve_defect == ld.solve_defect
+
                 # Euler flux is quadratic in Z, so face Gaussian quadrature
                 # is an independent exact integral of its divergence.
                 z = np.column_stack([np.sqrt(rho), np.sqrt(rho)[:, None]*velocity, (energy+pressure)/np.sqrt(rho)])
@@ -131,7 +180,19 @@ def main():
             assert lib.rd_simplex_geometry(d, np.zeros_like(x), vol, normal, area) != 0
             assert lib.rd_euler_n_residual(d, u, np.ascontiguousarray(2*normal), area, gamma, -1., 0,
                                            phi, residual, ctypes.byref(diag)) != 0
-        print(f'PASS: 700 production triangle/tetra geometries and N/LDA/F1 residuals; {stagnant} zero-velocity cases (rank 3 in 2D, rank 4 in 3D); {defects}')
+            # Reject mismatched contracts before touching caller buffers.
+            for bad in ('dimension', 'measure', 'scheme', 'N_temporal', 'missing_F1_output'):
+                common.fill(812.); common_phi.fill(812.)
+                element.geometry.ndim = 4 if bad == 'dimension' else d
+                element.geometry.measure = 0. if bad == 'measure' else 1.
+                output.temporal = DoublePtr() if bad == 'missing_F1_output' else cptr(common_time)
+                scheme = 7 if bad == 'scheme' else (1 if bad == 'missing_F1_output' else 0)
+                temporal = cptr(target) if bad in ('N_temporal', 'missing_F1_output') else None
+                assert lib.rd_element_roe_residual(ctypes.byref(element), scheme, gamma, -1., 0, temporal,
+                                                   ctypes.byref(output), ctypes.byref(adapter_diag)) == -1
+                np.testing.assert_array_equal(common, 812.)
+                np.testing.assert_array_equal(common_phi, 812.)
+        print(f'PASS: 700 production triangle/tetra geometries, N/LDA/F1 residuals and exact common-interface layouts; {stagnant} zero-velocity cases (rank 3 in 2D, rank 4 in 3D); {defects}')
 
 
 if __name__ == '__main__':
