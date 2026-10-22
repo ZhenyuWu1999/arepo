@@ -81,6 +81,105 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**Cross-host publication checkpoint (2026-10-22):**
+The Mac integrates published COSMA commit `37f320b` before publishing its
+interface/Blob work. Interface commit `7ab92cd` matches the previously
+validated numerical source. Shared-log COSMA entries 12--17 are retained;
+Mac entries are now 18--25, with links updated. See
+[publication record](dev_log_3D_moving_mesh.md#26-2026-10-22-synchronize-cosma-history-and-publish-the-mac-checkpoint).
+The next proposed COSMA study remains a plan, not an executed campaign.
+
+**Proposed COSMA mesh/resolution study (2026-10-22):**
+Zhenyu requests a future Braspenning comparison, explicit mesh-shape and
+resolution sensitivity, and numerical handoff tables. See
+[entry 25](dev_log_3D_moving_mesh.md#25-2026-10-22-proposed-cosma-blob-comparison-and-mesh-convergence-study)
+and [the staged plan](RD_3D_BLOB_COSMA_PLAN_20261022.md). Reference IC/loading,
+long-box gates and cost calibration precede full jobs. Native N1 and the
+long-box Blob driver still need adaptation; no new run/submission. The plan
+separates method/diagnostic-dependent convergence from universal non-convergence
+and preserves moving-3D/hierarchy/MPI priorities.
+
+**Blob reference setups checked (2026-10-22):**
+Current IC thermal balance is correct and follows the available Morton
+source, including actual Mach 1.506436. SWIFT has a dedicated
+`BlobTest_Braspenning2022` reproduction directory; its generic `BlobTest_3D`
+generator must not substitute for the paper IC. Braspenning differs in
+domain aspect ratio, cloud sampling, mass threshold and clock. Official
+HDF5 access timed out locally, so its cloud counts remain estimates.
+See [comparison](RD_3D_BLOB_REFERENCE_SETUPS_20261022.md) and
+[entry 24](dev_log_3D_moving_mesh.md#24-2026-10-22-compare-the-rd-blob-setup-with-swift-and-both-papers).
+No solver/IC change or new hydrodynamic run; the Morton lifetime gap remains.
+
+**Blob N1 diagnosis (2026-10-20, follow-up):**
+The actual predecessor BLOB function matches all 32768 initial states; its
+spatial N kernel matches the port on all 221713 initial tetrahedra to
+1.790e-12 scaled residual difference. A four-step native 32³ control matches
+independent Heun at roundoff. No new spatial viscosity or update multiplier
+error is identified. P1-Z fails to preserve general isobaric contacts, but
+the predecessor shares this response. The published lifetime gap remains
+unexplained; do not equate it with demonstrated extra port dissipation.
+Fig. 20 curve shapes are close after an empirical time stretch 2.867, which
+is not a validated unit conversion. Braspenning uses different cloud sampling,
+threshold and crushing-time conventions. See [entry 22](dev_log_3D_moving_mesh.md#22-2026-10-20-blob-n1-implementation-and-initial-condition-diagnosis)
+and [diagnosis](RD_3D_BLOB_N1_DIAGNOSIS_20261020.md). No production solver edit.
+
+**COSMA Blob results analysed on the Mac (2026-10-20):**
+Downloaded 32³/eight-rank N equal/hierarchy runs both complete 1.5 t_cr.
+Independent saved-state conservation is <=8.430e-14/3.681e-14, with positive
+states and fixed coordinates/median duals. At the exact endpoint, the relative
+volume-weighted density L1 difference is 8.265e-6. Recorded wall times are
+5.178/2.832 h (observed ratio 1.828, not MPI scaling). However, threshold cloud
+mass halves near .404 t_cr and reaches zero between 1 and 1.05 t_cr, much
+earlier than the intended Morton N1 comparison. This is current N/lumped RK2
+at very low cloud resolution (140 nodes), not a quantitative N1 reproduction
+or physical convergence result. Both LDA/F1 runs fail with negative pressure
+at ID14151 near .02142 t_cr, including equal steps below the last reported
+CFL limit. Source/build file hashes match base `35ecccd16083`; these runs
+predate the uncommitted shared-interface changes below. See
+[entry 21](dev_log_3D_moving_mesh.md#21-2026-10-20-independent-analysis-of-the-downloaded-cosma-blob-results)
+and the [analysis report](RD_3D_BLOB_COSMA_ANALYSIS_20261020.md).
+Raw downloads stay outside Git; compact figures/data and a reproducible
+snapshot-analysis script are retained in the repository. No cluster query,
+new simulation, solver change or thesis edit accompanies this analysis.
+
+**Shared element interfaces (2026-10-19):**
+Zhenyu authorized the first consolidation from shared-log entry 19. The
+`rd_element.h` geometry/state/output/stage-flux contracts now connect native
+2D/3D evaluation with a common local/remote `rd_deposit_element()` ledger
+boundary. A static P1-Z/Roe adapter preserves the pure Euler kernels and
+converts vertex-first results to component-first stage layout. Legacy 2D
+Gauss/ALE/B/HLLC numerical assembly remains explicit. Full `make check_rd`
+passes; 62 frozen before/after native pairs (12 2D, 50 3D), 200 snapshot pairs
+and 1726 particle arrays match byte-for-byte after ID sorting, with identical
+logged timelines. The 3D hierarchy/MPI suite retains its previous bounds.
+See [interface report](RD_ELEMENT_INTERFACE_20261019.md) and
+[entry 20](dev_log_3D_moving_mesh.md#20-2026-10-19-first-native-integration-of-shared-element-interfaces).
+This is an interface change, not a new residual/time method or moving-3D
+implementation. The older moving HLLC Sedov control's 3.095e-3 total drift
+is reproduced unchanged and is not reclassified as a conservative blast pass.
+
+**Final-thesis supplement and COSMA update (2026-10-19):**
+Zhenyu reports that COSMA Blob tests for N and LDA have been submitted; no
+results are available yet. This is a user-reported status, not a live scheduler
+inspection. Job IDs, actual resolution/ranks/time integration, source revision
+and completion status still need to accompany the results. Do not infer a
+completed Blob validation from submission or from the local N-only pilot.
+
+At the user's request, prepare English mathematical review documents for the
+final thesis under the Mac path
+`/Users/zhenyuwu/Desktop/MyThesis/supplementary_doc/`. The first is
+`static_3d_rd.tex` (compiled review PDF alongside), covering tetra geometry,
+Roe N/LDA, temporal mass, equal-step conservation, the experimental static
+hierarchy, CFL and MPI. It tracks source `35ecccd16083` and follows the thesis
+style. This is a separate draft awaiting Zhenyu's review; it does not authorize
+edits to existing thesis chapters or establish new numerical results. See
+[shared-log entry 18](dev_log_3D_moving_mesh.md#18-2026-10-19-static-3d-mathematical-supplement-for-final-thesis-review).
+The supplementary directory is outside this repository and is not transferred
+to clusters by Git. Future mathematical revisions and numerical evidence
+should be reconciled before any explicitly requested thesis integration.
+
+The following COSMA-side handoff records are retained with their original dates; later Mac analyses and proposals above supersede their transfer/pending-status statements where applicable.
+
 **Portable Blob analysis packages (2026-10-20):**
 [Shared-log entry 16](dev_log_3D_moving_mesh.md#16-2026-10-20-standalone-initializationanalysis-scripts-and-compact-mac-bundles)
 records two standalone NumPy/h5py scripts and validated compact Mac downloads:

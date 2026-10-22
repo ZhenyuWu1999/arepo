@@ -52,6 +52,14 @@ not automatically turn a proposed algorithm into a validated result.
   hierarchy in its concise ongoing-work discussion, with detailed alternatives
   in development notes. A solver review or baseline discussion does not itself
   authorize editing the thesis.
+- Prepare final-thesis mathematical supplements in the user-authorized Mac
+  directory `/Users/zhenyuwu/Desktop/MyThesis/supplementary_doc/`; the static
+  3D RD draft is the first review document. Write in English and follow the
+  existing thesis's notation and LaTeX style. Keep these drafts separate from
+  the main thesis until Zhenyu reviews them and explicitly requests integration.
+  Record revisions, source correspondence and pending numerical evidence in
+  the shared 3D log; other hosts should use that record rather than assuming
+  this Mac-only directory is synchronized through the AREPO repository.
 - State what each test establishes and its limits. Conservation, uniform-state
   preservation, positivity, convergence order, MPI agreement and efficiency are
   separate properties. Preserve failed attempts and distinguish setup failures
@@ -79,6 +87,11 @@ not automatically turn a proposed algorithm into a validated result.
 - Keep experimental configurations explicit; do not silently replace the
   default Config or merge unrelated research code. Verify the current branch
   rather than relying on a historical branch name in a report.
+- Use the shared element contracts in `src/hydro/rd_element.h` when extending
+  RD backends. Keep geometry/residual/mass policies explicit and timestep
+  weights, ownership and MPI ledger updates outside the pure spatial kernel.
+  See [the interface record](dev_log/RD_ELEMENT_INTERFACE_20261019.md) for
+  current adapters and the required distinction between interface and method.
 - Follow the commit-authorship convention in `dev_log/context.md`: credit
   Zhenyu Wu and the contributing agent/model per commit, with a co-author
   trailer. Do not change repository-wide identity or include another author's

@@ -1,0 +1,161 @@
+{
+  "random": {
+    "count": 1200,
+    "seconds": 0.9510069999960251,
+    "max_nodal_difference_scaled": 3.764954450697867e-14,
+    "difference_quantiles": [
+      2.1965814692032223e-17,
+      8.354386717827875e-16,
+      2.6132089707457835e-15,
+      7.452823604791002e-15,
+      3.764954450697867e-14
+    ],
+    "max_total_difference_scaled": 1.3282350576958066e-14,
+    "max_geometry_volume_defect": 1.7763568394002505e-15,
+    "max_MAG_over_two_area_defect": 4.440892098500626e-16,
+    "max_normal_difference": 4.440892098500626e-16,
+    "current_svd_count": 0,
+    "worst_index": 900,
+    "input_sha256": "3d791bb6b3633fd326a0e487ddd4bd016c0c03530e0d23b86be065139b084c2a",
+    "output_sha256": "0a965e92959d3178da677b7e87e90574ff98b7aa77480c00512c059e309c2cba",
+    "command": [
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/kernel_probe",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/random.input.bin",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/random.output.bin"
+    ]
+  },
+  "mesh": {
+    "vertices": 32768,
+    "tetrahedra": 221713,
+    "padding": 1.5,
+    "volume": 1000.0,
+    "dual_max_relative_error": 2.6645352591003757e-15,
+    "triangulation_seconds": 2.4719588339794427
+  },
+  "initial_blob": {
+    "count": 1972,
+    "seconds": 0.05868258298141882,
+    "max_nodal_difference_scaled": 4.397786583548358e-13,
+    "difference_quantiles": [
+      3.624001077619097e-17,
+      5.545542335065433e-15,
+      6.024085382629214e-14,
+      1.3431750792653342e-13,
+      4.397786583548358e-13
+    ],
+    "max_total_difference_scaled": 1.95539932442687e-13,
+    "max_geometry_volume_defect": 4.6629367034256575e-15,
+    "max_MAG_over_two_area_defect": 4.440892098500626e-16,
+    "max_normal_difference": 7.771561172376096e-16,
+    "current_svd_count": 0,
+    "worst_index": 1349,
+    "input_sha256": "ec622a342abbe905547c5b07873c88c32f56569d90f358551e46ee8e1c70d26f",
+    "output_sha256": "e728b38e2f669f2500120b54b66a3b145b75bf92ffe72d19e127d39d491200f4",
+    "command": [
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/kernel_probe",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/initial_blob.input.bin",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/initial_blob.output.bin"
+    ],
+    "mixed_tetra_count": 972
+  },
+  "blob_snapshot_001": {
+    "count": 1272,
+    "seconds": 0.03630195802543312,
+    "max_nodal_difference_scaled": 6.036538072440588e-13,
+    "difference_quantiles": [
+      1.1425527868130816e-16,
+      1.805239513890124e-15,
+      3.863205766904967e-14,
+      1.0721915913926214e-13,
+      6.036538072440588e-13
+    ],
+    "max_total_difference_scaled": 1.147964890407744e-13,
+    "max_geometry_volume_defect": 1.7763568394002505e-15,
+    "max_MAG_over_two_area_defect": 4.440892098500626e-16,
+    "max_normal_difference": 2.220446049250313e-16,
+    "current_svd_count": 0,
+    "worst_index": 984,
+    "input_sha256": "653f3c1dda120114f4948ef603f8c8f85c956e94f32f029cd168390d53423fb6",
+    "output_sha256": "fe089800d1008c1a52202667fc8c2fce25d01be904f4c9c69e7182ffe1c1c3fc",
+    "command": [
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/kernel_probe",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_001.input.bin",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_001.output.bin"
+    ]
+  },
+  "blob_snapshot_005": {
+    "count": 1272,
+    "seconds": 0.03554787504253909,
+    "max_nodal_difference_scaled": 5.266256181135631e-13,
+    "difference_quantiles": [
+      2.220446049250313e-16,
+      4.354744010271038e-15,
+      3.5518940689750495e-14,
+      1.1414043321611436e-13,
+      5.266256181135631e-13
+    ],
+    "max_total_difference_scaled": 1.0602629885170245e-13,
+    "max_geometry_volume_defect": 2.220446049250313e-15,
+    "max_MAG_over_two_area_defect": 4.440892098500626e-16,
+    "max_normal_difference": 3.3306690738754696e-16,
+    "current_svd_count": 0,
+    "worst_index": 1257,
+    "input_sha256": "ef0bdf08f757216ce74167d5c2493cb1c028c0dea540b01237f4a76c2af6d8b0",
+    "output_sha256": "55406c209bbe55bb24b14b906743e898627487e39bc15c3270d62f54da0d30ab",
+    "command": [
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/kernel_probe",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_005.input.bin",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_005.output.bin"
+    ]
+  },
+  "blob_snapshot_010": {
+    "count": 1272,
+    "seconds": 0.034972375025972724,
+    "max_nodal_difference_scaled": 3.0020312001251617e-13,
+    "difference_quantiles": [
+      9.020562075079397e-17,
+      7.41073868937292e-15,
+      3.935877221426038e-14,
+      1.3228588797292687e-13,
+      3.0020312001251617e-13
+    ],
+    "max_total_difference_scaled": 2.252920072720599e-13,
+    "max_geometry_volume_defect": 1.7763568394002505e-15,
+    "max_MAG_over_two_area_defect": 4.440892098500626e-16,
+    "max_normal_difference": 2.220446049250313e-16,
+    "current_svd_count": 0,
+    "worst_index": 1076,
+    "input_sha256": "a9b7dd290502f2dbbf96583940738f9a9d2a57c1b93f319f94fdbab07dc0120f",
+    "output_sha256": "4809dd147919d7d8ec6b2792ba918b71ca33ff90dd0d645ad9fb10863db9fd65",
+    "command": [
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/kernel_probe",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_010.input.bin",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_010.output.bin"
+    ]
+  },
+  "blob_snapshot_020": {
+    "count": 1272,
+    "seconds": 0.0291957079898566,
+    "max_nodal_difference_scaled": 3.0619842002332464e-13,
+    "difference_quantiles": [
+      3.6952474040992617e-16,
+      1.7647228862378986e-14,
+      5.3179682879545e-14,
+      1.2317164504584175e-13,
+      3.0619842002332464e-13
+    ],
+    "max_total_difference_scaled": 1.7286172493413687e-13,
+    "max_geometry_volume_defect": 1.7763568394002505e-15,
+    "max_MAG_over_two_area_defect": 4.440892098500626e-16,
+    "max_normal_difference": 2.220446049250313e-16,
+    "current_svd_count": 0,
+    "worst_index": 1138,
+    "input_sha256": "5a94648e08a618bbee681adc1277c581f11b61681a650201563357a21bfc13af",
+    "output_sha256": "6b115a4b56fe147a6bb4e4364150cc62b6879b9f307518f976cf5c3b088946aa",
+    "command": [
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/kernel_probe",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_020.input.bin",
+      "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/blob_snapshot_020.output.bin"
+    ]
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "analysis_directory": "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_cosma_analysis_20261020_v1/analysis_v4",
+  "accepted_exit_status": 0,
+  "script": "/Users/zhenyuwu/arepo_rd/arepo/tests/rd/analyse_3d_blob_bundle.py",
+  "script_sha256": "88d7a578c43e903da487823bb6a014f95b4041978fc9f1462a2f86c73e1c9554",
+  "python": "3.10.16 (main, Dec 11 2024, 10:22:29) [Clang 14.0.6 ]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "packages": {
+    "numpy": "2.0.0",
+    "scipy": "1.15.3",
+    "h5py": "3.14.0",
+    "matplotlib": "3.10.0"
+  },
+  "thread_limits": {
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1
+  },
+  "visual_inspection_passed": [
+    "cloud_mass.png",
+    "diagnostics.png",
+    "density_evolution.png",
+    "density_planes.png",
+    "flow_structure.png"
+  ],
+  "source_import": {
+    "blob3d_mac_analysis_20261020_v1.tar.gz": {
+      "sha256": "26719c7efc00e1ae518121c908007299d9ea4f143159469146956cf7523f7256",
+      "members": 194,
+      "validated_files": 168,
+      "extracted_to": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1"
+    },
+    "blob3d_scripts_20261020_v1.tar.gz": {
+      "sha256": "a59c31c578eda0d33cf282de9f88493ade940468c3cdcddecc3505295df4335d",
+      "members": 116,
+      "validated_files": 96,
+      "extracted_to": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_scripts_20261020_v1"
+    }
+  },
+  "files": {
+    "LDA_equal_np8.csv": "dc981890ca10f382e79274afe16c34eb7b3292fa121806c21dfd70fd9139bbfc",
+    "LDA_hier_np8.csv": "dc981890ca10f382e79274afe16c34eb7b3292fa121806c21dfd70fd9139bbfc",
+    "N_equal_np8.csv": "c29f4b7711db595a3908cb6bee300433a5bd6671d0018f85cdc5942c496cb431",
+    "N_hier_np8.csv": "6784b5fde7e3af941db6d7ae0ded4f644a07a83e73a2b2cd971daf42213a080c",
+    "cloud_mass.png": "5e53dfd56247280e70d545a3f2362338afa21e35814e0be2221fcfea9daf5ab7",
+    "cloud_mass.svg": "7ff7661d442c8cfde6cbf62fddb829dba07d68fb662d01e55283bf28cb7cc75c",
+    "density_evolution.png": "51e68d1106f3d7942de444a523b453ffb1e10ed7316cf400b82e9b72df5229b6",
+    "density_evolution.svg": "c3991397dc366d63f1b0053009a4b06913adcc74894a435e2e33eea17c733170",
+    "density_planes.png": "543e80e64ea71fc7530f7f57c2d9715b0bb64a1dfc4aa7ceba65173fdeca533f",
+    "density_planes.svg": "5ce06cb60ed4420831bbdfe7d0a6a944ba7d00acee780f2da21d118b11eabfe9",
+    "diagnostics.png": "d208adb973980f0897b99a79a0ebd5cae633abe24c0342bf35c862958e7f4f31",
+    "diagnostics.svg": "8fd58bc9bc45ffa0831faf81bb3acfa2dd5914954a5aaa2377f6e9401cc09258",
+    "exact_common_times.csv": "2b08920b1f2f4234cac3ba6d1773534481f264b42e9a47ad1e0affe06d89b523",
+    "flow_structure.png": "c57a712923a32d2e79ca8a020139499dacea80c8592de7813e19018716337606",
+    "flow_structure.svg": "558360464acb5224c948ad504dc72eb8c0d34b1e8ec80cd7451f56fab869cd3e",
+    "independent_analysis.json": "84fe3577538745d1815698e9cf7f2b6cffabc84811e0e8148b299c172946059f",
+    "time_interpolated_comparison.csv": "436fae514a0ae0b7bf20394b9a32a7b453404bcd34fc3ced1870430c306efad6"
+  },
+  "analysis_attempts": {
+    "v1": "log-parser comma failure; no hydrodynamics",
+    "v2": "plotting API argument failure after numerical analysis; no hydrodynamics",
+    "v3": "completed intermediate figures",
+    "v4": "accepted analysis and inspected final figures"
+  }
+}

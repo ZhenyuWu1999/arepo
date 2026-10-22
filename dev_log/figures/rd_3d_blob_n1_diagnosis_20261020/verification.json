@@ -1,0 +1,49 @@
+{
+  "accepted_archive": "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1",
+  "portable_reproduction": "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction",
+  "portable_numerical_results_exactly_match_original_probe": true,
+  "source_script_hashes": {
+    "full_mesh_audit.py": "83c38255b5cd8c139076a9efcff9638b8a4a5a8094c19950b0c0c12e5243aa2e",
+    "prepare_sources.py": "4e96eea0e363971cef2ee19b0a97bd2b6af7a9941821e6aacfe88540a1e75cba",
+    "plot_diagnosis.py": "8e1c6dadcb6a98e78cd18d140f5b3bec312b0dda2f745faf7cce176254cf1cf5",
+    "replay_updates.py": "8681182811281ca451d5402eda48e0732d31a453775b807bfd61cf362a572747",
+    "kernel_probe.cpp": "472bd801002be019c70d7479c0c2295a2496ec9a853ce08feb3b4e407e03bb00",
+    "README.md": "16a4d8ac47fa7a43e927f8b74de08f3da9db751c565bab8dc0a8b8985926d5e3",
+    "ic_probe.cpp": "faec32390dc04409fc5e66a25759858b1fe03552eac52db414e6cba056cc23a5",
+    "mesh_rhs.c": "dfe27c54a7b5e4c74ef880eb608f079e2980d50f940ea0d97e993c3bb9beb403",
+    "contact_audit.py": "77cfcb7d6f18e4ddcd9a64c1eae77cd7b849b0bc4f8f9ba6f3da40842c18a0c9",
+    "run_kernel_audit.py": "b8d7e8d28da1f6908ab1e03296b37419c5bfdba95d232267d7572c68a17997fd",
+    "compare_published_curve.py": "302d222658b1fad6e2127c733cac59bf01fcf4e3c6a26122cd184aae8b745446"
+  },
+  "files": {
+    "N_equal_np8_thresholds.csv": "b004b2776baba69947df29ad8e7743365131a1172eaa4af294dc2ecc443f8338",
+    "early_2d_sections.png": "3058a6c8894893ab74137352584a951e888eb7892a8197395b7d36cea2520545",
+    "longitudinal_profiles.png": "9987d0f242e306561ebab08740cbbb27c79935604ceb0fe78ebbcd92d9665d54",
+    "update_audit.json": "0721c2b9be3edb9d1cbbe6793cd271d85c0e260b11913e72c819473882aaa324",
+    "threshold_sensitivity.png": "28734d4f7c17aa3da857d41d856990bba6d8fbf26d86f4fb344829d4f7caaff7",
+    "threshold_sensitivity.svg": "39a7e7a4aa875dd4399731ae026a7d97344e2292d2a17110c0d2c14b1f957cd2",
+    "longitudinal_profiles.svg": "b0ac639215a79dc53d5f0f32ebb1456b5e68a3c0b78b11511c1c7799e3f587cc",
+    "morton_fig20_N32_vector_trace.csv": "a0c92354f57f47f22cb4caa3a04f79eaf30172de628d08d5d817560c50066a65",
+    "early_2d_sections.svg": "e066ab423561697f698ab98c4ee25713e5bc30d4a03860906994e587b13ea89c",
+    "published_curve_comparison.json": "ab3c46f64e28df48827309fc4269169193aa0a275e35681005b95fd8369a1fe4",
+    "N_hier_np8_thresholds.csv": "476aba44041da78cd2389e3e753833c4d3634f3ed1d9ce21111bbff2f53516bc",
+    "prepared_sources.json": "df7b8310c3698ca0b70d22cda2913ce7c201ff42092bceefabad35181841b36c",
+    "contact_audit.json": "710f5d4f0ca8a06b2feec9bce504d36418579f155e9793f605ad390053bb4484",
+    "kernel_audit.json": "4c489f122e1182bc4f9845baea61c7c7e44a961f4115dc522b2d543570c7bb25",
+    "published_curve_comparison.png": "817f3c812164dea74ac207dc6b64845ae55f11b5eb7f6bf63e8f1a24fff787f0",
+    "diagnostic_weight_controls.json": "043eb43befb876411dc4c661bbc288a09788794efc41a0d9c1f9279c9c4f7da3",
+    "published_curve_comparison.svg": "f7711b104c9742cf3278663d1451662648946e2f6e4998e1a03c3fe8710747a4",
+    "diagnostic_summary.json": "4874cea0572c39cad65885cfb0d5210ac2629f6f0a4db006554b89dae033ad9b",
+    "full_initial_audit.json": "3cd9134304fd48ce6921e6895e4d19c1752d6c903972cf4ca3698b9fb1187772",
+    "native_completion.json": "af198bc9039758cff46d2daa27f849d40504dad7db8d163befee874ac09879d5",
+    "native_manifest.json": "313521349f13902ca0ab43c716a3529cf69fb17c0ec5746f4190abe9869e3b3f"
+  },
+  "python": "3.10.16 (main, Dec 11 2024, 10:22:29) [Clang 14.0.6 ]",
+  "inspected_figures": [
+    "early_2d_sections.png",
+    "longitudinal_profiles.png",
+    "threshold_sensitivity.png",
+    "published_curve_comparison.png"
+  ],
+  "scope": "Source/IC/kernel/contact/short-step diagnosis; no full N1 lifetime, production change or cluster run."
+}

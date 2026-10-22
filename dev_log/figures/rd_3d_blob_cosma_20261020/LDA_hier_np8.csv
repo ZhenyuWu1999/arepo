@@ -1,0 +1,2 @@
+snapshot,time,tau,cloud_mass,cloud_nodes,dense_mass,cold_mass,rho_min,rho_max,p_min,p_max,u_min,coverage,dual_max_relative_change,eos_relative_defect,cloud_vx,cloud_x,drift_mass,drift_px,drift_py,drift_pz,drift_energy,cloud_fraction
+snap_000.hdf5,0.0,0.0,420.9728057637894,140,420.9728057637894,420.9728057637894,9.999999999999998,100.00000000000001,99.99999999999993,100.00000000000009,1.4999999999999998,0.0,0.0,0.0,1.0000000000000002e-08,2.491380451818355,0.0,0.0,0.0,0.0,0.0,1.0

@@ -1,0 +1,239 @@
+{
+  "summary": {
+    "median_mass": {
+      "initial": 420.9728057637893,
+      "half_linear_tau": 0.40420580444042
+    },
+    "voronoi_mass": {
+      "initial": 425.9142138574032,
+      "half_linear_tau": 0.4011610745748832
+    },
+    "equal_volume_mass": {
+      "initial": 427.24609375,
+      "half_linear_tau": 0.38984821318733726
+    },
+    "node_count": {
+      "initial": 140,
+      "half_linear_tau": 0.42188000679016113
+    }
+  },
+  "rows": [
+    {
+      "tau": 0.0,
+      "median_mass": 420.9728057637893,
+      "voronoi_mass": 425.9142138574032,
+      "equal_volume_mass": 427.24609375,
+      "node_count": 140
+    },
+    {
+      "tau": 0.05001068115234375,
+      "median_mass": 406.07273822890687,
+      "voronoi_mass": 411.3136606290034,
+      "equal_volume_mass": 412.96324083998803,
+      "node_count": 140
+    },
+    {
+      "tau": 0.10000991821289062,
+      "median_mass": 379.3288270304673,
+      "voronoi_mass": 384.4973266291486,
+      "equal_volume_mass": 384.27338904546804,
+      "node_count": 133
+    },
+    {
+      "tau": 0.1500091552734375,
+      "median_mass": 344.614585801432,
+      "voronoi_mass": 349.79782410419966,
+      "equal_volume_mass": 349.7940307303556,
+      "node_count": 121
+    },
+    {
+      "tau": 0.20000839233398438,
+      "median_mass": 315.3775178027395,
+      "voronoi_mass": 319.5230828812094,
+      "equal_volume_mass": 319.3482849230116,
+      "node_count": 111
+    },
+    {
+      "tau": 0.25000762939453125,
+      "median_mass": 284.4091343536448,
+      "voronoi_mass": 286.8401502905148,
+      "equal_volume_mass": 286.63608465859744,
+      "node_count": 100
+    },
+    {
+      "tau": 0.3000068664550781,
+      "median_mass": 257.22761392938617,
+      "voronoi_mass": 259.0283984743465,
+      "equal_volume_mass": 257.9348142224391,
+      "node_count": 91
+    },
+    {
+      "tau": 0.350006103515625,
+      "median_mass": 241.91953737414616,
+      "voronoi_mass": 243.84541195824946,
+      "equal_volume_mass": 240.3923617575163,
+      "node_count": 88
+    },
+    {
+      "tau": 0.4000053405761719,
+      "median_mass": 213.6374330213437,
+      "voronoi_mass": 213.81204902848606,
+      "equal_volume_mass": 206.79862558772584,
+      "node_count": 77
+    },
+    {
+      "tau": 0.45000457763671875,
+      "median_mass": 176.12988432697068,
+      "voronoi_mass": 176.82563799633706,
+      "equal_volume_mass": 165.1794765103286,
+      "node_count": 61
+    },
+    {
+      "tau": 0.5000038146972656,
+      "median_mass": 158.4562684307032,
+      "voronoi_mass": 160.0461739949028,
+      "equal_volume_mass": 146.65113646177156,
+      "node_count": 56
+    },
+    {
+      "tau": 0.5500030517578125,
+      "median_mass": 139.18070797136068,
+      "voronoi_mass": 141.13250872373504,
+      "equal_volume_mass": 130.71627354326338,
+      "node_count": 52
+    },
+    {
+      "tau": 0.6000022888183594,
+      "median_mass": 117.63210518359931,
+      "voronoi_mass": 118.34420064123906,
+      "equal_volume_mass": 108.1195668867395,
+      "node_count": 44
+    },
+    {
+      "tau": 0.6500015258789062,
+      "median_mass": 100.94535697700684,
+      "voronoi_mass": 102.17299346114059,
+      "equal_volume_mass": 90.32600113265084,
+      "node_count": 38
+    },
+    {
+      "tau": 0.7000007629394531,
+      "median_mass": 80.64907068295352,
+      "voronoi_mass": 82.9656702025331,
+      "equal_volume_mass": 73.53102342824117,
+      "node_count": 32
+    },
+    {
+      "tau": 0.75,
+      "median_mass": 61.148205451612235,
+      "voronoi_mass": 61.22948776028671,
+      "equal_volume_mass": 52.2345872453549,
+      "node_count": 23
+    },
+    {
+      "tau": 0.8000106811523438,
+      "median_mass": 48.93081325420845,
+      "voronoi_mass": 50.083152366484605,
+      "equal_volume_mass": 43.44713669452719,
+      "node_count": 20
+    },
+    {
+      "tau": 0.8500099182128906,
+      "median_mass": 31.178561409006583,
+      "voronoi_mass": 33.157923589673686,
+      "equal_volume_mass": 31.549412729819142,
+      "node_count": 15
+    },
+    {
+      "tau": 0.9000091552734375,
+      "median_mass": 13.827610498407727,
+      "voronoi_mass": 15.644257308945042,
+      "equal_volume_mass": 14.583032855316533,
+      "node_count": 7
+    },
+    {
+      "tau": 0.9500083923339844,
+      "median_mass": 7.044196624926541,
+      "voronoi_mass": 7.831995886061458,
+      "equal_volume_mass": 8.031557102096695,
+      "node_count": 4
+    },
+    {
+      "tau": 1.0000076293945312,
+      "median_mass": 1.3127793729299144,
+      "voronoi_mass": 1.6773886145972683,
+      "equal_volume_mass": 1.988492693432931,
+      "node_count": 1
+    },
+    {
+      "tau": 1.0500068664550781,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.100006103515625,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.1500053405761719,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.2000045776367188,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.2500038146972656,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.3000030517578125,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.3500022888183594,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.4000015258789062,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.4500007629394531,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    },
+    {
+      "tau": 1.5,
+      "median_mass": 0.0,
+      "voronoi_mass": 0.0,
+      "equal_volume_mass": 0.0,
+      "node_count": 0
+    }
+  ]
+}

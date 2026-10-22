@@ -1,0 +1,18 @@
+{
+  "count": 221713,
+  "returncode": 0,
+  "seconds": 1.5956658329814672,
+  "max_scaled_nodal_difference": 1.7898306113452827e-12,
+  "worst_index": 128331,
+  "max_volume_defect": 3.064215547965432e-14,
+  "max_MAG_defect": 1.5543122344752192e-15,
+  "max_normal_difference": 1.6375789613221059e-15,
+  "current_svd_count": 0,
+  "input_sha256": "34ae8af7ca7b90d7767771c0e2a5c40ce246f18e750be0cfbef0222926de02fc",
+  "output_sha256": "0a76c55807ad682b87dd8865c24852aaadd9cee293803b0608b0180bea4d79af",
+  "command": [
+    "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/kernel_probe",
+    "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/full_initial.input.bin",
+    "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/portable_reproduction/full_initial.output.bin"
+  ]
+}

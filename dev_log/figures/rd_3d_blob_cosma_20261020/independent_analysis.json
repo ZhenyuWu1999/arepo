@@ -1,0 +1,622 @@
+{
+  "tcr": 1.0283829789165462,
+  "tkh": 1.645412766266474,
+  "setup": {
+    "box": 10,
+    "seed": 68315,
+    "initial_cloud_nodes": 140,
+    "nominal_diameter_in_mean_spacings": 6.4,
+    "wind": 6.1499999999999995,
+    "wind_mach": 1.5064361918116542,
+    "initial_cloud_mass": 420.9728057637894,
+    "analytic_cloud_mass": 418.8790204786391,
+    "initial_density_excess_mass": 378.8755251874104,
+    "dual_to_voronoi_ratio_percentiles": [
+      0.1322034356158794,
+      0.5898782525015707,
+      0.9557827855005435,
+      1.3101299120739034,
+      2.553879328849382
+    ]
+  },
+  "source_audit": {
+    "N": {
+      "base_commit": "35ecccd160834e45c921d77d9761d015fc4306d3",
+      "frozen_source_tar_sha256": "a64002b924c6c3166c94e655d61424a8d8d5bda2dad7293b4e74dff16f221afa",
+      "source_build_files_checked": 170,
+      "differences_from_base_commit": []
+    },
+    "LDA": {
+      "base_commit": "35ecccd160834e45c921d77d9761d015fc4306d3",
+      "frozen_source_tar_sha256": "7b8c949183ef4ef3c9d9bad00c0f4a572f0489bbc1958f788bbd9d1a105950a9",
+      "source_build_files_checked": 170,
+      "differences_from_base_commit": []
+    }
+  },
+  "cases": {
+    "N_equal_np8": {
+      "case": "N_equal_np8",
+      "nodes": 32768,
+      "snapshots": 31,
+      "returncode": 0,
+      "job": "12187329",
+      "host": "gc001.pri.cosma.local",
+      "wall_seconds": 18639.878392606042,
+      "end_tau": 1.5,
+      "initial_totals": [
+        10378.8755251874,
+        61241.101728665315,
+        0.001037887552518731,
+        0.001037887552518731,
+        338316.3878027026
+      ],
+      "normalization": [
+        10378.8755251874,
+        61241.101728665315,
+        10378.8755251874,
+        10378.8755251874,
+        338316.3878027026
+      ],
+      "max_abs_normalized_drift": {
+        "mass": 8.429948899399284e-14,
+        "px": 7.603737917238934e-14,
+        "py": 1.608308641335473e-16,
+        "pz": 1.450357533770664e-16,
+        "energy": 7.260550712609323e-14
+      },
+      "all_saved_minimum": {
+        "rho": 4.272875714776133,
+        "pressure": 30.976455168730794,
+        "specific_internal_energy": 0.4529744220207583
+      },
+      "max_coverage": 0.0,
+      "max_dual_change": 8.881784197001252e-16,
+      "max_eos_defect": 0.0,
+      "dense_mass_equals_cloud_mass": true,
+      "initial_cloud_mass": 420.9728057637894,
+      "final_cloud_fraction": 0.0,
+      "final_rho_max": 32.693901669503354,
+      "thresholds": {
+        "half": {
+          "bracket_tau": [
+            0.4000053405761719,
+            0.45000457763671875
+          ],
+          "linear_scalar_curve_estimate_tau": 0.40420580444042
+        },
+        "ten_percent": {
+          "bracket_tau": [
+            0.8000106811523438,
+            0.8500099182128906
+          ],
+          "linear_scalar_curve_estimate_tau": 0.8192573335375812
+        },
+        "one_percent": {
+          "bracket_tau": [
+            0.9500083923339844,
+            1.0000076293945312
+          ],
+          "linear_scalar_curve_estimate_tau": 0.9747354815695767
+        },
+        "zero": {
+          "bracket_tau": [
+            1.0000076293945312,
+            1.0500068664550781
+          ]
+        }
+      },
+      "provided_native_log_aggregate": {
+        "case": "full_blob32_N_equal_np8",
+        "seconds": 18639.878392606042,
+        "end": 1.5425744683748193,
+        "conservation": 8.429948899399284e-14,
+        "coverage": 0.0,
+        "snapshots": 31,
+        "stage1_records": 131072,
+        "max_bin_ratio": 1,
+        "rho_min": 8.837119545673017,
+        "p_min": 71.09158543481283,
+        "cloud_mass_fraction": 0.0,
+        "dt_min": 1.1768909212950263e-05,
+        "dt_max": 1.1768909213172307e-05
+      }
+    },
+    "N_hier_np8": {
+      "case": "N_hier_np8",
+      "nodes": 32768,
+      "snapshots": 31,
+      "returncode": 0,
+      "job": "12187330",
+      "host": "gc001.pri.cosma.local",
+      "wall_seconds": 10194.703132810071,
+      "end_tau": 1.5,
+      "initial_totals": [
+        10378.8755251874,
+        61241.101728665315,
+        0.001037887552518731,
+        0.001037887552518731,
+        338316.3878027026
+      ],
+      "normalization": [
+        10378.8755251874,
+        61241.101728665315,
+        10378.8755251874,
+        10378.8755251874,
+        338316.3878027026
+      ],
+      "max_abs_normalized_drift": {
+        "mass": 3.680435070423804e-14,
+        "px": 2.780116675990485e-14,
+        "py": 1.4030726316457102e-16,
+        "pz": 1.6359005020845467e-16,
+        "energy": 3.0797122690925805e-14
+      },
+      "all_saved_minimum": {
+        "rho": 4.264266960606589,
+        "pressure": 30.94698094912171,
+        "specific_internal_energy": 0.45245876920729877
+      },
+      "max_coverage": 0.0,
+      "max_dual_change": 2.220446049250313e-16,
+      "max_eos_defect": 0.0,
+      "dense_mass_equals_cloud_mass": true,
+      "initial_cloud_mass": 420.9728057637894,
+      "final_cloud_fraction": 0.0,
+      "final_rho_max": 32.70101141934953,
+      "thresholds": {
+        "half": {
+          "bracket_tau": [
+            0.40008544921875,
+            0.4500732421875
+          ],
+          "linear_scalar_curve_estimate_tau": 0.40428374537125955
+        },
+        "ten_percent": {
+          "bracket_tau": [
+            0.8001708984375,
+            0.85015869140625
+          ],
+          "linear_scalar_curve_estimate_tau": 0.8194015355670667
+        },
+        "one_percent": {
+          "bracket_tau": [
+            0.95013427734375,
+            1.0001220703125
+          ],
+          "linear_scalar_curve_estimate_tau": 0.9748546594247959
+        },
+        "zero": {
+          "bracket_tau": [
+            1.0001220703125,
+            1.05010986328125
+          ]
+        }
+      },
+      "provided_native_log_aggregate": {
+        "case": "full_blob32_N_hier_np8",
+        "seconds": 10194.703132810071,
+        "end": 1.5425744683748193,
+        "conservation": 3.680435070423804e-14,
+        "coverage": 0.0,
+        "snapshots": 31,
+        "stage1_records": 131072,
+        "max_bin_ratio": 8,
+        "rho_min": 8.837025874582254,
+        "p_min": 71.08843823661448,
+        "cloud_mass_fraction": 0.0
+      }
+    },
+    "LDA_equal_np8": {
+      "case": "LDA_equal_np8",
+      "nodes": 32768,
+      "snapshots": 1,
+      "returncode": 1,
+      "job": "12187332",
+      "host": "gc001.pri.cosma.local",
+      "wall_seconds": 379.6630986679811,
+      "end_tau": 0.0,
+      "initial_totals": [
+        10378.8755251874,
+        61241.101728665315,
+        0.001037887552518731,
+        0.001037887552518731,
+        338316.3878027026
+      ],
+      "normalization": [
+        10378.8755251874,
+        61241.101728665315,
+        10378.8755251874,
+        10378.8755251874,
+        338316.3878027026
+      ],
+      "max_abs_normalized_drift": {
+        "mass": 0.0,
+        "px": 0.0,
+        "py": 0.0,
+        "pz": 0.0,
+        "energy": 0.0
+      },
+      "all_saved_minimum": {
+        "rho": 9.999999999999998,
+        "pressure": 99.99999999999993,
+        "specific_internal_energy": 1.4999999999999998
+      },
+      "max_coverage": 0.0,
+      "max_dual_change": 0.0,
+      "max_eos_defect": 0.0,
+      "dense_mass_equals_cloud_mass": true,
+      "initial_cloud_mass": 420.9728057637894,
+      "final_cloud_fraction": 1.0,
+      "final_rho_max": 100.00000000000001,
+      "thresholds": {},
+      "failure": {
+        "stage": 1,
+        "node": 14151,
+        "rho": 2.7419081441624558,
+        "pressure": -5.008912912361697e-05,
+        "sync": 1872,
+        "printed_time": 0.0220314,
+        "printed_dt": 1.17689e-05,
+        "last_courant_limit": 1.3043246e-05,
+        "last_cfl_limiting_id": 27334,
+        "failure_tau_inferred_from_tick": 0.02142333984375,
+        "uncompressed_log_sha256": "f49c2a4117af7f01193d022673fe973eae3cee1d93af159fbf3da82bcf7a394e",
+        "last_diagnostic": "RD-DIAG time=0.022019629 elements=443426 svd_fallback=0 (0%) exact_singular=0 svd_rcond=-1.000e+00 rank_counts=[0,0,0,0,0] min_svd_rank=-1 min_pivot_ratio=1.402e-05 cons_defect_abs=8.527e-14 max_phi=1.527e+02 cons_defect_rel=5.585e-16 dt_extrap=[0.000000e+00,0.000000e+00]"
+      }
+    },
+    "LDA_hier_np8": {
+      "case": "LDA_hier_np8",
+      "nodes": 32768,
+      "snapshots": 1,
+      "returncode": 1,
+      "job": "12187333",
+      "host": "gc001.pri.cosma.local",
+      "wall_seconds": 206.76657068287022,
+      "end_tau": 0.0,
+      "initial_totals": [
+        10378.8755251874,
+        61241.101728665315,
+        0.001037887552518731,
+        0.001037887552518731,
+        338316.3878027026
+      ],
+      "normalization": [
+        10378.8755251874,
+        61241.101728665315,
+        10378.8755251874,
+        10378.8755251874,
+        338316.3878027026
+      ],
+      "max_abs_normalized_drift": {
+        "mass": 0.0,
+        "px": 0.0,
+        "py": 0.0,
+        "pz": 0.0,
+        "energy": 0.0
+      },
+      "all_saved_minimum": {
+        "rho": 9.999999999999998,
+        "pressure": 99.99999999999993,
+        "specific_internal_energy": 1.4999999999999998
+      },
+      "max_coverage": 0.0,
+      "max_dual_change": 0.0,
+      "max_eos_defect": 0.0,
+      "dense_mass_equals_cloud_mass": true,
+      "initial_cloud_mass": 420.9728057637894,
+      "final_cloud_fraction": 1.0,
+      "final_rho_max": 100.00000000000001,
+      "thresholds": {},
+      "failure": {
+        "stage": 1,
+        "node": 14151,
+        "rho": 2.7064776249856886,
+        "pressure": -0.03303868560543384,
+        "sync": 1872,
+        "printed_time": 0.0220314,
+        "printed_dt": 1.17689e-05,
+        "last_courant_limit": 1.3043246e-05,
+        "last_cfl_limiting_id": 27334,
+        "failure_tau_inferred_from_tick": 0.02142333984375,
+        "uncompressed_log_sha256": "37d6fe74836e55a443576afffd84b40e5347bab9fa81280712eedb6809b7cf71",
+        "last_diagnostic": "RD-DIAG time=0.022019629 elements=1012 svd_fallback=0 (0%) exact_singular=0 svd_rcond=-1.000e+00 rank_counts=[0,0,0,0,0] min_svd_rank=-1 min_pivot_ratio=3.092e-05 cons_defect_abs=1.332e-15 max_phi=1.861e+00 cons_defect_rel=7.157e-16 dt_extrap=[0.000000e+00,0.000000e+00]"
+      }
+    }
+  },
+  "comparison": {
+    "exact_common_times": [
+      {
+        "tau": 0.0,
+        "rho_relative_volume_L1": 0.0,
+        "rho_L1_per_initial_cloud_excess": 0.0,
+        "rho_Linf_over_initial_cloud_density": 0.0,
+        "pressure_relative_volume_L1": 0.0,
+        "velocity_volume_RMS_over_wind": 0.0
+      },
+      {
+        "tau": 0.75,
+        "rho_relative_volume_L1": 6.940650761426838e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00019013144298782355,
+        "rho_Linf_over_initial_cloud_density": 0.0001534154363530149,
+        "pressure_relative_volume_L1": 7.211505540057064e-06,
+        "velocity_volume_RMS_over_wind": 5.5244261377330344e-06
+      },
+      {
+        "tau": 1.100006103515625,
+        "rho_relative_volume_L1": 7.222516598809047e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00019785284552377726,
+        "rho_Linf_over_initial_cloud_density": 0.0001284520665883093,
+        "pressure_relative_volume_L1": 7.096129508869495e-06,
+        "velocity_volume_RMS_over_wind": 5.859481062657833e-06
+      },
+      {
+        "tau": 1.5,
+        "rho_relative_volume_L1": 8.264599029647592e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0002263995399329999,
+        "rho_Linf_over_initial_cloud_density": 7.10974984617252e-05,
+        "pressure_relative_volume_L1": 9.164888916975198e-06,
+        "velocity_volume_RMS_over_wind": 5.959640702031756e-06
+      }
+    ],
+    "time_interpolated": [
+      {
+        "tau": 0.0,
+        "rho_relative_volume_L1": 0.0,
+        "rho_L1_per_initial_cloud_excess": 0.0,
+        "rho_Linf_over_initial_cloud_density": 0.0,
+        "pressure_relative_volume_L1": 0.0,
+        "velocity_volume_RMS_over_wind": 0.0
+      },
+      {
+        "tau": 0.0501708984375,
+        "rho_relative_volume_L1": 6.026295654417062e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00016508369719642188,
+        "rho_Linf_over_initial_cloud_density": 0.00037866125167312247,
+        "pressure_relative_volume_L1": 7.166971549790978e-06,
+        "velocity_volume_RMS_over_wind": 1.7273539375739163e-05
+      },
+      {
+        "tau": 0.10015869140625,
+        "rho_relative_volume_L1": 6.5376878523028326e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00017909272024900594,
+        "rho_Linf_over_initial_cloud_density": 0.0003744349908778588,
+        "pressure_relative_volume_L1": 6.577930091345247e-06,
+        "velocity_volume_RMS_over_wind": 1.1460009274882701e-05
+      },
+      {
+        "tau": 0.150146484375,
+        "rho_relative_volume_L1": 6.881230690899744e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00018850369594505955,
+        "rho_Linf_over_initial_cloud_density": 0.00043797381607248555,
+        "pressure_relative_volume_L1": 6.111056994785708e-06,
+        "velocity_volume_RMS_over_wind": 8.63371818306018e-06
+      },
+      {
+        "tau": 0.20013427734375,
+        "rho_relative_volume_L1": 6.932203752065245e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00018990004651880937,
+        "rho_Linf_over_initial_cloud_density": 0.00041680261298353115,
+        "pressure_relative_volume_L1": 5.7663312238989565e-06,
+        "velocity_volume_RMS_over_wind": 8.238247092980167e-06
+      },
+      {
+        "tau": 0.2501220703125,
+        "rho_relative_volume_L1": 6.858828130126742e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0001878900025965842,
+        "rho_Linf_over_initial_cloud_density": 0.000364301365145252,
+        "pressure_relative_volume_L1": 5.5161144622513364e-06,
+        "velocity_volume_RMS_over_wind": 8.146374988837263e-06
+      },
+      {
+        "tau": 0.30010986328125,
+        "rho_relative_volume_L1": 6.657006270338017e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0001823613162028854,
+        "rho_Linf_over_initial_cloud_density": 0.0003295064029556727,
+        "pressure_relative_volume_L1": 5.393553417721874e-06,
+        "velocity_volume_RMS_over_wind": 8.062915585307447e-06
+      },
+      {
+        "tau": 0.35009765625,
+        "rho_relative_volume_L1": 6.570185121470947e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00017998294695720918,
+        "rho_Linf_over_initial_cloud_density": 0.0002839627146857993,
+        "pressure_relative_volume_L1": 5.448900497270683e-06,
+        "velocity_volume_RMS_over_wind": 7.871823164015527e-06
+      },
+      {
+        "tau": 0.40008544921875,
+        "rho_relative_volume_L1": 6.473739640665591e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00017734092979405095,
+        "rho_Linf_over_initial_cloud_density": 0.0002588375003689691,
+        "pressure_relative_volume_L1": 5.648932288735609e-06,
+        "velocity_volume_RMS_over_wind": 7.567407014860647e-06
+      },
+      {
+        "tau": 0.4500732421875,
+        "rho_relative_volume_L1": 6.444677081868269e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0001765447931735826,
+        "rho_Linf_over_initial_cloud_density": 0.00023920652086545146,
+        "pressure_relative_volume_L1": 5.954880066336419e-06,
+        "velocity_volume_RMS_over_wind": 7.195389865035912e-06
+      },
+      {
+        "tau": 0.50006103515625,
+        "rho_relative_volume_L1": 6.451265240998689e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0001767252684986143,
+        "rho_Linf_over_initial_cloud_density": 0.00020869720830290816,
+        "pressure_relative_volume_L1": 6.332905447611576e-06,
+        "velocity_volume_RMS_over_wind": 6.797852197616698e-06
+      },
+      {
+        "tau": 0.550048828125,
+        "rho_relative_volume_L1": 6.566139286144379e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0001798721157779476,
+        "rho_Linf_over_initial_cloud_density": 0.0002030804068448333,
+        "pressure_relative_volume_L1": 6.697263341058317e-06,
+        "velocity_volume_RMS_over_wind": 6.418137976259841e-06
+      },
+      {
+        "tau": 0.60003662109375,
+        "rho_relative_volume_L1": 6.6963967844088875e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00018344037572306021,
+        "rho_Linf_over_initial_cloud_density": 0.00020084807429611827,
+        "pressure_relative_volume_L1": 7.0038650792279815e-06,
+        "velocity_volume_RMS_over_wind": 6.067614673263144e-06
+      },
+      {
+        "tau": 0.6500244140625,
+        "rho_relative_volume_L1": 6.850377680986277e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00018765851189863684,
+        "rho_Linf_over_initial_cloud_density": 0.0001914504310933296,
+        "pressure_relative_volume_L1": 7.21137287865933e-06,
+        "velocity_volume_RMS_over_wind": 5.790221125158696e-06
+      },
+      {
+        "tau": 0.70001220703125,
+        "rho_relative_volume_L1": 6.954925785921138e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0001905224914786757,
+        "rho_Linf_over_initial_cloud_density": 0.00017771252003484506,
+        "pressure_relative_volume_L1": 7.287031559762066e-06,
+        "velocity_volume_RMS_over_wind": 5.614384641377947e-06
+      },
+      {
+        "tau": 0.75,
+        "rho_relative_volume_L1": 6.940650761426838e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00019013144298782355,
+        "rho_Linf_over_initial_cloud_density": 0.0001534154363530149,
+        "pressure_relative_volume_L1": 7.211505540057064e-06,
+        "velocity_volume_RMS_over_wind": 5.5244261377330344e-06
+      },
+      {
+        "tau": 0.8001708984375,
+        "rho_relative_volume_L1": 8.578599215842838e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00023500122737584643,
+        "rho_Linf_over_initial_cloud_density": 0.00016169318607900607,
+        "pressure_relative_volume_L1": 8.656243286519318e-06,
+        "velocity_volume_RMS_over_wind": 6.882810455790379e-06
+      },
+      {
+        "tau": 0.85015869140625,
+        "rho_relative_volume_L1": 8.2876768181735e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00022703173039816284,
+        "rho_Linf_over_initial_cloud_density": 0.00014802599698569453,
+        "pressure_relative_volume_L1": 8.082515374224745e-06,
+        "velocity_volume_RMS_over_wind": 6.836448544890073e-06
+      },
+      {
+        "tau": 0.900146484375,
+        "rho_relative_volume_L1": 8.128937115477358e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00022268323199786704,
+        "rho_Linf_over_initial_cloud_density": 0.0001397373838793925,
+        "pressure_relative_volume_L1": 7.726473684102688e-06,
+        "velocity_volume_RMS_over_wind": 6.7885291190054445e-06
+      },
+      {
+        "tau": 0.95013427734375,
+        "rho_relative_volume_L1": 8.064495618136939e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0002209179285272296,
+        "rho_Linf_over_initial_cloud_density": 0.00013803540245362455,
+        "pressure_relative_volume_L1": 7.611698308845351e-06,
+        "velocity_volume_RMS_over_wind": 6.725061226897722e-06
+      },
+      {
+        "tau": 1.0001220703125,
+        "rho_relative_volume_L1": 8.065212933694914e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00022093757859273543,
+        "rho_Linf_over_initial_cloud_density": 0.00013416776760124093,
+        "pressure_relative_volume_L1": 7.646019940318705e-06,
+        "velocity_volume_RMS_over_wind": 6.636602182171334e-06
+      },
+      {
+        "tau": 1.05010986328125,
+        "rho_relative_volume_L1": 8.053039940084181e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0002206041129105904,
+        "rho_Linf_over_initial_cloud_density": 0.0001302619317993958,
+        "pressure_relative_volume_L1": 7.730618039115249e-06,
+        "velocity_volume_RMS_over_wind": 6.556263586987308e-06
+      },
+      {
+        "tau": 1.100006103515625,
+        "rho_relative_volume_L1": 7.222516598809047e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00019785284552377726,
+        "rho_Linf_over_initial_cloud_density": 0.0001284520665883093,
+        "pressure_relative_volume_L1": 7.096129508869495e-06,
+        "velocity_volume_RMS_over_wind": 5.859481062657833e-06
+      },
+      {
+        "tau": 1.15008544921875,
+        "rho_relative_volume_L1": 7.90061157333063e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00021642850657059182,
+        "rho_Linf_over_initial_cloud_density": 0.0001262941110971383,
+        "pressure_relative_volume_L1": 7.740180217096946e-06,
+        "velocity_volume_RMS_over_wind": 6.488564738350055e-06
+      },
+      {
+        "tau": 1.2000732421875,
+        "rho_relative_volume_L1": 7.814490595688186e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00021406931774039134,
+        "rho_Linf_over_initial_cloud_density": 0.00012075196104085251,
+        "pressure_relative_volume_L1": 7.626259104138352e-06,
+        "velocity_volume_RMS_over_wind": 6.46015829466419e-06
+      },
+      {
+        "tau": 1.25006103515625,
+        "rho_relative_volume_L1": 7.725317463578005e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0002116265185178632,
+        "rho_Linf_over_initial_cloud_density": 0.00011662322029913241,
+        "pressure_relative_volume_L1": 7.524416674644488e-06,
+        "velocity_volume_RMS_over_wind": 6.418360636785553e-06
+      },
+      {
+        "tau": 1.300048828125,
+        "rho_relative_volume_L1": 7.761324733840298e-06,
+        "rho_L1_per_initial_cloud_excess": 0.000212612897819797,
+        "rho_Linf_over_initial_cloud_density": 0.00010007092321451694,
+        "pressure_relative_volume_L1": 7.689508016724323e-06,
+        "velocity_volume_RMS_over_wind": 6.362259105726822e-06
+      },
+      {
+        "tau": 1.35003662109375,
+        "rho_relative_volume_L1": 7.88886577948278e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00021610674355295934,
+        "rho_Linf_over_initial_cloud_density": 9.200319855573013e-05,
+        "pressure_relative_volume_L1": 8.056897450563778e-06,
+        "velocity_volume_RMS_over_wind": 6.2799572795875196e-06
+      },
+      {
+        "tau": 1.4000244140625,
+        "rho_relative_volume_L1": 8.003097519798226e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00021923599560262172,
+        "rho_Linf_over_initial_cloud_density": 8.440356129256088e-05,
+        "pressure_relative_volume_L1": 8.477565654358746e-06,
+        "velocity_volume_RMS_over_wind": 6.181763920401632e-06
+      },
+      {
+        "tau": 1.45001220703125,
+        "rho_relative_volume_L1": 8.160464847956748e-06,
+        "rho_L1_per_initial_cloud_excess": 0.00022354689932193908,
+        "rho_Linf_over_initial_cloud_density": 7.30996138095108e-05,
+        "pressure_relative_volume_L1": 8.872562308031978e-06,
+        "velocity_volume_RMS_over_wind": 6.074835469112108e-06
+      },
+      {
+        "tau": 1.5,
+        "rho_relative_volume_L1": 8.264599029647592e-06,
+        "rho_L1_per_initial_cloud_excess": 0.0002263995399329999,
+        "rho_Linf_over_initial_cloud_density": 7.10974984617252e-05,
+        "pressure_relative_volume_L1": 9.164888916975198e-06,
+        "velocity_volume_RMS_over_wind": 5.959640702031756e-06
+      }
+    ],
+    "max_same_index_time_offset_over_tcr": 0.00016021728515631118,
+    "max_same_index_cloud_fraction_difference": 0.00011018260410011749
+  },
+  "observed_equal_to_hier_wall_ratio": 1.8283885415570842,
+  "caveats": [
+    "No material tracer; cloud is rho>64 and p/rho<9.",
+    "Only saved N states independently establish positivity/conservation here; full native N logs are absent.",
+    "Non-common output times require interpolation, not an exact solver comparison.",
+    "One resolution and one MPI rank count for the full Blob do not establish convergence or MPI scaling.",
+    "Binaries and frozen source tar bytes are absent; source audit checks supplied file hashes against Git."
+  ]
+}

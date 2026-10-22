@@ -1,0 +1,12 @@
+{
+  "reused_artifact_from": "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_20261018_v1",
+  "numerical_source_files_checked": 168,
+  "numerical_source_differences": [],
+  "config_matches_cosma": true,
+  "binary_sha256": "1fdd74e8813548387e93b628922a94100755b679cec2a48559b61e75398410ac",
+  "parameters_sha256": "d4441d3a525b61db6f7125b638aa8a43e70a2021f453ca61ee4dace6e9974782",
+  "desired_dt": 1.1768909213064722e-05,
+  "end": 4.707563685225889e-05,
+  "source": "35ecccd160834e45c921d77d9761d015fc4306d3",
+  "ranks": 1
+}

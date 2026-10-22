@@ -1,11 +1,117 @@
 # AREPO-RD COSMA context
 
-Updated: 2026-10-20 (native Blob outcomes audited; no active jobs)
+Updated: 2026-10-22 (Mac-prepared Blob comparison recommendations; no live cluster query)
 
 This file records the COSMA environment for compiling and running the public
 AREPO residual-distribution branch. It supplements context.md (the original
 Cuillin workflow) and context_localMac.md (small native Apple-Silicon tests).
 Earlier scientific history remains in the numbered development logs.
+
+**Publication synchronization (2026-10-22):** the Mac incorporated COSMA
+commit `37f320b` before publishing interface commit `7ab92cd` and the
+subsequent analysis/handoff documentation. Published COSMA log entries
+12--17 retain their numbers; Mac entries are now 18--25. See
+[entry 26](dev_log_3D_moving_mesh.md#26-2026-10-22-synchronize-cosma-history-and-publish-the-mac-checkpoint).
+Fetch and inspect the actual remote tip before continuing; numerical Blob
+runs analysed here still use their recorded frozen `35ecccd` source.
+
+## Proposed next Blob campaign, 2026-10-22
+
+Zhenyu plans to submit subsequent work on COSMA. Read
+[entry 25](dev_log_3D_moving_mesh.md#25-2026-10-22-proposed-cosma-blob-comparison-and-mesh-convergence-study)
+for the numerical comparison/size tables and
+[the staged plan](RD_3D_BLOB_COSMA_PLAN_20261022.md) before preparing jobs.
+This is a recommendation, not a submitted campaign or validated runner.
+Keep the existing Morton cube/N1 diagnosis separate from a long-box,
+cloud-enhanced Braspenning comparison. The dedicated SWIFT reference is
+`BlobTest_Braspenning2022`; its official HDF5 download timed out on the Mac.
+Verify actual ICs/units on COSMA and adapt the RD density input and rectangular
+periodic domain explicitly before full runs. Native 3D currently requires
+RK2; a full N1 control still needs an adapter or standalone replay.
+
+Start chi=10/n=16 loading and geometry gates, then calibrate n=32 N/RK2
+equal before extending to 5--10 t_cc. Study mesh shape with fixed per-phase
+sampling and seed ensembles, then resolution and chi=100, with selected
+hierarchy/MPI pairs. Estimated reference totals at n=32 are 132307/144661
+for chi=10/100; at n=64 they exceed one million. Measure resources rather
+than extrapolating the old 32768-node cube's times. Compare native and
+fixed-scale coarse-grained diagnostics; dense-mass agreement alone does
+not establish converged mixing or morphology. No cluster action in this
+Mac planning task; historical environment details below need rechecking.
+
+## Local diagnosis follow-up, 2026-10-20
+
+[Entry 22](dev_log_3D_moving_mesh.md#22-2026-10-20-blob-n1-implementation-and-initial-condition-diagnosis)
+and the [N1 diagnosis](RD_3D_BLOB_N1_DIAGNOSIS_20261020.md) compare the actual
+predecessor/current kernels and ICs. They find no new spatial viscosity or
+update multiplier in the port; a short Mac native control agrees with an
+independent full-mesh Heun replay. P1-Z contact preservation is a shared
+limitation. The difference from Fig. 20 remains unresolved; its empirical
+time-stretch fit is not an accepted alternative time unit. Original run and
+post-processing metadata are needed before blaming RK2. A full same-mesh N1
+control with recorded actual dt is recommended for compute nodes, not launched.
+Pure LDA was not separately demonstrated in the paper's Blob section.
+
+The portable offline diagnostic sources are in `tests/rd/blob_n1_diagnosis/`;
+rebuild them under the host's compiler/LAPACKE environment. The archived
+Mac binary and raw local artifacts are not supplied by a repository pull.
+No COSMA query, build, job or source integration accompanies this follow-up.
+
+## Latest inspected results, 2026-10-20
+
+Zhenyu downloaded portable data/scripts bundles into the Mac workspace's
+`../cosma_runs/`. Checksums pass for 168 data files and 96 script files.
+The 32³/eight-rank N equal/hierarchy jobs 12187329/12187330 both exit zero at
+1.5 t_cr, with 31 snapshots each. Independently recomputed saved-state
+conservation is <=8.430e-14/3.681e-14; states remain positive and geometry
+fixed. Exact endpoint density relative volume L1 difference is 8.265e-6.
+Recorded wall times are 5.178/2.832 h; this single pair does not establish
+MPI scaling. Provided native aggregates report star ratio 1/8.
+
+Cloud threshold mass halves near .404 t_cr and first reaches zero near
+1.05 t_cr. The strong erosion is also present with equal steps and is much
+earlier than the Morton N1 benchmark; current N/lumped RK2 and 140 cloud
+nodes do not establish a quantitative reproduction or resolved disruption.
+LDA equal/hierarchy jobs 12187332/12187333 both exit one near .02142 t_cr,
+negative raw-corrector pressure at ID14151. The equal step is below the last
+reported spectral CFL bound. Do not treat their initial-only snapshots as
+evolved LDA passes. No numerical repair or new job accompanies the analysis.
+
+Both supplied frozen-source records identify `35ecccd160834e45c921d77d9761d015fc4306d3`;
+170 source/build hashes per campaign match that commit. Thus they predate
+the Mac's uncommitted shared-element interface integration. The downloaded
+snapshots have unknown Git headers; use the frozen/build/runtime provenance.
+Full N logs, executables and source tar bytes are not included; distinguish
+independent snapshot checks from provided native-log aggregates. Full LDA
+failure logs are included and their decompressed hashes match.
+
+See [shared-log entry 21](dev_log_3D_moving_mesh.md#21-2026-10-20-independent-analysis-of-the-downloaded-cosma-blob-results)
+and [report](RD_3D_BLOB_COSMA_ANALYSIS_20261020.md) for source/binary/job records,
+weights, figures, actual times and reproduction. Compact data/plots are in
+the repository; the raw downloads and Mac analysis archive are not. Existing
+thesis files and the mathematical supplement were not edited. The historical
+environment guidance below remains dated and does not establish current
+cluster availability.
+
+## Earlier reported status, 2026-10-19
+
+Zhenyu reports that the COSMA Blob N and LDA tests have been submitted and
+that results are not yet available. This local documentation session did not
+query Slurm or inspect the cluster outputs. Job IDs, source revisions, actual
+resolution/rank counts, timestep/method configuration and completion status
+remain to be recorded with the results. Submission does not establish a passed
+benchmark; the earlier local Blob pilot tested N/RK2 only.
+
+A separate English static 3D mathematical supplement is being prepared for
+Zhenyu's final-thesis review in the Mac-only directory
+`/Users/zhenyuwu/Desktop/MyThesis/supplementary_doc/`. See
+[shared-log entry 18](dev_log_3D_moving_mesh.md#18-2026-10-19-static-3d-mathematical-supplement-for-final-thesis-review).
+It is not part of a repository pull and contains no inferred COSMA result.
+When results are available, append their provenance and analysis to the shared
+English 3D log and use them to revise the supplement after review. Existing
+thesis chapters remain outside the current editing authorization.
+
+The following COSMA-side handoff records are retained with their original dates; later Mac analyses and proposals above supersede their transfer/pending-status statements where applicable.
 
 ## Compact Mac downloads available, 2026-10-20
 
@@ -79,7 +185,7 @@ case outputs and analysis are independent, and all OMP/BLAS thread counts are
 one. The preceding v1 pending jobs were cancelled before execution; both
 archives are retained. The original local handoff below remains historical.
 
-## Current 3D handoff, 2026-10-19
+## Earlier source handoff, 2026-10-19
 
 Zhenyu plans to log into COSMA and check resources for the next tests.
 [Shared-log entry 11](dev_log_3D_moving_mesh.md#11-2026-10-19-cluster-recommendation-and-cosma-handoff)
