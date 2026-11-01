@@ -3,7 +3,69 @@
 Agent entry point: [AGENTS.md](../AGENTS.md). Keep stable working rules there;
 this file holds local paths, toolchains and the evolving handoff.
 
-Updated: 2026-10-22
+Updated: 2026-11-01 (Europe/London)
+
+**Publication and next Cuillin step (2026-11-01):**
+Zhenyu requests committing/pushing the pending Blob/Gresho plotting work
+and recording a provenance-first search for Morton's original runs on
+Cuillin. See [entry 35](dev_log_3D_moving_mesh.md#35-2026-11-01-publish-the-checkpoint-and-prepare-cuillin-provenance-recovery)
+and [the handoff](RD_3D_BLOB_CUILLIN_PROVENANCE_HANDOFF_20261101.md). The
+latest selected figure paths below remain current. No new simulation,
+cluster connection or audit of later COSMA results accompanies publication.
+
+**Figure export (2026-10-22):** entry 34 records copies of the selected two
+Blob and two static 3D Gresho figures in `/Users/zhenyuwu/Downloads/`, each
+as PNG and PDF (eight files). Destination/source SHA256 checks pass.
+
+**Selected Blob mass presentation (2026-10-22):**
+[Entry 32](dev_log_3D_moving_mesh.md#32-2026-10-22-replace-the-fitting-display-with-four-prescribed-curves)
+records Zhenyu's direction to omit fitting and use a single panel with four
+curves: current equal/hierarchy and the same Morton mass trace at published
+x multiplied by 1.6*2 and by 1.6. The latter label is exactly
+`Morton with artificial halt timescale`. Current time/mass arrays and the
+mass criterion are unchanged. Latest PNG/PDF, explicit reference-coordinate
+CSV and verified metadata: `dev_log/figures/rd_3d_blob_reference_20261022_v4/`.
+[Entry 33](dev_log_3D_moving_mesh.md#33-2026-10-22-explain-the-cloud-criterion-and-remove-footer-text)
+removes the mass-plot footer text and documents the operational Agertz
+criterion adopted by Morton. In all 62 saved native states, the temperature
+cut excludes no additional density-selected nodes or mass.
+Reproduction uses `tests/rd/plot_3d_blob_reference.py`; the density PNG remains
+byte-identical. No new evolution. Entry 31 below is exploratory history.
+
+**Blob clock-hypothesis follow-up (2026-10-22):**
+[Entry 31](dev_log_3D_moving_mesh.md#31-2026-10-22-test-the-users-multiplication-by-16-hypothesis)
+tests multiplication directly. Keeping Morton's published x fixed, use
+x=a*(native t/t_cr): a=1.6 improves overlap, half-mass 0.647 versus 0.707;
+best a is about 1.792. This hypothesis shifts the earlier stated-KH display
+by 2.56, not 1.6. The printed formula remains self-consistent, but entry 30
+does not exclude an error in the original figure-generation chain. The
+original mass plotter is absent from available predecessor Python history.
+See [report](RD_3D_BLOB_TIME_NORMALIZATION_20261022.md), compact artifacts in
+`dev_log/figures/rd_3d_blob_clock_hypotheses_20261022/`, and external archive
+`../local_runs/rd_3d_blob_time_hypotheses_20261022_v2/`. No new evolution.
+
+**Blob figure update (2026-10-22):**
+[Entry 29](dev_log_3D_moving_mesh.md#29-2026-10-22-revise-blob-presentation-and-clarify-comparison-scope)
+supersedes entry 28's presentation: retain only hierarchical z=5 P1-Z slices
+to 3 t_cc, match Braspenning's Spectral_r colour ramp, and retain only the
+Morton cloud-mass criterion. Equal/hierarchy have identical initial states;
+the digitized Morton 32^3 N1 curve is a reference overlay with an explicit
+method/provenance qualification and no fitted time rescaling. Script:
+`tests/rd/plot_3d_blob_reference.py`; verified PNG/PDF/CSV and metadata:
+`dev_log/figures/rd_3d_blob_reference_20261022_v2/`. Old plots are retained.
+Clock audit in entry 30: the plotted radius-based t_cc differs from Morton's
+diameter-based t_cr; t_cr=2*t_cc and t_KH=1.6*t_cr=3.2*t_cc. The conversions
+are verified, with the current endpoint 3*t_cc=1.5*t_cr=0.9375*t_KH.
+The existing Blob diagnostics already plot roundoff-scale equal/hierarchy
+total-mass and energy drift with MPI=8. No new hydrodynamics or cluster access.
+
+**Gresho plotting update (2026-10-22):**
+[Entry 27](dev_log_3D_moving_mesh.md#27-2026-10-22-separate-gresho-layer-maps-and-the-all-z-profile)
+separates the existing 16^3 t=.25 figures into three projected-layer maps at
+z approximately .53125 and one all-z volume-weighted radial profile. Use
+`tests/rd/plot_3d_gresho.py`; inspected figures/metadata are in
+`dev_log/figures/rd_3d_gresho_static_20261022/`, with a new external plotting
+archive. Original native data and old plots are retained; no solver rerun.
 
 **Publication synchronization (2026-10-22):**
 Integrated COSMA `37f320b` by fast-forward before publishing the Mac work;

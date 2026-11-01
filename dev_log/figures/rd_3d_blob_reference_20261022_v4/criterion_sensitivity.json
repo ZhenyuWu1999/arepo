@@ -1,0 +1,18 @@
+{
+  "N_equal_np8": {
+    "saved_states": 31,
+    "max_nodes_excluded_only_by_temperature": 0,
+    "max_extensive_mass_excluded_only_by_temperature": 0.0,
+    "max_p_over_rho_among_density_selected_nodes": 5.630435790567994,
+    "p_over_rho_threshold": 9,
+    "scope": "Saved states only; not every substep."
+  },
+  "N_hier_np8": {
+    "saved_states": 31,
+    "max_nodes_excluded_only_by_temperature": 0,
+    "max_extensive_mass_excluded_only_by_temperature": 0.0,
+    "max_p_over_rho_among_density_selected_nodes": 5.63679799062547,
+    "p_over_rho_threshold": 9,
+    "scope": "Saved states only; not every substep."
+  }
+}

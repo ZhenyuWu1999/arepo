@@ -1,0 +1,44 @@
+{
+  "N_equal_np8": {
+    "rows": 31,
+    "max_abs_difference_vs_prior_diagnosis": {
+      "t_over_tcc": 0.0,
+      "mass_morton_cut": 0.0,
+      "mass_braspenning_cut": 0.0
+    },
+    "initial_selected_mass": 420.9728057637894
+  },
+  "N_hier_np8": {
+    "rows": 31,
+    "max_abs_difference_vs_prior_diagnosis": {
+      "t_over_tcc": 0.0,
+      "mass_morton_cut": 0.0,
+      "mass_braspenning_cut": 0.0
+    },
+    "initial_selected_mass": 420.9728057637894
+  },
+  "digitized_reference": {
+    "vertices": 20,
+    "matches_prior_independent_extraction": true,
+    "empirical_time_rescaling": false
+  },
+  "hashes": {
+    "input_snapshots": 62,
+    "slice_and_mesh_caches": 2,
+    "figures": 4,
+    "script": 1,
+    "all_match": true
+  },
+  "visual_inspection": "Both final PNGs inspected: titles, exact panel times, slice method, logarithmic colour limits, mass cuts, axes, digitization label and footnotes visible without overlap.",
+  "archive": "v1 retained; v2 is the final presentation.",
+  "artifact_sha256": {
+    "N_equal_np8_cloud_mass.csv": "92385560d8bd5453f549e5ba4c97c87be3838f0c99aec1ecf956e8cc9b5e4ae7",
+    "N_hier_np8_cloud_mass.csv": "9786160ec59303ba266ad123f413a83056f0d855215c42ad8d1bf21b9175bed6",
+    "blob_cloud_mass_morton_overlay.pdf": "16aba52db03bee093c1b63ded34989033b8bc0a2ad52197312021edd9d945f25",
+    "blob_cloud_mass_morton_overlay.png": "a8f3d0530a213bfe97cac3ade6a7f1c8ddd56876fcce8248af39f085b820f554",
+    "blob_density_slices_z5.pdf": "84260d620bc425155a16628acae42a2ee2d0b8396cd25c56ca2e4fdfb17bd9b2",
+    "blob_density_slices_z5.png": "29eb2498e0c104bffc897b7d496cfcccba37ed9a7f28c8d13b80c71a684216fe",
+    "morton_fig20_N32_digitized.csv": "9f7267798bf9efc20a8ff18392c8712b3d6fc1dcb3f66d8727e29dec13160b61",
+    "plot_metadata.json": "eb0235d2e5f7e0054a2d56e1d0cf90e22e8d19fcea2591f4b0efa398d977eb83"
+  }
+}

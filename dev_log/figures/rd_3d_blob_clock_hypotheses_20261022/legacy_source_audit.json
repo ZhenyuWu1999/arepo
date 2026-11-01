@@ -1,0 +1,23 @@
+{
+  "head": "adfbe55586fc926f1911dbecfbdb915c8f667c11",
+  "status": "",
+  "source_files": {
+    "rd/main3D.cpp": {
+      "path": "/Users/zhenyuwu/rdsolver/rd/main3D.cpp",
+      "sha256": "26719a912649f84e7e0bd3ef2414d9a3a2024278c0436c17c1a87abfc8a2e60b"
+    },
+    "rd/io3D.cpp": {
+      "path": "/Users/zhenyuwu/rdsolver/rd/io3D.cpp",
+      "sha256": "20e98f43efe813b70706764ca595f2840b816537b4c72b770cc4c3c6b74ef5b7"
+    },
+    "rd/constants3D.h.TEMPLATE": {
+      "path": "/Users/zhenyuwu/rdsolver/rd/constants3D.h.TEMPLATE",
+      "sha256": "b0432915df77c64a9db021e47fa09da2f83e3f790c9d009b67b7d19cf791adf0"
+    }
+  },
+  "raw_output_clock": "main3D increments T by DT; io3D writes T directly to snapshot header and log.",
+  "historical_python_blobs_scanned": 67,
+  "search_pattern": "\\b(?:blob|cloud|t_?kh|t_?cr|t_?cc)\\b|0\\.64|1\\.6",
+  "historical_python_matches": [],
+  "limitation": "No Figure 20 normalization script recovered from this available checkout/history; no original publication-run snapshots."
+}

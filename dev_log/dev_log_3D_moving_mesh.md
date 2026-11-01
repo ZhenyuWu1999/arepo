@@ -52,6 +52,15 @@ or renumbered here. Host setup files continue to describe their own environments
 | 24 | 2026-10-22 | compare the RD Blob setup with SWIFT and both papers | Local Mac; see dated entry for actual status |
 | 25 | 2026-10-22 | proposed COSMA Blob comparison and mesh-convergence study | Local Mac; see dated entry for actual status |
 | 26 | 2026-10-22 | Synchronize published COSMA history and prepare Mac interface/Blob publication | Local Mac; Git integration and publication checks |
+| 27 | 2026-10-22 | Split Gresho layer maps and all-z radial profile with explicit slice labeling | Local Mac; saved-data plotting only |
+| 28 | 2026-10-22 | Blob central density slices, digitized Morton mass overlay and existing hierarchy/MPI conservation evidence | Local Mac; saved-data plotting and verification |
+| 29 | 2026-10-22 | Revise Blob figures: hierarchy-only slices, Braspenning colours and Morton-only mass selection | Local Mac; saved-data plotting and PDF verification |
+| 30 | 2026-10-22 | Recheck Morton diameter-based t_cr versus the plotted radius-based t_cc | Local Mac; primary-source and saved-data audit |
+| 31 | 2026-10-22 | Test multiplication/division clock hypotheses against Morton and audit the missing plotting provenance | Local Mac; saved-data diagnostics, no new evolution |
+| 32 | 2026-10-22 | User-selected single-panel mass plot with equal/hierarchy and two fixed Morton time scales; no fitting | Local Mac; saved-data plotting only |
+| 33 | 2026-10-22 | Trace the cloud-selection thresholds to Agertz; remove mass-plot footers | Local Mac; primary-source review and saved-data plotting |
+| 34 | 2026-10-22 | Copy the selected Blob and static 3D Gresho figures to Downloads | Local Mac; eight existing files exported |
+| 35 | 2026-11-01 | Publish the figure/diagnostic checkpoint and prioritize original Morton run provenance on Cuillin | Local Mac; Git publication, Cuillin recovery planned |
 
 ## 1. 2026-10-11: current state and handoff to Cuillin
 
@@ -1956,3 +1965,450 @@ outside this repository; their existing paths/provenance are retained. No
 new simulation, Slurm submission, convergence result or moving-3D capability
 is claimed. The Git push outcome and final hashes are verified separately
 against the remote branch after publication.
+
+## 27. 2026-10-22: separate Gresho layer maps and the all-z profile
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **Request:** replace the combined display with two figures only: initial,
+  N and LDA tangential-velocity maps, explicitly labelled with the slice z;
+  and the all-z volume-weighted v_phi radial profile. Omit error/energy panels.
+- **Sources:** plotting checkout `feature/3d-moving-mesh`, HEAD `c92f0b5`;
+  the original static 16^3 N/LDA snapshots remain from entry 7's frozen
+  `3d72127` campaign. The new script is
+  [plot_3d_gresho.py](../tests/rd/plot_3d_gresho.py).
+- **Input archive:** `../local_runs/rd_3d_static_gresho_20261018_v1/`.
+- **New plotting archive:** `../local_runs/rd_3d_gresho_split_20261022_v1/`.
+  PNG/PDF copies and input/output SHA256/mapping metadata are retained in
+  `dev_log/figures/rd_3d_gresho_static_20261022/`.
+- **Status:** both figures generated and PNGs visually inspected; input and
+  output hashes verified. Single analysis process, OMP/OpenBLAS threads one.
+  No native run, IC/solver change, archive overwrite or thesis edit.
+
+The first figure retains the original projected-layer method. Select
+`abs(z-0.53125)<0.028125`, giving 256 nodes whose actual z range is
+0.5237628326--0.5387461650. Project their x,y coordinates and nodal tangential
+velocity onto the plane, then use SciPy griddata linear interpolation on
+220x220 plotting points. The title states **slice plot at z approximately
+0.53125, one jittered layer projected onto xy**; the footer gives the actual
+z range and interpolation rule. This is not an exact tetrahedron-plane
+intersection or an all-z average. No volume weighting, periodic padding or
+extrapolation is added; the convex-hull exterior remains blank. Initial t=0
+and N/LDA t=.25 share the original v_phi color range 0--1.
+
+The separate profile retains all 4096 nodes, 24 cylindrical radial bins,
+median-dual weights `Masses/Density` for both mean radius and mean v_phi,
+the stationary analytic curve, and every fourth ID-sorted point as the faint
+scatter. Its title is **All z: volume-weighted radial profile**. These are
+presentation changes; the underlying diagnostics and hydrodynamic results
+are not recomputed or reclassified. The old six-panel figure remains an
+archived historical result.
+
+- [Three-panel slice PNG](figures/rd_3d_gresho_static_20261022/gresho_3d_vphi_slice_z0p53125.png)
+  / [PDF](figures/rd_3d_gresho_static_20261022/gresho_3d_vphi_slice_z0p53125.pdf).
+- [All-z radial profile PNG](figures/rd_3d_gresho_static_20261022/gresho_3d_vphi_profile_all_z.png)
+  / [PDF](figures/rd_3d_gresho_static_20261022/gresho_3d_vphi_profile_all_z.pdf).
+
+Reproduce into a new output directory:
+
+```sh
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python tests/rd/plot_3d_gresho.py \
+  --run-root /absolute/path/to/rd_3d_static_gresho_20261018_v1 \
+  --output /absolute/path/to/new_plot_directory
+```
+
+## 28. 2026-10-22: Blob slice figures, Morton overlay and conservation evidence
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **Request:** present density slices in the spirit of Braspenning Figure 1,
+  plot cloud mass with explicit selection criteria, and overplot a digitized
+  Morton curve where original data are unavailable. Zhenyu also asks whether
+  the existing static 3D hierarchy/MPI evidence includes a conservation plot.
+- **Plotting checkout:** `feature/3d-moving-mesh`, HEAD `c92f0b5`. Native
+  snapshots retain entry 21's frozen `35ecccd` provenance; no new evolution.
+- **Inputs:** `../cosma_runs/blob3d_mac_analysis_20261020_v1/`; the validated
+  periodic mesh, slice weights and primary SVG in
+  `../local_runs/rd_3d_blob_n1_audit_20261020_v1/`.
+- **Reproduction:** [plot_3d_blob_reference.py](../tests/rd/plot_3d_blob_reference.py).
+  Final external archive: `../local_runs/rd_3d_blob_figures_20261022_v2/`.
+  Presentation v1 is retained. Compact PNG/PDF, CSV, metadata and verification
+  copies: `dev_log/figures/rd_3d_blob_reference_20261022/`.
+- **Status:** both final PNGs visually inspected. All 62 snapshot, two cache,
+  plotting-script and four figure hashes verified; both 31-state mass
+  histories match the prior independent threshold diagnosis exactly. One
+  analysis process with both OMP/OpenBLAS thread limits one. No solver/IC
+  modification, new simulation, cluster action, thesis edit or Git publication.
+
+The [density figure](figures/rd_3d_blob_reference_20261022/blob_density_slices_z5.png)
+([PDF](figures/rd_3d_blob_reference_20261022/blob_density_slices_z5.pdf)) shows
+N/RK2 equal and hierarchical timesteps, both eight MPI ranks, on the central
+**z=5 plane** at snapshots 0, 10, 20 and 30. These are approximately
+0, 1, 2 and 3 radius-based t_cc; each panel states its actual saved time.
+The intermediate equal/hierarchy times are slightly different, with no
+temporal interpolation. Reconstruct density through the containing 3D
+tetrahedron as `rho=(sum_i lambda_i sqrt(rho_i))^2`, the P1-Z density, on a
+501x501 plane grid. This is neither a projected nodal layer nor an all-z
+average. The periodic cache reproduces the requested plane to maximum
+coordinate error 4.316e-15; its median duals agree with native Masses/Density.
+All panels share a logarithmic rho/rho_wind,0 scale from 1 to 10; values
+outside the initial wind/cloud densities are explicitly colour-clipped.
+The downloaded cube ends at 3 t_cc, so this is a presentation reference to
+[Braspenning Figure 1](https://arxiv.org/html/2203.13915v2), not its
+5 t_cc, high-resolution long-box experiment or a matched reproduction.
+
+The [mass figure](figures/rd_3d_blob_reference_20261022/blob_cloud_mass_morton_overlay.png)
+([PDF](figures/rd_3d_blob_reference_20261022/blob_cloud_mass_morton_overlay.pdf))
+shows two explicit Eulerian selections, summing native snapshot extensive
+Masses and normalizing each run by its initial mass under the same selection:
+
+- **Left, Morton:** rho>0.64*rho_cloud,0 AND T<0.9*T_wind,0, equivalent here
+  to rho>64 AND p/rho<9 for a fixed mean molecular weight.
+- **Right, Braspenning density diagnostic applied to the same current runs:**
+  rho>rho_cloud,0/3, equivalent here to rho>100/3, without a temperature cut.
+
+Both initial selected masses are 420.9728057637894. This is currently dense
+or cool gas, not tagged surviving original cloud material; no material
+tracer is available. The IC Masses field stores input density and is not
+used as an extensive mass; stored Voronoi Volume is not used for this sum.
+
+The left panel overlays the red solid 32^3 N1 curve from
+[Morton Figure 20's primary SVG](https://arxiv.org/html/2204.01757v2/cloudMass.svg).
+The source hash and tick calibration are retained in metadata. Extract its
+20 vector-path vertices, excluding the legend; they agree with entry 22's
+independent extraction to roundoff. These are coordinates of the published
+curve, **not recovered original snapshot measurements**. Use the published
+clock relation t_KH=3.2*t_cc; the upper axis retains t/t_KH. No fitted time
+stretch, including entry 22's empirical 2.867 factor, is applied. The full
+extracted curve is saved as CSV even where it lies outside the display.
+The lifetime discrepancy remains; a digitized overlay does not resolve the
+missing publication-run provenance or establish its physical cause.
+
+**Existing conservation figure:** entry 21's
+[diagnostics.png](figures/rd_3d_blob_cosma_20261020/diagnostics.png), upper left,
+already compares total mass and total energy drift for equal/hierarchy with
+MPI=8. Maxima over the 31 saved times are 8.430e-14 / 3.680e-14 for mass,
+7.261e-14 / 3.080e-14 for energy, and 7.604e-14 / 2.780e-14 for x momentum;
+transverse normalized drifts are at most 1.636e-16. Each component uses the
+initial sum of absolute nodal conserved content, with the momentum denominator
+floored by initial box mass. These are roundoff-scale total-box defects;
+declining threshold-selected cloud mass is a different diagnostic. The report
+also retains short 1/2/4-rank agreement gates. The full Blob evolution has
+only eight ranks and does not establish MPI scaling, arbitrary long-time LDA
+positivity or moving-3D support. Independent saved-state checks also do not
+replace a fresh per-stage audit of the omitted full native N logs.
+
+Reproduce into a new directory, retaining the validated input caches:
+
+```sh
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python tests/rd/plot_3d_blob_reference.py \
+  --bundle /absolute/path/to/blob3d_mac_analysis_20261020_v1 \
+  --audit-root /absolute/path/to/rd_3d_blob_n1_audit_20261020_v1 \
+  --output /absolute/path/to/new_blob_plot_directory
+```
+
+## 29. 2026-10-22: revise Blob presentation and clarify comparison scope
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **User correction:** retain only the hierarchical-timestep row of density
+  slices, match Braspenning Figure 1's colour style, and remove the Braspenning
+  cloud-mass selection panel because the present IC is different. Fair
+  comparisons require more than adopting the same selection criterion.
+- **Sources:** plotting checkout `feature/3d-moving-mesh`, HEAD `c92f0b5`;
+  unchanged frozen `35ecccd` native data and caches from entry 28. Update
+  [plot_3d_blob_reference.py](../tests/rd/plot_3d_blob_reference.py); preserve
+  its previous source in the external v2 plotting archive.
+- **New evidence:** `../local_runs/rd_3d_blob_figures_20261022_v3/`, with
+  final PNG/PDF/CSV, script snapshot, metadata, verification and separate
+  Poppler renders. Repository copies are in
+  `dev_log/figures/rd_3d_blob_reference_20261022_v2/`; earlier presentations
+  remain archived. No simulation, cluster action or solver/IC change.
+
+The density figure is now **one row of four hierarchical N/RK2 snapshots**,
+still at the actual z=5 plane and approximately 0, 1, 2 and 3 t_cc. Preserve
+the P1-Z reconstruction, explicit actual times and 1--10 logarithmic density
+range. Replace magma by **Spectral_r**, with a horizontal colourbar and ticks
+1, 3 and 10. The primary [Braspenning PDF](https://arxiv.org/pdf/2203.13915),
+Figure 1 on page 3, was inspected visually after browser-image retrieval
+timed out. The purple/blue-to-red ramp agrees with Spectral_r; five sampled
+rendered colourbar points agree within two 8-bit RGB levels. Source PDF,
+SHA256 and page render remain outside Git in
+`../local_runs/rd_3d_blob_restyle_reference_20261022_v1/`; the compact
+verification JSON retains the source hash and colour samples.
+
+The mass figure is now **one panel using only the Morton criterion**:
+rho>0.64*rho_cloud,0 AND T<0.9*T_wind,0. Retain equal and hierarchy curves
+and the digitized 32^3 N1 reference, with the same initial-mass normalization
+and physical clock conversion. Remove the Braspenning selection from the
+new CSVs and figure. All retained mass/time values match entry 28 exactly,
+and the 20-point Morton CSV is byte-identical. No fitted time stretch.
+
+Entry 24's setup audit remains applicable: the present uniformly random
+10R x 10R x 10R cube has 140 initial cloud nodes, whereas Braspenning uses
+a 40R x 10R x 10R tunnel and enhanced cloud sampling. Thus its published
+cloud-mass evolution is not overplotted. The current equal/hierarchy cases
+have identical initial density, mass, pressure, internal energy, velocity
+and coordinates, verified again after ID sorting. Their comparison isolates
+the timestep choice within this setup. Morton remains a **published reference
+overlay**: the available BLOB initialization agrees, but current N/RK2 differs
+from published N1 and the complete original publication-run configuration
+has not been recovered. The figure footer states this limitation explicitly.
+
+Both PNGs and separate renders of both final PDFs were visually checked.
+All 62 input snapshot hashes, both cache hashes, script hash and four figure
+hashes agree with metadata; the unchanged retained histories were checked
+against the preceding archive. Both OMP/OpenBLAS thread limits remain one.
+
+- [Hierarchy-only density PNG](figures/rd_3d_blob_reference_20261022_v2/blob_density_slices_z5.png)
+  / [PDF](figures/rd_3d_blob_reference_20261022_v2/blob_density_slices_z5.pdf).
+- [Morton-selection mass PNG](figures/rd_3d_blob_reference_20261022_v2/blob_cloud_mass_morton_overlay.png)
+  / [PDF](figures/rd_3d_blob_reference_20261022_v2/blob_cloud_mass_morton_overlay.pdf).
+
+## 30. 2026-10-22: audit the factor of two in the Blob clocks
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **Question:** Morton states t_KH=1.6*t_cr; does the plotted 3.2 factor
+  introduce an erroneous factor of two?
+- **Sources:** plotting checkout `feature/3d-moving-mesh`, HEAD `c92f0b5`;
+  entry 29's unchanged figure metadata and CSVs in
+  `dev_log/figures/rd_3d_blob_reference_20261022_v2/`. Read the primary
+  [Morton equation 54](https://arxiv.org/html/2204.01757v2#S5.E54) and the
+  [Figure 20 normalization paragraph](https://arxiv.org/html/2204.01757v2#S5.SS3.SSS1.p7),
+  also checked against the archived primary HTML.
+
+Morton explicitly defines **t_cr=2*R_cloud*sqrt(chi)/v_wind**, using the
+diameter, and then t_KH=1.6*t_cr. The current figures explicitly label their
+lower axis with the radius-based **t_cc=R_cloud*sqrt(chi)/v_wind**. Therefore
+t_cr=2*t_cc and t_KH=3.2*t_cc are consistent. The similar symbols can obscure
+the two definitions; they must not be equated merely because both are called
+cloud-crushing times.
+
+For the downloaded setup, t_cc=0.5141914894582731,
+t_cr=1.0283829789165462 and t_KH=1.645412766266474. Both current runs end at
+code time 1.5425744683748193, hence **3*t_cc=1.5*t_cr=0.9375*t_KH**.
+The endpoint t/t_KH entries and all 20 digitized-reference conversions were
+checked against these relations and agree to floating-point precision.
+No numerical plotting correction is indicated by this audit; the current
+and published mass-curve discrepancy is not removed by a factor-of-two
+clock correction. No figure, source, snapshot or native run is changed.
+
+## 31. 2026-10-22: test the user's multiplication-by-1.6 hypothesis
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **Request:** directly test whether multiplying by 1.6 makes the published
+  and current cloud-mass histories coincide, because a historical time
+  conversion may be wrong. Do not dismiss this solely from the printed formula.
+- **Sources:** plotting checkout `feature/3d-moving-mesh`, HEAD `c92f0b5`;
+  unchanged frozen `35ecccd` snapshots, entry 29's hash-verified mass CSVs,
+  the primary Figure 20 SVG and predecessor `adfbe55586fc`.
+- **Evidence:** [focused report](RD_3D_BLOB_TIME_NORMALIZATION_20261022.md),
+  [four-panel diagnostic](figures/rd_3d_blob_clock_hypotheses_20261022/blob_time_normalization_hypotheses.png),
+  [reproduction script](../tests/rd/blob_n1_diagnosis/plot_time_hypotheses.py)
+  and `../local_runs/rd_3d_blob_time_hypotheses_20261022_v2/`. Earlier figures
+  remain intact; v1's label placement is also retained in its own archive.
+
+Keep the published reference coordinate x_ref=t/t_KH unchanged and transform
+current native time as x=a*(t/t_cr), with diameter-based t_cr. The stated
+conversion is a=0.625. Multiplying that displayed coordinate by 1.6 gives
+a=1 and leaves a large difference. Multiplying raw t/t_cr by 1.6 instead
+gives **a=1.6**, equivalent to a **2.56** shift from the previous display.
+This makes the full decay substantially closer: current equal/hierarchy
+half-mass x=0.646729/0.646854 versus reference 0.706769, about 8.5% earlier.
+
+At 19 equal mass levels from 5% to 95%, equal-run crossing-time RMS falls
+from 0.570578 under the stated formula to 0.098007 for a=1.6. A=2 also gives
+0.105639, so the data do not select 1.6 uniquely. The best zero-offset fit
+is a=1.791855 (hierarchy 1.791599), RMS 0.028750. Its factor relative to
+the stated KH coordinate is 2.866967, reproducing entry 22's shape fit.
+No reference vertex, mass criterion, mass normalization or native time changes.
+
+All 62 native snapshot header times agree exactly with the CSV. A fresh SVG
+render confirms the curve identity, axis label and 0/0.5 tick calibration.
+The predecessor increments/output T directly. No Figure 20 mass-normalization
+script is found in the available checkout or a keyword scan of 67 historical
+Python blobs. Full original publication-run provenance remains unavailable.
+
+**Qualification of entry 30:** agreement with the printed definitions does
+not exclude a normalization error in the original plot-generation chain.
+The multiplication hypothesis is worth pursuing, but the overlap is not
+proof of such an error or a justified correction to either simulation.
+One original physical-time/plotted-coordinate pair or the actual Figure 20
+plotter is needed to resolve it. No author contact is initiated.
+
+Both final PNG and separately rendered PDF were visually inspected; input,
+source and figure hashes, coordinate identities and the earlier fitted
+factor were checked. One analysis process, both OMP/OpenBLAS threads one.
+No new simulation, build, cluster action, solver/IC or thesis edit.
+
+## 32. 2026-10-22: replace the fitting display with four prescribed curves
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **User direction:** curve fitting is not meaningful for this comparison.
+  Use one panel with four curves: current equal/hierarchy, Morton digitized
+  x multiplied by 1.6*2, and Morton x multiplied by 1.6. Use the requested
+  legend label `Morton with artificial halt timescale` verbatim for the latter.
+- **Source:** checkout `feature/3d-moving-mesh`, HEAD `c92f0b5`; unchanged
+  frozen `35ecccd` native data and entry 29's digitized reference. Update
+  [plot_3d_blob_reference.py](../tests/rd/plot_3d_blob_reference.py).
+- **Final archive:** `../local_runs/rd_3d_blob_figures_20261022_v4/`;
+  compact figure/data/provenance copies in
+  `dev_log/figures/rd_3d_blob_reference_20261022_v3/`. Earlier figures and
+  exploratory fitting records remain historical archives, not the selected
+  scientific presentation or an inferred correction to the physical clock.
+
+The mass plot contains exactly one axes and four plotted lines, with no
+secondary axis or fitted curve. Retain the radius-based t/t_cc coordinate,
+unchanged current equal and hierarchical mass histories, the Morton density
+and temperature criterion, and initial selected-mass normalization. With
+x_p denoting the original Figure 20 t/t_KH coordinate, the reference curves
+are **x=1.6*2*x_p** and **x=1.6*x_p**, respectively. Their mass values are
+identical. The latter is an artificial display with half the first curve's
+timescale; the legend follows Zhenyu's spelling exactly. Export all 20 pairs
+of displayed coordinates in `morton_display_coordinates.csv` for inspection.
+No parameters are estimated from the data.
+
+Both native mass CSVs and the original digitized Morton CSV remain
+byte-identical to entry 29. The re-generated hierarchy-only density PNG is
+also byte-identical. All 62 input snapshot hashes, both cache hashes, plot
+hashes and the two reference-coordinate multipliers are verified. The final
+mass PNG and separate Poppler-rendered PDF were visually inspected. Both
+OMP/OpenBLAS thread limits one; no simulation, solver/IC change, cluster
+action or thesis edit.
+
+- [Four-curve mass PNG](figures/rd_3d_blob_reference_20261022_v3/blob_cloud_mass_morton_overlay.png)
+  / [PDF](figures/rd_3d_blob_reference_20261022_v3/blob_cloud_mass_morton_overlay.pdf).
+
+## 33. 2026-10-22: explain the cloud criterion and remove footer text
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **Request:** explain the origin of rho>0.64*rho_cloud,0 AND
+  T<0.9*T_wind,0, and remove the text beneath the mass figure.
+- **Sources:** checkout `feature/3d-moving-mesh`, HEAD `c92f0b5`; unchanged
+  frozen `35ecccd` native data and the entry 32 reference trace. Review
+  [Agertz et al. (2007), section 5/Figure 6 discussion](https://academic.oup.com/mnras/article/380/3/963/952655),
+  also verified on page 7 of the [arXiv preprint](https://arxiv.org/pdf/astro-ph/0610051),
+  and [Morton section 5.3.1/Figure 20 discussion](https://arxiv.org/html/2204.01757v2#S5.SS3.SSS1.p7).
+- **New archive:** `../local_runs/rd_3d_blob_figures_20261022_v5/`;
+  compact artifacts, criterion-sensitivity JSON and verification in
+  `dev_log/figures/rd_3d_blob_reference_20261022_v4/`. Update
+  [plot_3d_blob_reference.py](../tests/rd/plot_3d_blob_reference.py).
+
+Agertz defines the remaining cloud using these two thresholds and explains
+that they identify gas visually associated with the cloud. That discussion
+does not derive a unique theoretical value for 0.64 or 0.9; these are
+operational diagnostic choices. Morton explicitly adopts the Agertz
+definition to compare cloud-mass histories. The density reference is the
+**initial cloud density**, not the wind density; the temperature reference
+is the **initial external/wind temperature**. The density cut retains dense
+gas and the temperature cut rejects gas heated to near the initial hot phase.
+Neither threshold is a universal physical phase boundary or a material tracer.
+The resulting selected mass is not a separately conserved quantity.
+
+For the present fixed-composition ideal-gas setup, these become rho>64 and
+p/rho<9. Fresh reads of all 62 native snapshots confirm that every node
+passing rho>64 also passes the temperature cut. Thus it excludes **zero
+additional nodes and zero additional extensive mass** in both 31-state
+histories. The archived density-only and combined-cut mass diagnostics also
+agree exactly. This is a property of the saved states in this setup, not
+a claim about every substep or other Blob parameters.
+
+Remove all three mass-figure footer lines and the reserved footer space.
+Retain the title/selection criterion, axes, in-panel code-unit thresholds,
+four curves, exact user-specified legend and both prescribed reference
+time factors. No curve values change: both native mass CSVs, the original
+Morton trace and its two displayed-coordinate CSVs are byte-identical to
+entry 32. The hierarchy-only density PNG is also byte-identical.
+
+Both final mass PNG and a separate Poppler rendering of the PDF were
+visually checked; extracted PDF text confirms the footer strings are absent.
+The pdftotext executable was unavailable on PATH; bundled pypdf supplied
+the successful text check without installing tools or changing assertions.
+Source/output hashes, unchanged data and selection sensitivity are verified.
+OMP/OpenBLAS threads one; no simulation, solver/IC change, cluster action,
+thesis edit or Git publication.
+
+- [Mass PNG without footers](figures/rd_3d_blob_reference_20261022_v4/blob_cloud_mass_morton_overlay.png)
+  / [PDF](figures/rd_3d_blob_reference_20261022_v4/blob_cloud_mass_morton_overlay.pdf).
+
+## 34. 2026-10-22: export the four selected figures to Downloads
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **Request:** place the latest two Blob and two static 3D Gresho figures in
+  `/Users/zhenyuwu/Downloads/`.
+- **Checkout:** `feature/3d-moving-mesh`, HEAD `c92f0b5`; file copies only.
+- **Sources:** Blob hierarchy-only density slices and footer-free four-curve
+  mass plot from `dev_log/figures/rd_3d_blob_reference_20261022_v4/`;
+  Gresho three-panel z~0.53125 layer maps and all-z volume-weighted radial
+  profile from `dev_log/figures/rd_3d_gresho_static_20261022/`.
+- **Outcome:** all four figures copied in both PNG and PDF, eight files total,
+  retaining their source filenames. SHA256 of every destination matches its
+  source. Existing differing files are never overwritten. No figure edits,
+  new analysis, hydrodynamics, cluster action or thesis change.
+
+## 35. 2026-11-01: publish the checkpoint and prepare Cuillin provenance recovery
+
+- **Author:** Codex (GPT-6), with Zhenyu Wu; execution host local Mac.
+- **Date/time convention for this entry:** Europe/London.
+- **Authorization:** commit and push the accumulated figures, analysis and
+  development record to GitHub; document the next step of looking on Cuillin
+  for Morton's original data/code to explain the Blob discrepancy.
+- **Publication branch / starting revision:** `feature/3d-moving-mesh` /
+  `c92f0b5f8c423eb0c92a5f718d3fa26630d112af`. Fetching origin confirms no
+  incoming divergence at the start of this turn. Native data retain their
+  earlier source revisions; this is not a hydro-method update.
+- **Handoff:** [Cuillin provenance-recovery plan](RD_3D_BLOB_CUILLIN_PROVENANCE_HANDOFF_20261101.md).
+  Cuillin has not been accessed or searched in this turn; the original
+  publication data's existence/location there remain unverified.
+
+### Progress retained in this publication
+
+The static 3D pipeline has completed the downloaded 32^3 N/RK2 equal and
+hierarchical Blob runs with MPI=8, positive saved states, roundoff-scale
+extensive conservation and nearly identical cloud evolution. Both still
+lose threshold-selected cloud mass earlier than the digitized Morton N1
+reference. The LDA failure is retained separately and is not an evolved
+Blob pass. These statements refer to the previously downloaded campaigns;
+no claim is made about the user's later COSMA tests.
+
+Final Blob density slices use hierarchical timesteps only, exact z=5 P1-Z
+tetrahedral reconstruction and the requested Spectral_r colour style. The
+mass panel retains four prescribed curves and no footer or fitted parameters:
+current equal/hierarchy and the same Morton trace at 1.6*2*x_p and 1.6*x_p.
+The artificial half-timescale curve remains explicitly labelled as requested;
+it is not evidence that the paper's clock is wrong. The current density and
+temperature criterion is documented and unchanged. Final Gresho maps and
+all-z volume-weighted profile are also retained, with their different slice
+mapping stated explicitly. The eight PNG/PDF copies in Downloads are recorded
+in entry 34; raw simulation archives and thesis files stay outside this commit.
+
+The available predecessor's analytic BLOB values match on the current nodes,
+and its initial spatial N residuals match the current kernel. These findings
+do not establish that the original publication used the same random points,
+tetrahedra, binary, time integration or analysis. The Mac copy emits raw T
+and lacks the Figure 20 plotter in the available Python history. Matching
+curves by a fitted time factor was exploratory and is not adopted as a
+physical explanation or correction.
+
+### Items to verify from original Cuillin artifacts
+
+1. Recover paper-era 32^3 N1 snapshots, physical-time headers/logs and actual
+   Figure 20 data/script, with source/build/configuration provenance. Search
+   bounded accessible project archives and historical source copies first.
+2. Pair original physical time with plotted x_p. Verify the stated relation
+   t_KH=1.6*t_cr, diameter t_cr=2R*sqrt(chi)/v and radius t_cc=t_cr/2 in the
+   actual preprocessing/plotting path. Check multiplication/division,
+   duplicated conversions, units and output-index assumptions directly.
+3. Confirm original FIRST_ORDER/RK settings, N scheme, scheduling, CFL,
+   floors/repairs, periodic geometry, wind/pressure/density/radius parameters,
+   actual node/mesh realization and number of cloud nodes. A shared analytic
+   profile, seed number or current template alone is insufficient.
+4. Recompute original selected mass using its actual extensive weights,
+   temperature convention and initial normalization. Reproduce the published
+   curve without fitting before diagnosing additional numerical dissipation.
+5. Only after this recovery, use controlled matching IC/mesh and time-step
+   comparisons to separate N1/RK2, sampling, geometry and residual effects.
+   Keep heavy analysis, builds and any reruns on compute nodes. Preserve
+   original artifacts and keep large raw data outside Git.
+
+Validation for this publication checks source/JSON parsing, compact artifact
+hashes and scope, local links/log anchors and staged whitespace. No new native
+run or rebuild is required for plotting/documentation-only changes. The Git
+commit and push outcome are checked against the remote branch separately.

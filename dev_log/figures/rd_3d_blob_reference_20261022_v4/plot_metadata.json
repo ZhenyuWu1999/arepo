@@ -1,0 +1,334 @@
+{
+  "script_sha256": "9740ee486ee05ecebb08713b666f7de3ec34e60f785943a9671484c04ebc986b",
+  "input_snapshots": [
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_000.hdf5",
+      "sha256": "f11ba3f51f6236f928b0ad5771def38417125a3b162e096c4ca1e8b344b61afe"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_001.hdf5",
+      "sha256": "23274a4d9b431661ef685a6b1a8f25827c93d0d485882f7f5e52db28895995c7"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_002.hdf5",
+      "sha256": "2da6857fd3d963d60693c54fe269c3363f5457931a29db02309367d6194a1138"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_003.hdf5",
+      "sha256": "daadbffa775e088305837c0b28ba31ce4493043ff7a40785db309f02c997a439"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_004.hdf5",
+      "sha256": "e383b34f5a5cb98c6bf1871f2c88e1b92f23fff7a4a1e7ddf360e15bbeccbc34"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_005.hdf5",
+      "sha256": "4da9886f9beae6758b224f72eee608de7e372069e7b8150d627f5fff17d47294"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_006.hdf5",
+      "sha256": "3e2dedffbb994105621afe90b7f1ebab1e607b0e0270a8e2bdd2aa2a05aa5212"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_007.hdf5",
+      "sha256": "baf04ff804215d52d5b4d2a2514f10f11667e0a01ec1e891671376e23e37f9b1"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_008.hdf5",
+      "sha256": "296a01dbfce8e451688de0dbe570d4c90db979247fe9b4ec01d945e4da05c02f"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_009.hdf5",
+      "sha256": "d84f7f712c35c57df8e67389e866c14225a6fe4f6de5ae762d2ebb95fdc416a4"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_010.hdf5",
+      "sha256": "960d8f84e93039fefc908c23d26dc931bb95dbf16ce0347cd789f129f47f4331"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_011.hdf5",
+      "sha256": "9ac552dfb297cb1024d4ab45d41c8e3976f23fd1e5c0650bfca8edb5450894c0"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_012.hdf5",
+      "sha256": "921d3d6fab7c384a487b05728e0a729cd9ff261da6f76b7a81e0b0ee706d824f"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_013.hdf5",
+      "sha256": "d9742d311fdcba4ee17a85e6f813c76f29525eacf36bb7644b80d9b69acb6acc"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_014.hdf5",
+      "sha256": "8582431626384aac79caa17e081b78fafa5122cafe065e16389a89cf4961c9eb"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_015.hdf5",
+      "sha256": "e2b0544acfc9cd8973c570042be53479d1dae6f72a59215e7ec6ed22c508f150"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_016.hdf5",
+      "sha256": "1cdf1fb19473d4688ed7b43817109a42ae689fd93595acfc6fbfd41fccf9205c"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_017.hdf5",
+      "sha256": "e72b85f2f5b99e5cc850406335685a9ff316d6823cc1cc05515c227af13071de"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_018.hdf5",
+      "sha256": "7774278ad929c9edd3ecb37fda17bcd79e8f69c988495a8593f11bd51baccd7a"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_019.hdf5",
+      "sha256": "a8561eaf82aa8f535dd6ac509a9b3202b3d1c431d35d01f0d5d5ac4bb329f481"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_020.hdf5",
+      "sha256": "c686fb9a70bc722544fabbe13081ce42eaf0a18ff3769f846b43539bbde2a723"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_021.hdf5",
+      "sha256": "1e2b06119d81523c10d0ef9a067a93c434d1af3d83d4d4ea91354259173b9d7c"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_022.hdf5",
+      "sha256": "55ed7b87d7b6c623d66e372840ec9733d993a5edb4a58aaaeaccdf9fb7a00ddb"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_023.hdf5",
+      "sha256": "96bf4c63ba550583df6bded32a3475483af47b1b1fb0a918531a2e9c1f1afb59"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_024.hdf5",
+      "sha256": "095e6d0f2d914dade61ce857719a21ed42bbc55f17476bc9050b48a002f40ad8"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_025.hdf5",
+      "sha256": "929feae15e14b7cc6a4019652043bd7a336595edebea2a7897c12ce826c4e6b7"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_026.hdf5",
+      "sha256": "2da8faa94b95f26d78deee500f781220c155f3ab1ef9f152fb5cffb0db7858fb"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_027.hdf5",
+      "sha256": "c9a783730ab482581bd0605a90f70eef586990e4ab6cbb1a733ea3e7dbc9a340"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_028.hdf5",
+      "sha256": "0b0ebdd65f99fa79f1fcd1be12c9c92f5bab677672e9a9cb3f3a096156ed27ef"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_029.hdf5",
+      "sha256": "1bd49b7e99e49386d3e7b39214cc6dc1a28422dc3662a64f2a5a85451d8db6ab"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_equal_np8/snapshots/snap_030.hdf5",
+      "sha256": "cda7a0db1aec5454c854b49f2f94bfc0522fe56ed5088448c49f88a3f96f15a3"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_000.hdf5",
+      "sha256": "2a355d09883e2972d9fef2780133837af892604658dfc85bec8767ffcdc165b0"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_001.hdf5",
+      "sha256": "03fae961f075a845ef6b356baedb0341dab58c36805cafc7d1a9a68c0ad57879"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_002.hdf5",
+      "sha256": "2a555e5b4859932bfc01dff0d7c4159b155dcb0c5df235ddd9810138448ec98f"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_003.hdf5",
+      "sha256": "6ed3e585a5f5916641b7f0df44578bbfc9c3caa3dd09424dace18eadd97d9380"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_004.hdf5",
+      "sha256": "a1630fc9f2fa5066b5db223acc5d9c6155e795885317303f15f5b8b8f61c330c"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_005.hdf5",
+      "sha256": "ce5389cb7f65566bcebe1eae227b03896dd0f617a980076d6552e28787dbf482"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_006.hdf5",
+      "sha256": "caba1890b16ed318c162d3236a3228885cb89f7377953e23954a7c238aff1fcb"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_007.hdf5",
+      "sha256": "210a79ee83b5242ef92900e5ca2af15b18d18d366751f1c1b73f97c7e290abd3"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_008.hdf5",
+      "sha256": "b36abda12d4f4f4d0b1c57d685dc750ce774c46ceced6e7f2a7a7c7e119c8010"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_009.hdf5",
+      "sha256": "1335b33c56bfcf58023594353252f3d678fece197816dd2d7db996ecb235132c"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_010.hdf5",
+      "sha256": "5fd442ab0dc0e1e606ab49edd0faeb2bbdf84848dfa7e9a293930792216236b6"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_011.hdf5",
+      "sha256": "e17a50ac64f777ad4f6b2035e0b73f3f2ea71b450ad7216c4fadf0c63e02aade"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_012.hdf5",
+      "sha256": "748d54983f4cc20c81a7d7e2dfb0ff35a28e587518c9157a50dab099cdd47e83"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_013.hdf5",
+      "sha256": "5718d3c9fd1aadc24b7584e2a4ac671fd40a21644e8b084c03fa0efa1ede2f6a"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_014.hdf5",
+      "sha256": "1f167aec41dd4dbb7328ebc661bb7fea3e9b90e605490ceff800e7ff93d3038b"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_015.hdf5",
+      "sha256": "64ab439980d2aa24ebe141887e482e0f45abd530978a898628a46ad1ad899dc0"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_016.hdf5",
+      "sha256": "9a1ebf135281d8c3268887a53eaef06b7a0a5e4bd87f6b32a84cfd7fdad9cd40"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_017.hdf5",
+      "sha256": "b6213c758d3a9f39071e5244f0d24d374051e300348c8fc0bcc24a8f5fcf74b9"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_018.hdf5",
+      "sha256": "ef6c0724321fed5cd5c7494ccc736174a3d9b64d0bc82feb0f8c427786b93d78"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_019.hdf5",
+      "sha256": "81d8da5953f5b666f76f3a5e0ef37b8cf7cb55f4994d39961502894128029a37"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_020.hdf5",
+      "sha256": "5b79f56a7981d10186bf49a2e238ce36070bf72398b7a4579411149e289e4ee9"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_021.hdf5",
+      "sha256": "13abc7790ba71d0306125f49a27e59ce652c70afd274604b5f71542174117bad"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_022.hdf5",
+      "sha256": "5e67d26a145267a108bedc697077e4490134d20ec20111d8e8e2785742733c79"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_023.hdf5",
+      "sha256": "a3ef60501de283cba6341b6c2d5f8d8df0b85fbbfa9287cd280520ca48263218"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_024.hdf5",
+      "sha256": "4b61d28c0acf89fdb0a90be81390410e8361a4458b7c526b84adab8480d04756"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_025.hdf5",
+      "sha256": "689bfbb37fb647234c9b1a34921ce2a246717cc72ea7de7861edb63340da3b47"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_026.hdf5",
+      "sha256": "725566e6d322f5ceb54020c2df1016470d8542fe2ce69006ce410b60bfecdf52"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_027.hdf5",
+      "sha256": "0c2a221c4c378d701d51d60659e7a96bfafbb49deab975fb3e928cd720b18b4c"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_028.hdf5",
+      "sha256": "4790c6fb950a99fd9f5964ae2c2090f1edc10b466963665a097acceed96094ae"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_029.hdf5",
+      "sha256": "d89ccac4dc10f0a7e5d82a0370db7883cf322bb7c0f984da6e2ca54e20ccea34"
+    },
+    {
+      "path": "/Users/zhenyuwu/arepo_rd/cosma_runs/blob3d_mac_analysis_20261020_v1/cases/N_hier_np8/snapshots/snap_030.hdf5",
+      "sha256": "720875c41a348abe610b0e9aced589def747a7f51b5f9849e1552c77a5052dd5"
+    }
+  ],
+  "reference": {
+    "url": "https://arxiv.org/html/2204.01757v2/cloudMass.svg",
+    "sha256": "94755056a56524a5e41e4cad0db226d1073a2e0043bb38796adbaa9389ade17a",
+    "extraction": "Red solid 32^3 N1 path; exclude legend; inspect tick/glyph calibration.",
+    "axis_calibration": {
+      "x_t0": 55.77597,
+      "x_tKH_half": 103.87942,
+      "y_mass0": 53.586877,
+      "y_mass1": 280.38688
+    },
+    "vector_points": 20,
+    "tKH_over_tcc": 3.2,
+    "original_snapshots": false,
+    "fitted_time_rescaling": false,
+    "user_requested_display_multipliers": [
+      3.2,
+      1.6
+    ]
+  },
+  "mass_panel": {
+    "panel_count": 1,
+    "curve_count": 4,
+    "current_cases": [
+      "N_equal_np8",
+      "N_hier_np8"
+    ],
+    "current_time_mapping": "native time / radius-based t_cc; unchanged.",
+    "reference_original_clock": "published t/t_KH coordinate * 1.6 * 2",
+    "reference_artificial_clock": "published t/t_KH coordinate * 1.6",
+    "artificial_label": "Morton with artificial halt timescale",
+    "fitted_parameters": false,
+    "footer_text": false
+  },
+  "slice": {
+    "plane": "z=5, full xy domain [0,10]^2",
+    "method": "rho=(sum(lambda_i sqrt(rho_i)))^2",
+    "grid_shape": [
+      501,
+      501
+    ],
+    "line_of_sight_average": false,
+    "tetrahedra": 221713,
+    "cache_path": "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/slice_weights.npz",
+    "cache_sha256": "a2638c1abd70c5ec9cef8195ef5f0f63fba710380dc3537d3a536a261f097290",
+    "mesh_path": "/Users/zhenyuwu/arepo_rd/local_runs/rd_3d_blob_n1_audit_20261020_v1/periodic_mesh.npz",
+    "mesh_sha256": "d40ebf2f1f19c332134c22ca22fa7d16a5040a4a18d5cd3cbd90bb254dcf0f16",
+    "cache_coordinate_reconstruction_max_error": 4.315992008230296e-15,
+    "cases": [
+      "N_hier_np8"
+    ],
+    "color_map": "Spectral_r",
+    "color_reference": "Braspenning (2023) Figure 1, chi=10: purple/blue to red ramp and horizontal colourbar.",
+    "color_normalization": "Logarithmic rho/rho_wind,0 in [1,10], clipped.",
+    "panel_times": {
+      "N_hier_np8": [
+        0.0,
+        1.0001220703125,
+        2.000244140625,
+        3.0
+      ]
+    }
+  },
+  "criteria": {
+    "morton": "rho>64 AND p/rho<9",
+    "mass": "Sum of native snapshot Masses, not input density or Voronoi volume.",
+    "normalization": "Initial mass passing the same criterion in that run.",
+    "interpretation": "Eulerian selected mass; no material tracer."
+  },
+  "comparison": {
+    "equal_vs_hierarchy": "Identical initial native states and geometry.",
+    "morton": "Available BLOB setup matches; current N/RK2 versus published N1. Original publication-run configuration unavailable.",
+    "braspenning_mass_comparison": false
+  },
+  "tcc": 0.5141914894582731,
+  "setup": "Current Morton-inspired 10^3 cube, not a matched Braspenning reproduction.",
+  "figures": {
+    "blob_cloud_mass_morton_overlay.pdf": "45263dd23affa6db5e8f0329a4b80930aaf0d7965565fec43932588469271e0d",
+    "blob_cloud_mass_morton_overlay.png": "30186d17092bd67abdfcb715df3975ffeec255019a11e55ff6637bada6169cd1",
+    "blob_density_slices_z5.pdf": "07cbfce73c061d255da5555d9802a4c984d20f0e5eb68a9bd091b421909f9217",
+    "blob_density_slices_z5.png": "7d547e00d540384b284a3c2281b194ffd5b9d57b8306c21bf3b35b9ca33ec32a"
+  }
+}

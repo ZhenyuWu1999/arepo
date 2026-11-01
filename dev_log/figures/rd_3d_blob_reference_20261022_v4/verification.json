@@ -1,0 +1,41 @@
+{
+  "panel_count": 1,
+  "curve_count": 4,
+  "footer_text": false,
+  "exported_pdf_footer_text_absent": true,
+  "pdf_text_check": "Initial pdftotext executable unavailable on PATH; bundled pypdf extraction passed. No source or assertion change required.",
+  "native_and_reference_CSVs_byte_identical": true,
+  "density_png_byte_identical": true,
+  "snapshots_rechecked": 62,
+  "criterion_sensitivity": {
+    "N_equal_np8": {
+      "saved_states": 31,
+      "max_nodes_excluded_only_by_temperature": 0,
+      "max_extensive_mass_excluded_only_by_temperature": 0.0,
+      "max_p_over_rho_among_density_selected_nodes": 5.630435790567994,
+      "p_over_rho_threshold": 9,
+      "scope": "Saved states only; not every substep."
+    },
+    "N_hier_np8": {
+      "saved_states": 31,
+      "max_nodes_excluded_only_by_temperature": 0,
+      "max_extensive_mass_excluded_only_by_temperature": 0.0,
+      "max_p_over_rho_among_density_selected_nodes": 5.63679799062547,
+      "p_over_rho_threshold": 9,
+      "scope": "Saved states only; not every substep."
+    }
+  },
+  "visual_inspection": "Final mass PNG and separate Poppler-rendered PDF inspected; no footer text or reserved footer gap; title, selection criterion, axes and four legend entries retained.",
+  "artifact_sha256": {
+    "N_equal_np8_cloud_mass.csv": "d8255d08ab23711eebd0d1ebe1822f80406d2a0480f0e82d6aa3164e213c03a8",
+    "N_hier_np8_cloud_mass.csv": "530ac448d5851505691303858cd94dd9d9d2052b65be17db1bcbe1034eff2878",
+    "blob_cloud_mass_morton_overlay.pdf": "45263dd23affa6db5e8f0329a4b80930aaf0d7965565fec43932588469271e0d",
+    "blob_cloud_mass_morton_overlay.png": "30186d17092bd67abdfcb715df3975ffeec255019a11e55ff6637bada6169cd1",
+    "blob_density_slices_z5.pdf": "07cbfce73c061d255da5555d9802a4c984d20f0e5eb68a9bd091b421909f9217",
+    "blob_density_slices_z5.png": "7d547e00d540384b284a3c2281b194ffd5b9d57b8306c21bf3b35b9ca33ec32a",
+    "criterion_sensitivity.json": "dd9c98d6623a2578abb6b2e470aac81469f6e6c5d10ab3a05bf82d228cb3962b",
+    "morton_display_coordinates.csv": "35fe157529eff9168e6a52cf2b6cb72536cb59373c3d5c3d012b365a5b087fcc",
+    "morton_fig20_N32_digitized.csv": "9f7267798bf9efc20a8ff18392c8712b3d6fc1dcb3f66d8727e29dec13160b61",
+    "plot_metadata.json": "561baf1161b312de97136ecf24b0eb981f742e1382ecf1c0a9727758f6665b4a"
+  }
+}

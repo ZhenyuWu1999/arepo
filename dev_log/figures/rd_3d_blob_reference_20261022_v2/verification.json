@@ -1,0 +1,125 @@
+{
+  "N_equal_np8": {
+    "rows": 31,
+    "Morton_mass_and_times_exactly_match_previous": true
+  },
+  "N_hier_np8": {
+    "rows": 31,
+    "Morton_mass_and_times_exactly_match_previous": true
+  },
+  "equal_hierarchy_initial_arrays_identical": [
+    "Coordinates",
+    "Masses",
+    "Density",
+    "Pressure",
+    "InternalEnergy",
+    "Velocities"
+  ],
+  "colour_reference": {
+    "url": "https://arxiv.org/pdf/2203.13915",
+    "sha256": "28bcc0bd3a2bdafcb7bc3b118a0cc97ef032afbbb9ab62d407dc24344a2cb73d",
+    "figure": 1,
+    "pdf_page_1_based": 3,
+    "render_dpi": 105,
+    "samples": [
+      {
+        "raster_xy": [
+          100,
+          752
+        ],
+        "reference_rgb": [
+          90,
+          82,
+          163
+        ],
+        "Spectral_r_rgb": [
+          92,
+          81,
+          163
+        ],
+        "max_channel_difference": 2
+      },
+      {
+        "raster_xy": [
+          173,
+          752
+        ],
+        "reference_rgb": [
+          140,
+          209,
+          164
+        ],
+        "Spectral_r_rgb": [
+          140,
+          209,
+          164
+        ],
+        "max_channel_difference": 0
+      },
+      {
+        "raster_xy": [
+          246,
+          752
+        ],
+        "reference_rgb": [
+          255,
+          253,
+          189
+        ],
+        "Spectral_r_rgb": [
+          255,
+          254,
+          190
+        ],
+        "max_channel_difference": 1
+      },
+      {
+        "raster_xy": [
+          319,
+          752
+        ],
+        "reference_rgb": [
+          248,
+          141,
+          81
+        ],
+        "Spectral_r_rgb": [
+          249,
+          142,
+          82
+        ],
+        "max_channel_difference": 1
+      },
+      {
+        "raster_xy": [
+          391,
+          752
+        ],
+        "reference_rgb": [
+          158,
+          1,
+          66
+        ],
+        "Spectral_r_rgb": [
+          160,
+          3,
+          67
+        ],
+        "max_channel_difference": 2
+      }
+    ]
+  },
+  "input_and_output_hashes": "62 snapshots, two caches, script and four final figures all match metadata.",
+  "presentation": "Four hierarchical-only density panels; one Morton-selection mass panel; both PNGs visually inspected. Both final PDFs rendered with Poppler and inspected separately.",
+  "prior_archives": "Previous figure directories retained; previous source preserved in external v2 archive.",
+  "artifact_sha256": {
+    "N_equal_np8_cloud_mass.csv": "d8255d08ab23711eebd0d1ebe1822f80406d2a0480f0e82d6aa3164e213c03a8",
+    "N_hier_np8_cloud_mass.csv": "530ac448d5851505691303858cd94dd9d9d2052b65be17db1bcbe1034eff2878",
+    "blob_cloud_mass_morton_overlay.pdf": "a2fb1e04c6c99777189a9522e70c1f4c16211ed6ce6dac5109d8fbb7ef233c7e",
+    "blob_cloud_mass_morton_overlay.png": "dd08af956889f5dd9a7664dec091d32e6be2e95560ce828648322edeee179beb",
+    "blob_density_slices_z5.pdf": "06343ad0000fd0a8917673574750271369c0c8a7210af814c6948d3127d3b580",
+    "blob_density_slices_z5.png": "7d547e00d540384b284a3c2281b194ffd5b9d57b8306c21bf3b35b9ca33ec32a",
+    "morton_fig20_N32_digitized.csv": "9f7267798bf9efc20a8ff18392c8712b3d6fc1dcb3f66d8727e29dec13160b61",
+    "plot_metadata.json": "bfca229f7562ee2271709d865192c7f726493b5688eb73b74b223414e74bbb0c"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "input_CSV_hashes": 3,
+  "raw_snapshot_header_times_and_hashes": 62,
+  "retained_stated_convention_and_mass_curves": true,
+  "all_hypothesis_coordinate_identities": true,
+  "earlier_empirical_fit_reproduced": true,
+  "legacy_python_history_blobs_searched": 67,
+  "visual_inspection": "Final PNG and Poppler-rendered PDF inspected. Metric labels clear of curves. Original primary SVG independently rendered with Sharp; red solid N=32^3 path and 0/0.5 x ticks checked.",
+  "reference_svg_sha256": "94755056a56524a5e41e4cad0db226d1073a2e0043bb38796adbaa9389ade17a",
+  "limitation": "No source of an actual historical clock error established; alternative coefficients are diagnostics only.",
+  "artifact_sha256": {
+    "blob_time_normalization_hypotheses.pdf": "ad825a5f4968d0f6a8428a8c43626c795338e5a7889f573d907e406697129de2",
+    "blob_time_normalization_hypotheses.png": "04552825161162a33e575ee62a804f443a5d790d12a6c66c1f7fa7b1572ff6f8",
+    "legacy_source_audit.json": "b41184d97e3836a3b29e765d514ed2978af608b849d2c937ae359f9d549846e6",
+    "mass_level_crossings.csv": "6dd328bd4b47758645e3bdfd471c18ce2188a5dd85d5eeaaf13942f928cda424",
+    "summary.json": "ffe57c87baa00e42db4214d587c76448a91bd577a37f2def7f834debe0940dbe",
+    "time_hypotheses.csv": "047b2d429ea2c13833f820733d818248d0f8b0f6d730e12299aef1ded240af57"
+  }
+}

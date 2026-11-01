@@ -81,6 +81,39 @@ Note that the CFD residual-distribution literature uses a single global timestep
 
 ## current status
 
+**Next Blob investigation: original Cuillin provenance (2026-11-01):**
+Zhenyu prioritizes finding Morton's original snapshots, run-specific code
+and Figure 20 analysis on Cuillin. Read
+[entry 35](dev_log_3D_moving_mesh.md#35-2026-11-01-publish-the-checkpoint-and-prepare-cuillin-provenance-recovery)
+and the [recovery handoff](RD_3D_BLOB_CUILLIN_PROVENANCE_HANDOFF_20261101.md).
+Current analytic IC/kernel agreement and clock-formula consistency do not
+recover the publication run. Verify physical-time/plotted-coordinate pairs,
+actual N1 build settings, point/mesh realization and mass weights/selection
+before assigning the lifetime gap to dissipation or a normalization error.
+The selected figures have no fitted parameters. Cuillin has not been searched
+in this publication turn, and later COSMA results have not been inspected.
+
+**User-selected Blob plot (2026-10-22):**
+Zhenyu rejects fitted time factors as meaningful for this comparison.
+[Entry 32](dev_log_3D_moving_mesh.md#32-2026-10-22-replace-the-fitting-display-with-four-prescribed-curves)
+retains one panel with current equal/hierarchy and two Morton traces using
+the prescribed published-x multipliers 1.6*2 and 1.6. Current states and
+times are unchanged; no fitted parameters. Entry 33 removes footer text and
+traces the operational cloud criterion to Agertz, as adopted by Morton. See
+`dev_log/figures/rd_3d_blob_reference_20261022_v4/`. The exploratory clock
+diagnostic below remains a historical record, not the selected presentation.
+
+**Blob clock hypotheses tested (2026-10-22):**
+[Entry 31](dev_log_3D_moving_mesh.md#31-2026-10-22-test-the-users-multiplication-by-16-hypothesis)
+qualifies the formula-only clock audit: multiplying raw t/t_cr by 1.6 gives
+substantially closer overlap with Morton's unchanged Figure 20 coordinate,
+though a fitted factor about 1.792 is closer and a=2 also helps. This is an
+unverified hypothesis, equivalent to a 2.56 shift versus the stated KH
+conversion; native times and established comparison figures are retained.
+The available predecessor emits raw T but lacks the Figure 20 mass plotter.
+Original physical-time/plotting provenance is needed; no new simulation.
+See [focused report](RD_3D_BLOB_TIME_NORMALIZATION_20261022.md).
+
 **Cross-host publication checkpoint (2026-10-22):**
 The Mac integrates published COSMA commit `37f320b` before publishing its
 interface/Blob work. Interface commit `7ab92cd` matches the previously

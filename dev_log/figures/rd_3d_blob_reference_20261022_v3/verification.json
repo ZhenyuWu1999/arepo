@@ -1,0 +1,27 @@
+{
+  "panel_count": 1,
+  "curve_count": 4,
+  "fitted_parameters": false,
+  "requested_label_verbatim": "Morton with artificial halt timescale",
+  "reference_display_factors": [
+    3.2,
+    1.6
+  ],
+  "reference_points": 20,
+  "mass_values_and_native_time_arrays_unchanged": true,
+  "density_png_byte_identical": true,
+  "input_snapshot_hashes_checked": 62,
+  "slice_cache_hashes_checked": 2,
+  "visual_inspection": "Final mass PNG and separate Poppler-rendered PDF inspected; all four legend entries, density/temperature criterion and both reference time multipliers visible.",
+  "artifact_sha256": {
+    "N_equal_np8_cloud_mass.csv": "d8255d08ab23711eebd0d1ebe1822f80406d2a0480f0e82d6aa3164e213c03a8",
+    "N_hier_np8_cloud_mass.csv": "530ac448d5851505691303858cd94dd9d9d2052b65be17db1bcbe1034eff2878",
+    "blob_cloud_mass_morton_overlay.pdf": "b9ae0d67b290097d96956d5cfb621d4d100acf21272159ae7a8af8b7e14e0073",
+    "blob_cloud_mass_morton_overlay.png": "39c9d7efaedbe43868efd6268feeeabe8b6ec6b3cb2c0ad2c1f053788cf764e4",
+    "blob_density_slices_z5.pdf": "3283f1130441482a6c4da5ab96e4d9ced6181b9ecf03294b8023b860d0409ed5",
+    "blob_density_slices_z5.png": "7d547e00d540384b284a3c2281b194ffd5b9d57b8306c21bf3b35b9ca33ec32a",
+    "morton_display_coordinates.csv": "35fe157529eff9168e6a52cf2b6cb72536cb59373c3d5c3d012b365a5b087fcc",
+    "morton_fig20_N32_digitized.csv": "9f7267798bf9efc20a8ff18392c8712b3d6fc1dcb3f66d8727e29dec13160b61",
+    "plot_metadata.json": "03e28b9f9b82e1b9b8c38ba7d7f058c28154ecff59854d5ab64a70f7bb40e391"
+  }
+}
